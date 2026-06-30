@@ -333,37 +333,42 @@ function ExploreScreen({ cats, currentUserId, navigate, setSelectedCatId, unlock
         <button className="binoculars-orb" aria-label="Nearby cats"><Search size={20} /></button>
       </div>
 
-      <DraggableBottomSheet>
-        <div className="sheet-search-row">
-          <Search size={18} />
-          <input
-            value={query}
-            placeholder="Search cats around you..."
-            onChange={(event) => setQuery(event.target.value)}
-          />
-          <button aria-label="Filters"><SlidersHorizontal size={17} /></button>
-        </div>
-        <div className="filter-rail" aria-label="Cat filters">
-          {filters.map((filter) => (
-            <FilterChip
-              key={filter}
-              active={activeFilter === filter}
-              label={filter}
-              onClick={() => setActiveFilter(filter)}
-            />
-          ))}
-        </div>
-        <div className="sheet-meta-row">
-          <strong>{nearbyCats.length || 18} cats nearby</strong>
-          <div className="sheet-toggles">
-            <button className={hideCaught ? 'mini-chip active' : 'mini-chip'} onClick={() => setHideCaught(!hideCaught)}>
-              <EyeOff size={14} /> Hide caught
-            </button>
-            <button className="mini-chip" onClick={() => setSortMode(sortMode === 'Recent' ? 'Nearest' : 'Recent')}>
-              {sortMode}
-            </button>
-          </div>
-        </div>
+      <DraggableBottomSheet
+        header={(
+          <>
+            <div className="sheet-search-row">
+              <Search size={18} />
+              <input
+                value={query}
+                placeholder="Search cats around you..."
+                onChange={(event) => setQuery(event.target.value)}
+              />
+              <button aria-label="Filters"><SlidersHorizontal size={17} /></button>
+            </div>
+            <div className="filter-rail" aria-label="Cat filters">
+              {filters.map((filter) => (
+                <FilterChip
+                  key={filter}
+                  active={activeFilter === filter}
+                  label={filter}
+                  onClick={() => setActiveFilter(filter)}
+                />
+              ))}
+            </div>
+            <div className="sheet-meta-row">
+              <strong>{nearbyCats.length || 18} cats nearby</strong>
+              <div className="sheet-toggles">
+                <button className={hideCaught ? 'mini-chip active' : 'mini-chip'} onClick={() => setHideCaught(!hideCaught)}>
+                  <EyeOff size={14} /> Hide caught
+                </button>
+                <button className="mini-chip" onClick={() => setSortMode(sortMode === 'Recent' ? 'Nearest' : 'Recent')}>
+                  {sortMode}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      >
         {activeCat && (
           <CatPreviewCard
             cat={activeCat}
@@ -655,13 +660,13 @@ function SettingsScreen({ user }) {
   );
 }
 
-function DraggableBottomSheet({ children }) {
+function DraggableBottomSheet({ header, children }) {
   const viewportHeight = typeof window === 'undefined' ? 760 : window.innerHeight;
   // Snap points are heights, not translate offsets: collapsed leaves the map mostly visible,
   // half keeps cards and map in balance, and expanded behaves like a full list panel.
   const snapPoints = useMemo(
     () => ({
-      collapsed: 168,
+      collapsed: 206,
       half: Math.round(viewportHeight * 0.48),
       expanded: Math.round(viewportHeight - 112),
     }),
@@ -724,8 +729,8 @@ function DraggableBottomSheet({ children }) {
   }
 
   function handleDrag(event, info) {
-    const fromHandle = event.target.closest?.('.sheet-drag-zone');
-    if (!canDragSheet && !fromHandle) return;
+    const fromPinnedControls = event.target.closest?.('.sheet-drag-zone, .sheet-header');
+    if (!canDragSheet && !fromPinnedControls) return;
     // The sheet follows the finger continuously: dragging up increases height,
     // dragging down decreases height. No fixed-state jump during the gesture.
     const deltaY = dragStartRef.current.y - info.point.y;
@@ -772,7 +777,10 @@ function DraggableBottomSheet({ children }) {
       >
         <span className="sheet-handle" />
       </div>
-      <div ref={scrollRef} className="sheet-content" onScroll={handleScroll}>{children}</div>
+      <div className="sheet-content">
+        <div className="sheet-header">{header}</div>
+        <div ref={scrollRef} className="sheet-scroll-content" onScroll={handleScroll}>{children}</div>
+      </div>
     </motion.section>
   );
 }
