@@ -245,7 +245,7 @@ function TopBar({ user, stats }) {
   return (
     <header className="top-bar">
       <div>
-        <p className="eyebrow">Cat Quest</p>
+        <p className="eyebrow">Catmunity</p>
         <h1>Hi, {user.name}</h1>
       </div>
       <div className="top-actions">
@@ -311,7 +311,7 @@ function ExploreScreen({ cats, currentUserId, navigate, setSelectedCatId, unlock
     <section className="explore-live">
       <div className="map-brand">
         <PawPrint size={18} />
-        <span>Cat Quest</span>
+        <span>Catmunity</span>
       </div>
       <div className="live-map-shell">
         <div className="live-hud">
@@ -853,13 +853,23 @@ function MockMap({ cats, currentUserId, activeCatId, onSelect }) {
             onClick={() => onSelect(cat)}
             aria-label={`${cat.name}, ${locked ? 'locked' : 'caught'}`}
           >
-            <span className="pin-pulse" />
-            <img src={cat.cropped_image_url} alt="" />
-            <small>{locked ? <Lock size={11} /> : index + 1}</small>
+            <CatHeadMarker image={cat.cropped_image_url} locked={locked} count={index + 1} />
           </button>
         );
       })}
     </div>
+  );
+}
+
+function CatHeadMarker({ image, locked = false, count }) {
+  return (
+    <>
+      <span className="pin-pulse" />
+      <span className="cat-head-photo">
+        <img src={image} alt="" />
+      </span>
+      <small>{locked ? <Lock size={11} /> : count}</small>
+    </>
   );
 }
 
