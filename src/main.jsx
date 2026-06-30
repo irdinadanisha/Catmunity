@@ -666,7 +666,7 @@ function DraggableBottomSheet({ header, children }) {
   // half keeps cards and map in balance, and expanded behaves like a full list panel.
   const snapPoints = useMemo(
     () => ({
-      collapsed: 206,
+      collapsed: 138,
       half: Math.round(viewportHeight * 0.48),
       expanded: Math.round(viewportHeight - 112),
     }),
@@ -752,11 +752,10 @@ function DraggableBottomSheet({ header, children }) {
   }
 
   function cycleSheet() {
-    const current = sheetHeight.get();
     const target =
-      current < snapPoints.half
+      state === 'collapsed'
         ? snapPoints.half
-        : current < snapPoints.expanded
+        : state === 'half'
           ? snapPoints.expanded
           : snapPoints.collapsed;
     animateToSnap(target);

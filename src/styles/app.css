@@ -901,6 +901,20 @@ button {
   background: transparent;
 }
 
+.sheet-collapsed .sheet-header {
+  gap: 8px;
+  padding-bottom: 8px;
+}
+
+.sheet-collapsed .sheet-search-row {
+  height: 44px;
+}
+
+.sheet-collapsed .filter-chip {
+  min-height: 30px;
+  padding: 6px 11px;
+}
+
 .sheet-scroll-content {
   flex: 1 1 auto;
   min-height: 0;
