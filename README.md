@@ -1,6 +1,6 @@
-# Cat Quest MVP
+# Catmunity
 
-A mobile-first React concept app for discovering and collecting real-world cats. It uses mock data and local React state so the product flow can be tested before adding a backend, database, object storage, map SDK, authentication, geolocation, or cat-detection model.
+Catch your neighbourhood cats! Catmunity is a mobile-first React concept app for discovering and collecting real-world cats. It uses mock data and local React state so the product flow can be tested before adding a backend, database, object storage, map SDK, authentication, geolocation, or cat-detection model.
 
 ## Run
 
@@ -13,15 +13,15 @@ Open `http://localhost:5173/`.
 
 ## Included MVP Flow
 
-- Welcome/login-style entry screen
-- Explore map with caught and locked nearby cats
+- Full-screen explore map with caught and locked nearby cats
+- Draggable bottom sheet with search, filter chips, preview cards, and nearby list
 - Catch flow with photo upload/sample image, crop confirmation, and success copy
-- Add/edit cat details form with name, color, fun info, remarks, tags, and location
+- Add/edit cat details form with name, color, fun info, remarks, tags, date, and location
 - Personal collection gallery and caught-location map
 - Cat detail screen with locked/unlocked detail behavior
 - Public user profile with privacy-aware map pins
 - Community feed, post creation, comments, and reactions
-- Settings screen with privacy and safety defaults
+- Settings/profile screen with privacy and safety defaults
 
 ## Data Models
 
