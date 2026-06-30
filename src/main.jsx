@@ -174,7 +174,13 @@ function App() {
       {toast && <div className="toast"><Sparkles size={16} />{toast}</div>}
       {screen !== 'welcome' && screen !== 'explore' && <TopBar user={me} stats={stats} />}
 
-      <main className={screen === 'welcome' ? 'main main--welcome' : screen === 'explore' ? 'main main--map' : 'main'}>
+      <motion.main
+        key={screen}
+        className={screen === 'welcome' ? 'main main--welcome' : screen === 'explore' ? 'main main--map' : 'main'}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
+      >
         {screen === 'welcome' && <WelcomeScreen onStart={() => navigate('explore')} />}
         {screen === 'explore' && <ExploreScreen {...commonProps} />}
         {screen === 'catch' && <CatchScreen onPhotoSelected={handlePhotoSelected} />}
@@ -215,10 +221,10 @@ function App() {
           <CreatePostScreen onBack={() => navigate('community')} onCreate={handleCreatePost} />
         )}
         {screen === 'settings' && <SettingsScreen user={me} />}
-      </main>
+      </motion.main>
 
       {screen !== 'welcome' && (
-        <nav className={screen === 'explore' ? 'bottom-nav floating-bottom-nav' : 'bottom-nav'} aria-label="Main navigation">
+        <nav className={screen === 'explore' ? 'bottom-nav bottom-nav--map' : 'bottom-nav'} aria-label="Main navigation">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const active = screen === tab.id || (tab.id === 'collection' && ['detail', 'publicProfile'].includes(screen));
