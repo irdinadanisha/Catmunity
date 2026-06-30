@@ -134,17 +134,18 @@ button {
   z-index: 30;
   left: 50%;
   bottom: 0;
-  width: min(480px, 100%);
+  width: min(480px, 100vw);
   transform: translateX(-50%);
+  margin: 0;
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 6px;
   min-height: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom));
   padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
   background: var(--bottom-panel-bg);
-  border: 1px solid var(--bottom-panel-border);
-  border-bottom: 0;
-  border-radius: 26px 26px 0 0;
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.36);
+  border-radius: 0;
   box-shadow: var(--bottom-panel-shadow);
   backdrop-filter: blur(24px) saturate(1.2);
 }
