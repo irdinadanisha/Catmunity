@@ -817,8 +817,6 @@ button {
 }
 
 .immersive-map .map-pin.active .cat-head-photo {
-  background:
-    linear-gradient(135deg, #fff0c8, rgba(255, 255, 255, 0.96));
   filter:
     drop-shadow(0 0 0 rgba(255, 240, 200, 0.8))
     drop-shadow(0 0 13px rgba(255, 240, 200, 0.7))

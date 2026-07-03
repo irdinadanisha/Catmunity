@@ -878,7 +878,7 @@ const catHeadPath =
   'M50 15 C43 15 38 17 34 21 L19 8 C16 6 13 8 14 13 L18 34 C12 42 10 53 12 64 C15 83 31 94 50 94 C69 94 85 83 88 64 C90 53 88 42 82 34 L86 13 C87 8 84 6 81 8 L66 21 C62 17 57 15 50 15 Z';
 
 function CatHeadShape({ image, fill = 'rgba(232, 95, 75, 0.95)', className = '', children }) {
-  const clipId = `cat-head-clip-${useId().replaceAll(':', '')}`;
+  const patternId = `cat-head-pattern-${useId().replaceAll(':', '')}`;
   const gradientId = `cat-head-gradient-${useId().replaceAll(':', '')}`;
   const shapeFill = fill === 'action' ? `url(#${gradientId})` : fill;
 
@@ -886,25 +886,22 @@ function CatHeadShape({ image, fill = 'rgba(232, 95, 75, 0.95)', className = '',
     <span className={`cat-head-shape ${className}`}>
       <svg className="cat-head-svg" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
         <defs>
-          <clipPath id={clipId} clipPathUnits="userSpaceOnUse">
-            <path d={catHeadPath} />
-          </clipPath>
+          {image && (
+            <pattern id={patternId} patternUnits="userSpaceOnUse" width="100" height="100">
+              <image
+                href={image}
+                width="100"
+                height="100"
+                preserveAspectRatio="xMidYMid slice"
+              />
+            </pattern>
+          )}
           <linearGradient id={gradientId} x1="15" y1="14" x2="88" y2="90" gradientUnits="userSpaceOnUse">
             <stop stopColor="#e85f4b" />
             <stop offset="1" stopColor="#f08a59" />
           </linearGradient>
         </defs>
-        {image ? (
-          <image
-            href={image}
-            width="100"
-            height="100"
-            preserveAspectRatio="xMidYMid slice"
-            clipPath={`url(#${clipId})`}
-          />
-        ) : (
-          <path d={catHeadPath} fill={shapeFill} />
-        )}
+        <path d={catHeadPath} fill={image ? `url(#${patternId})` : shapeFill} />
         <path className="cat-head-outline" d={catHeadPath} />
       </svg>
       {children && <span className="cat-head-content">{children}</span>}
