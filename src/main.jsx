@@ -120,7 +120,6 @@ function App() {
         originalImage: previewUrl,
         croppedImage: crop.croppedImageUrl,
         cropMode: crop.mode,
-        backgroundColor: crop.backgroundColor,
         latitude: position.latitude,
         longitude: position.longitude,
         locationName: approximateLocation(position.latitude, position.longitude),
@@ -458,7 +457,7 @@ function ExploreScreen({ cats, currentUserId, navigate, setSelectedCatId, unlock
 function CatchScreen({ onPhotoSelected, processing = false }) {
   return (
     <section className="screen catch-screen">
-      <ScreenHeader title="Catch a cat" subtitle="Use a photo, then confirm the cropped cat memory." icon={Camera} />
+      <ScreenHeader title="Catch a cat" subtitle="Use a square photo, then confirm the cat memory." icon={Camera} />
       <label className={processing ? 'upload-panel processing' : 'upload-panel'}>
         <input
           type="file"
@@ -468,8 +467,8 @@ function CatchScreen({ onPhotoSelected, processing = false }) {
           onChange={(event) => onPhotoSelected(event.target.files?.[0])}
         />
         <Camera size={38} />
-        <strong>{processing ? 'Preparing cat cutout...' : 'Take or upload a cat photo'}</strong>
-        <span>{processing ? 'Removing the background and matching the backdrop to the cat fur.' : 'Automatic crop will run first. Manual crop is available when detection needs help.'}</span>
+        <strong>{processing ? 'Preparing square crop...' : 'Take or upload a cat photo'}</strong>
+        <span>{processing ? 'Standardizing the photo into a square cat image.' : 'Frame the photo as a square and keep the cat centered as much as possible.'}</span>
       </label>
       <button className="secondary-button" disabled={processing} onClick={() => onPhotoSelected(null)}>
         <ImagePlus size={18} /> Use sample cat photo
@@ -487,7 +486,7 @@ function ConfirmScreen({ capture, onBack, onConfirm }) {
       <ScreenHeader title="Catch this cat?" subtitle={`Location saved as ${capture.locationName}.`} icon={Sparkles} />
       <div className="confirm-frame">
         <img src={capture.croppedImage} alt="Cropped cat preview" />
-        <span className="pill">{capture.cropMode === 'auto' ? 'Auto crop' : 'Manual crop ready'}</span>
+        <span className="pill">{capture.cropMode === 'square-crop' ? 'Square crop ready' : 'Photo ready'}</span>
       </div>
       <div className="confirm-actions">
         <button className="secondary-button" onClick={onBack}><X size={18} /> Retake</button>

@@ -9,13 +9,12 @@ const defaultAccurateLocation = {
 };
 
 export async function autoDetectCatCrop(imageUrl) {
-  const cutout = await createCatCutoutImage(imageUrl);
+  const croppedImageUrl = await createSquareCatCrop(imageUrl);
 
   return {
-    croppedImageUrl: cutout.imageUrl,
-    backgroundColor: cutout.backgroundColor,
-    confidence: cutout.mode === 'cutout' ? 0.88 : 0.62,
-    mode: cutout.mode,
+    croppedImageUrl,
+    confidence: 0.7,
+    mode: 'square-crop',
   };
 }
 
@@ -443,28 +442,36 @@ function toRadians(value) {
   return (value * Math.PI) / 180;
 }
 
-async function createCatCutoutImage(imageUrl) {
+async function createSquareCatCrop(imageUrl) {
   try {
-    const { removeBackground } = await import('@imgly/background-removal');
-    const foregroundBlob = await removeBackground(imageUrl);
-    const foregroundImage = await loadImageFromSource(URL.createObjectURL(foregroundBlob));
-    const backgroundColor = sampleDominantForegroundColor(foregroundImage);
+    const image = await loadImageFromSource(imageUrl);
+    const imageWidth = image.naturalWidth || image.width;
+    const imageHeight = image.naturalHeight || image.height;
+    const cropSize = Math.min(imageWidth, imageHeight);
+    const sourceX = (imageWidth - cropSize) / 2;
+    const sourceY = (imageHeight - cropSize) / 2;
+    const outputSize = 900;
+    const canvas = document.createElement('canvas');
+    canvas.width = outputSize;
+    canvas.height = outputSize;
+    const context = canvas.getContext('2d');
 
-    return {
-      imageUrl: await compositeCutoutOnColor(foregroundImage, backgroundColor),
-      backgroundColor,
-      mode: 'cutout',
-    };
+    context.drawImage(
+      image,
+      sourceX,
+      sourceY,
+      cropSize,
+      cropSize,
+      0,
+      0,
+      outputSize,
+      outputSize,
+    );
+
+    return canvas.toDataURL('image/jpeg', 0.9);
   } catch (error) {
-    console.warn('Cat cutout failed, using centered color backdrop fallback.', error);
-    const fallbackImage = await loadImageFromSource(imageUrl);
-    const backgroundColor = sampleDominantImageColor(fallbackImage);
-
-    return {
-      imageUrl: await compositeFallbackOnColor(fallbackImage, backgroundColor),
-      backgroundColor,
-      mode: 'fallback-cutout',
-    };
+    console.warn('Square cat crop failed, using original image.', error);
+    return imageUrl;
   }
 }
 
@@ -476,161 +483,4 @@ function loadImageFromSource(source) {
     image.onerror = reject;
     image.src = source;
   });
-}
-
-async function compositeCutoutOnColor(foregroundImage, backgroundColor) {
-  const canvas = document.createElement('canvas');
-  const size = 900;
-  canvas.width = size;
-  canvas.height = size;
-  const context = canvas.getContext('2d');
-  const bounds = getOpaqueBounds(foregroundImage);
-  const scale = Math.min((size * 0.78) / bounds.width, (size * 0.72) / bounds.height);
-  const width = bounds.width * scale;
-  const height = bounds.height * scale;
-  const x = (size - width) / 2;
-  const y = (size - height) / 2 + size * 0.02;
-
-  paintPlainBackdrop(context, size, backgroundColor);
-  context.save();
-  context.shadowColor = 'rgba(38, 29, 24, 0.28)';
-  context.shadowBlur = 30;
-  context.shadowOffsetY = 18;
-  context.drawImage(foregroundImage, bounds.x, bounds.y, bounds.width, bounds.height, x, y, width, height);
-  context.restore();
-
-  drawCutoutOutline(context, foregroundImage, bounds, x, y, width, height);
-  context.drawImage(foregroundImage, bounds.x, bounds.y, bounds.width, bounds.height, x, y, width, height);
-
-  return canvas.toDataURL('image/jpeg', 0.9);
-}
-
-async function compositeFallbackOnColor(image, backgroundColor) {
-  const canvas = document.createElement('canvas');
-  const size = 900;
-  canvas.width = size;
-  canvas.height = size;
-  const context = canvas.getContext('2d');
-  const scale = Math.min((size * 0.82) / image.naturalWidth, (size * 0.82) / image.naturalHeight);
-  const width = image.naturalWidth * scale;
-  const height = image.naturalHeight * scale;
-  const x = (size - width) / 2;
-  const y = (size - height) / 2;
-
-  paintPlainBackdrop(context, size, backgroundColor);
-  context.save();
-  context.shadowColor = 'rgba(38, 29, 24, 0.22)';
-  context.shadowBlur = 24;
-  context.shadowOffsetY = 14;
-  context.drawImage(image, x, y, width, height);
-  context.restore();
-
-  return canvas.toDataURL('image/jpeg', 0.9);
-}
-
-function paintPlainBackdrop(context, size, backgroundColor) {
-  context.fillStyle = softenColor(backgroundColor);
-  context.fillRect(0, 0, size, size);
-}
-
-function drawCutoutOutline(context, image, bounds, x, y, width, height) {
-  const mask = document.createElement('canvas');
-  mask.width = context.canvas.width;
-  mask.height = context.canvas.height;
-  const maskContext = mask.getContext('2d');
-  maskContext.drawImage(image, bounds.x, bounds.y, bounds.width, bounds.height, x, y, width, height);
-  maskContext.globalCompositeOperation = 'source-in';
-  maskContext.fillStyle = '#fff8ee';
-  maskContext.fillRect(0, 0, mask.width, mask.height);
-
-  context.save();
-  context.filter = 'blur(4px)';
-  for (const [offsetX, offsetY] of [[0, -7], [7, 0], [0, 7], [-7, 0], [5, 5], [-5, 5], [5, -5], [-5, -5]]) {
-    context.drawImage(mask, offsetX, offsetY);
-  }
-  context.restore();
-}
-
-function getOpaqueBounds(image) {
-  const canvas = document.createElement('canvas');
-  canvas.width = image.naturalWidth;
-  canvas.height = image.naturalHeight;
-  const context = canvas.getContext('2d');
-  context.drawImage(image, 0, 0);
-  const data = context.getImageData(0, 0, canvas.width, canvas.height).data;
-  let minX = canvas.width;
-  let minY = canvas.height;
-  let maxX = 0;
-  let maxY = 0;
-
-  for (let y = 0; y < canvas.height; y += 1) {
-    for (let x = 0; x < canvas.width; x += 1) {
-      const alpha = data[(y * canvas.width + x) * 4 + 3];
-      if (alpha > 20) {
-        minX = Math.min(minX, x);
-        minY = Math.min(minY, y);
-        maxX = Math.max(maxX, x);
-        maxY = Math.max(maxY, y);
-      }
-    }
-  }
-
-  if (minX > maxX || minY > maxY) {
-    return { x: 0, y: 0, width: canvas.width, height: canvas.height };
-  }
-
-  const padding = 18;
-  return {
-    x: Math.max(0, minX - padding),
-    y: Math.max(0, minY - padding),
-    width: Math.min(canvas.width, maxX - minX + padding * 2),
-    height: Math.min(canvas.height, maxY - minY + padding * 2),
-  };
-}
-
-function sampleDominantForegroundColor(image) {
-  const canvas = document.createElement('canvas');
-  const sampleSize = 120;
-  canvas.width = sampleSize;
-  canvas.height = sampleSize;
-  const context = canvas.getContext('2d');
-  context.drawImage(image, 0, 0, sampleSize, sampleSize);
-  const pixels = context.getImageData(0, 0, sampleSize, sampleSize).data;
-  return quantizedDominantColor(pixels, true);
-}
-
-function sampleDominantImageColor(image) {
-  const canvas = document.createElement('canvas');
-  const sampleSize = 90;
-  canvas.width = sampleSize;
-  canvas.height = sampleSize;
-  const context = canvas.getContext('2d');
-  context.drawImage(image, 0, 0, sampleSize, sampleSize);
-  const pixels = context.getImageData(0, 0, sampleSize, sampleSize).data;
-  return quantizedDominantColor(pixels, false);
-}
-
-function quantizedDominantColor(pixels, requireAlpha) {
-  const buckets = new Map();
-
-  for (let index = 0; index < pixels.length; index += 16) {
-    const red = pixels[index];
-    const green = pixels[index + 1];
-    const blue = pixels[index + 2];
-    const alpha = pixels[index + 3];
-    if (requireAlpha && alpha < 80) continue;
-    if (red + green + blue > 700 || red + green + blue < 80) continue;
-
-    const key = `${Math.round(red / 24) * 24},${Math.round(green / 24) * 24},${Math.round(blue / 24) * 24}`;
-    buckets.set(key, (buckets.get(key) || 0) + 1);
-  }
-
-  const [dominant = '208,142,74'] = [...buckets.entries()].sort((a, b) => b[1] - a[1])[0] || [];
-  const [red, green, blue] = dominant.split(',').map(Number);
-  return { red, green, blue };
-}
-
-function softenColor({ red, green, blue }) {
-  const mix = (value) => Math.round(value * 0.68 + 255 * 0.32);
-  return `rgb(${mix(red)}, ${mix(green)}, ${mix(blue)})`;
 }
