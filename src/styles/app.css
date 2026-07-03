@@ -1652,7 +1652,16 @@ button {
   border-radius: 24px;
 }
 
-.mini-map > div {
+.google-mini-map {
+  background: #d9eadf;
+}
+
+.google-mini-map::before,
+.google-mini-map::after {
+  display: none;
+}
+
+.mini-map-label {
   position: absolute;
   z-index: 3;
   top: 14px;
@@ -1670,12 +1679,11 @@ button {
 }
 
 .mini-pin {
-  position: absolute;
+  position: relative;
   z-index: 4;
   width: 50px;
   height: 50px;
   padding: 0;
-  transform: translate(-50%, -50%);
   border: 0;
   background: transparent;
   overflow: visible;

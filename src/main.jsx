@@ -607,7 +607,7 @@ function CollectionScreen({ caughtCats, stats, user, navigate, setSelectedCatId 
       </div>
       <div className="section-title-row">
         <h2>Discovery map</h2>
-        <span className="quiet-label">Approximate pins</span>
+        <span className="quiet-label">Original pins</span>
       </div>
       <MiniMap cats={caughtCats} onSelect={(cat) => {
         setSelectedCatId(cat.id);
@@ -1173,23 +1173,74 @@ function CatHeadShape({ image, fill = 'rgba(232, 95, 75, 0.95)', className = '',
 }
 
 function MiniMap({ cats, onSelect = () => {}, approximate = false }) {
-  return (
-    <div className="mini-map">
-      <div>
-        <strong>{approximate ? 'Public area map' : 'My caught map'}</strong>
-        <small>{approximate ? 'Pins are fuzzed for privacy' : 'Tap a pin to view a cat'}</small>
+  const firstCatPosition = cats[0] ? getCatMapPosition(cats[0]) : defaultMapCenter;
+  const { isLoaded, loadError } = useJsApiLoader({
+    googleMapsApiKey,
+    id: 'catmunity-google-map',
+  });
+
+  if (!googleMapsApiKey || loadError) {
+    return (
+      <div className="mini-map google-map-missing">
+        <div className="mini-map-label">
+          <strong>{!googleMapsApiKey ? 'Google Maps API key missing.' : 'Google Map could not load.'}</strong>
+          <small>{!googleMapsApiKey ? 'Add the key to show discovery pins.' : 'Check key, billing, and referrers.'}</small>
+        </div>
       </div>
-      {cats.map((cat) => (
-        <button
-          key={cat.id}
-          className="mini-pin"
-          style={{ left: `${cat.map?.x ?? 50}%`, top: `${cat.map?.y ?? 50}%` }}
-          onClick={() => onSelect(cat)}
-          aria-label={cat.name}
-        >
-          <CatHeadShape className="mini-cat-head" image={cat.cropped_image_url} />
-        </button>
-      ))}
+    );
+  }
+
+  if (!isLoaded) {
+    return (
+      <div className="mini-map google-map-missing">
+        <div className="mini-map-label">
+          <strong>Loading Google Map...</strong>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mini-map google-mini-map">
+      <GoogleMap
+        mapContainerClassName="google-map-canvas"
+        mapContainerStyle={{ width: '100%', height: '100%' }}
+        center={firstCatPosition}
+        zoom={cats.length > 1 ? 12 : 15}
+        options={{
+          clickableIcons: false,
+          disableDefaultUI: true,
+          fullscreenControl: false,
+          gestureHandling: 'cooperative',
+          mapTypeControl: false,
+          streetViewControl: false,
+          zoomControl: false,
+        }}
+      >
+        {cats.map((cat) => {
+          const position = getCatMapPosition(cat);
+          return (
+            <OverlayView
+              key={cat.id}
+              position={position}
+              mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+              getPixelPositionOffset={(width, height) => ({ x: -width / 2, y: -height / 2 })}
+            >
+              <button
+                className="mini-pin"
+                onClick={() => onSelect(cat)}
+                aria-label={cat.name}
+              >
+                <CatHeadShape className="mini-cat-head" image={cat.cropped_image_url} />
+              </button>
+            </OverlayView>
+          );
+        })}
+      </GoogleMap>
+      <div className="mini-map-label">
+        <strong>{approximate ? 'Public area map' : 'My caught map'}</strong>
+        <small>{approximate ? 'Original cat pins' : 'Tap a pin to view a cat'}</small>
+      </div>
     </div>
   );
 }
