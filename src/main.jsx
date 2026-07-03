@@ -293,6 +293,7 @@ function App() {
   const commonProps = {
     cats,
     caughtCats,
+    currentUser: me,
     currentUserId,
     navigate,
     selectedCat,
@@ -423,7 +424,7 @@ function createAppUser(authUser) {
   return {
     id: authUser.id,
     name: displayName,
-    avatar_url: authUser.user_metadata?.avatar_url || fallback.avatar_url,
+    avatar_url: authUser.user_metadata?.avatar_url || '',
     bio: authUser.user_metadata?.bio || 'Saving neighborhood cat memories with Catmunity.',
     public_profile: authUser.user_metadata?.public_profile ?? true,
     email: authUser.email,
@@ -582,7 +583,7 @@ function WelcomeScreen({ onStart }) {
   );
 }
 
-function ExploreScreen({ cats, currentUserId, navigate, setSelectedCatId, unlockExistingCat }) {
+function ExploreScreen({ cats, currentUser, currentUserId, navigate, setSelectedCatId, unlockExistingCat }) {
   const [activeCatId, setActiveCatId] = useState(cats[0]?.id);
   const [query, setQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('All');
@@ -625,6 +626,7 @@ function ExploreScreen({ cats, currentUserId, navigate, setSelectedCatId, unlock
       <div className="live-map-shell has-google-map">
         <GoogleCatMap
           cats={cats}
+          currentUser={currentUser}
           currentUserId={currentUserId}
           activeCatId={activeCatId}
           onSelect={selectCatOnMap}
@@ -847,7 +849,7 @@ function CollectionScreen({ caughtCats, stats, user, navigate, setSelectedCatId 
   return (
     <section className="screen collection-screen">
       <div className="profile-hero">
-        <img src={user.avatar_url} alt={user.name} />
+        <UserAvatar user={user} className="profile-hero-avatar" />
         <div>
           <p className="eyebrow">Public profile</p>
           <h1>{user.name}</h1>
@@ -916,7 +918,7 @@ function PublicProfileScreen({ user, cats, currentUserId, onBack, onSelectCat })
     <section className="screen">
       <BackButton onBack={onBack} />
       <div className="profile-header">
-        <img src={user.avatar_url} alt={user.name} />
+        <UserAvatar user={user} className="profile-header-avatar" />
         <div>
           <p className="eyebrow">Public profile</p>
           <h1>{user.name}</h1>
@@ -952,7 +954,7 @@ function CommunityScreen({ posts, cats, users, comments, onCreate, onOpenUser })
         return (
           <article className="post-card" key={post.id}>
             <button className="post-user" onClick={() => onOpenUser(user.id)}>
-              <img src={user.avatar_url} alt={user.name} />
+              <UserAvatar user={user} className="post-user-avatar" />
               <span><strong>{user.name}</strong><small>{post.created_at} · {post.location_name}</small></span>
             </button>
             <img className="post-image" src={post.image_url || cat?.cropped_image_url} alt="Community cat sighting" />
@@ -1079,7 +1081,10 @@ function SettingsScreen({ user, userId, signedIn, onProfileSave, onSignOut }) {
       <ScreenHeader title="Profile settings" subtitle="Update how your Catmunity account appears." icon={Settings} />
       <form className="profile-settings-card" onSubmit={handleSubmit}>
         <div className="profile-settings-preview">
-          <img src={form.avatarUrl || user.avatar_url} alt={form.name || user.name} />
+          <UserAvatar
+            user={{ ...user, name: form.name || user.name, avatar_url: form.avatarUrl || user.avatar_url }}
+            className="profile-settings-avatar"
+          />
           <span>
             <strong>{form.name || 'Catmunity Friend'}</strong>
             <small>{form.publicProfile ? 'Public collection' : 'Private collection'}</small>
@@ -1327,6 +1332,18 @@ function FilterChip({ label, active, onClick }) {
   );
 }
 
+function UserAvatar({ user, className = '' }) {
+  if (user?.avatar_url) {
+    return <img className={className} src={user.avatar_url} alt={user.name || 'User'} />;
+  }
+
+  return (
+    <span className={`user-avatar-placeholder ${className}`} aria-label={user?.name || 'User'}>
+      <User size={20} />
+    </span>
+  );
+}
+
 function CatchButton({ onClick }) {
   return (
     <button className="floating-catch-button" onClick={onClick} aria-label="Catch a new cat">
@@ -1385,7 +1402,7 @@ function useGoogleMapsAuthFailure() {
   return authFailed;
 }
 
-function GoogleCatMap({ cats, currentUserId, activeCatId, centerSignal, onSelect }) {
+function GoogleCatMap({ cats, currentUser, currentUserId, activeCatId, centerSignal, onSelect }) {
   if (!googleMapsApiKey) {
     return (
       <div className="mock-map immersive-map google-map-missing" role="img" aria-label="Google Maps API key missing">
@@ -1401,6 +1418,7 @@ function GoogleCatMap({ cats, currentUserId, activeCatId, centerSignal, onSelect
   return (
     <RealGoogleMap
       cats={cats}
+      currentUser={currentUser}
       currentUserId={currentUserId}
       activeCatId={activeCatId}
       centerSignal={centerSignal}
@@ -1409,7 +1427,7 @@ function GoogleCatMap({ cats, currentUserId, activeCatId, centerSignal, onSelect
   );
 }
 
-function RealGoogleMap({ cats, currentUserId, activeCatId, centerSignal, onSelect }) {
+function RealGoogleMap({ cats, currentUser, currentUserId, activeCatId, centerSignal, onSelect }) {
   const [userPosition, setUserPosition] = useState(null);
   const [mapCenter, setMapCenter] = useState(defaultMapCenter);
   const [locationStatus, setLocationStatus] = useState('locating');
@@ -1506,8 +1524,8 @@ function RealGoogleMap({ cats, currentUserId, activeCatId, centerSignal, onSelec
             mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
             getPixelPositionOffset={(width, height) => ({ x: -width / 2, y: -height / 2 })}
           >
-            <div className="google-user-marker" aria-label="Your current location">
-              <User size={20} />
+            <div className={currentUser?.avatar_url ? 'google-user-marker has-photo' : 'google-user-marker'} aria-label="Your current location">
+              <UserAvatar user={currentUser} className="google-user-avatar" />
             </div>
           </OverlayView>
         )}
