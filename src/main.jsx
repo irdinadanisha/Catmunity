@@ -854,6 +854,12 @@ function CatPreviewCard({ cat, locked, onOpen }) {
 
 const defaultMapCenter = { lat: 3.1478, lng: 101.6953 };
 const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+const nearbyCatOffsets = [
+  { lat: 0.0011, lng: -0.0012 },
+  { lat: -0.001, lng: 0.0014 },
+  { lat: 0.0017, lng: 0.001 },
+  { lat: -0.0015, lng: -0.0008 },
+];
 
 function GoogleCatMap({ cats, currentUserId, activeCatId, centerSignal, onSelect }) {
   if (!googleMapsApiKey) {
@@ -882,27 +888,40 @@ function GoogleCatMap({ cats, currentUserId, activeCatId, centerSignal, onSelect
 function RealGoogleMap({ cats, currentUserId, activeCatId, centerSignal, onSelect }) {
   const [userPosition, setUserPosition] = useState(null);
   const [mapCenter, setMapCenter] = useState(defaultMapCenter);
+  const [locationStatus, setLocationStatus] = useState('locating');
   const mapRef = useRef(null);
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey,
     id: 'catmunity-google-map',
   });
 
-  useEffect(() => {
-    if (!navigator.geolocation) return;
+  function requestCurrentLocation() {
+    if (!navigator.geolocation) {
+      setLocationStatus('unsupported');
+      setMapCenter(defaultMapCenter);
+      return;
+    }
 
+    setLocationStatus('locating');
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
         const nextPosition = { lat: coords.latitude, lng: coords.longitude };
         setUserPosition(nextPosition);
         setMapCenter(nextPosition);
         mapRef.current?.panTo(nextPosition);
+        mapRef.current?.setZoom(16);
+        setLocationStatus('ready');
       },
       () => {
         setMapCenter(defaultMapCenter);
+        setLocationStatus('denied');
       },
       { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 },
     );
+  }
+
+  useEffect(() => {
+    requestCurrentLocation();
   }, []);
 
   useEffect(() => {
@@ -910,6 +929,19 @@ function RealGoogleMap({ cats, currentUserId, activeCatId, centerSignal, onSelec
     mapRef.current?.panTo(target);
     mapRef.current?.setZoom(userPosition ? 15 : 13);
   }, [centerSignal, userPosition, mapCenter]);
+
+  const positionedCats = useMemo(() => {
+    if (!userPosition) return cats;
+
+    return cats.map((cat, index) => {
+      const offset = nearbyCatOffsets[index % nearbyCatOffsets.length];
+      return {
+        ...cat,
+        latitude: userPosition.lat + offset.lat,
+        longitude: userPosition.lng + offset.lng,
+      };
+    });
+  }, [cats, userPosition]);
 
   if (loadError) {
     return (
@@ -938,8 +970,9 @@ function RealGoogleMap({ cats, currentUserId, activeCatId, centerSignal, onSelec
     <div className="mock-map immersive-map google-map-layer" aria-label="Live cat discovery map">
       <GoogleMap
         mapContainerClassName="google-map-canvas"
+        mapContainerStyle={{ width: '100%', height: '100%' }}
         center={mapCenter}
-        zoom={14}
+        zoom={userPosition ? 16 : 14}
         options={{
           clickableIcons: false,
           disableDefaultUI: true,
@@ -952,6 +985,7 @@ function RealGoogleMap({ cats, currentUserId, activeCatId, centerSignal, onSelec
         onLoad={(map) => {
           mapRef.current = map;
           map.panTo(mapCenter);
+          map.setZoom(userPosition ? 16 : 14);
         }}
       >
         {userPosition && (
@@ -965,7 +999,7 @@ function RealGoogleMap({ cats, currentUserId, activeCatId, centerSignal, onSelec
             </div>
           </OverlayView>
         )}
-        {cats.map((cat, index) => {
+        {positionedCats.map((cat, index) => {
           const locked = !cat.caught_by_users.includes(currentUserId);
           return (
             <OverlayView
@@ -985,6 +1019,15 @@ function RealGoogleMap({ cats, currentUserId, activeCatId, centerSignal, onSelec
           );
         })}
       </GoogleMap>
+      <div className="map-location-status">
+        <span>
+          {locationStatus === 'ready' && 'Using your current location'}
+          {locationStatus === 'locating' && 'Finding your current location...'}
+          {locationStatus === 'denied' && 'Location blocked, showing Kuala Lumpur'}
+          {locationStatus === 'unsupported' && 'Location unavailable, showing Kuala Lumpur'}
+        </span>
+        <button type="button" onClick={requestCurrentLocation}>Locate me</button>
+      </div>
     </div>
   );
 }

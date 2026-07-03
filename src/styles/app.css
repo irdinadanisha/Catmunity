@@ -586,6 +586,54 @@ button {
   height: 100%;
 }
 
+.google-map-canvas > div {
+  width: 100%;
+  height: 100%;
+}
+
+.map-location-status {
+  position: absolute;
+  z-index: 14;
+  top: 130px;
+  left: 18px;
+  right: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 38px;
+  padding: 7px 8px 7px 13px;
+  border-radius: 999px;
+  color: #33535c;
+  background: rgba(255, 252, 247, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  box-shadow: 0 14px 30px rgba(37, 58, 69, 0.12);
+  backdrop-filter: blur(18px) saturate(1.15);
+  pointer-events: auto;
+}
+
+.map-location-status span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.75rem;
+  font-weight: 850;
+}
+
+.map-location-status button {
+  flex: 0 0 auto;
+  min-height: 28px;
+  border: 0;
+  border-radius: 999px;
+  padding: 5px 10px;
+  color: #ffffff;
+  background: #28b9e8;
+  font-size: 0.72rem;
+  font-weight: 900;
+  box-shadow: 0 8px 18px rgba(40, 185, 232, 0.22);
+}
+
 .google-map-missing {
   display: grid;
   place-items: center;
