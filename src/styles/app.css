@@ -319,6 +319,14 @@ button:disabled {
   line-height: 1.4;
 }
 
+.auth-resend-button {
+  min-height: 36px;
+  border: 0;
+  background: transparent;
+  color: #1e7893;
+  font-weight: 950;
+}
+
 .screen-header {
   display: flex;
   gap: 12px;

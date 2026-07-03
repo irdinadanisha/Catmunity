@@ -25,6 +25,8 @@ Use the Supabase project URL only for `VITE_SUPABASE_URL`. Do not paste URLs tha
 
 In Supabase, enable **Authentication > Providers > Email**. For quick MVP testing, you can temporarily turn off email confirmation in **Authentication > Sign In / Providers > Email**, or keep it on and confirm the account from the email before logging in.
 
+If confirmation emails do not arrive, check spam/promotions, try the app's **Resend confirmation email** action, and inspect **Authentication > Logs** in Supabase. Supabase's default email sender is meant for testing and can be delayed or rate-limited; for more reliable production delivery, configure a custom SMTP provider in Supabase Auth settings.
+
 In **Authentication > URL Configuration**, set **Site URL** to your deployed Vercel URL, for example:
 
 ```bash

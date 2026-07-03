@@ -48,6 +48,7 @@ import {
 import {
   getCurrentSession,
   isSupabaseConfigured,
+  resendSignupConfirmation,
   signInWithEmail,
   signOutUser,
   signUpWithEmail,
@@ -413,6 +414,7 @@ function AuthScreen({ onSubmit }) {
   const [password, setPassword] = useState('');
   const [status, setStatus] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [canResendConfirmation, setCanResendConfirmation] = useState(false);
   const isSignup = mode === 'signup';
 
   async function handleSubmit(event) {
@@ -423,11 +425,33 @@ function AuthScreen({ onSubmit }) {
     try {
       await onSubmit({ mode, name, email, password });
       setStatus(isSignup ? 'If email confirmation is enabled, check your inbox before signing in.' : '');
+      setCanResendConfirmation(isSignup);
     } catch (error) {
       setStatus(error.message || 'Authentication failed. Please try again.');
+      setCanResendConfirmation(false);
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function handleResendConfirmation() {
+    if (!email) {
+      setStatus('Enter your email first, then resend the confirmation.');
+      return;
+    }
+
+    setSubmitting(true);
+    setStatus('');
+
+    const { error } = await resendSignupConfirmation(email);
+    setSubmitting(false);
+
+    if (error) {
+      setStatus(error.message || 'Could not resend confirmation email.');
+      return;
+    }
+
+    setStatus('Confirmation email resent. Check inbox, spam, and promotions folders.');
   }
 
   return (
@@ -486,6 +510,11 @@ function AuthScreen({ onSubmit }) {
         <button className="primary-button" type="submit" disabled={submitting}>
           <ShieldCheck size={18} /> {submitting ? 'Please wait...' : isSignup ? 'Create account' : 'Log in'}
         </button>
+        {canResendConfirmation && (
+          <button className="auth-resend-button" type="button" disabled={submitting} onClick={handleResendConfirmation}>
+            Resend confirmation email
+          </button>
+        )}
       </form>
     </main>
   );
