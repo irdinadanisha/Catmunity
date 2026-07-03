@@ -802,7 +802,7 @@ function CatchButton({ onClick }) {
     <button className="floating-catch-button" onClick={onClick} aria-label="Catch a new cat">
       <CatHeadShape className="cat-head-action" fill="action">
         <Plus size={18} className="catch-plus" />
-        <Camera size={23} />
+        <Camera size={22} className="catch-camera" />
       </CatHeadShape>
     </button>
   );

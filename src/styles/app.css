@@ -768,8 +768,14 @@ button {
 }
 
 .catch-plus {
-  width: 16px;
-  translate: 14px -13px;
+  width: 15px;
+  translate: 13px -12px;
+}
+
+.catch-camera {
+  width: 22px;
+  height: 22px;
+  translate: 0 4px;
 }
 
 .cat-head-photo {
@@ -1141,9 +1147,9 @@ button {
   position: fixed;
   z-index: 42;
   left: 50%;
-  bottom: calc(30px + env(safe-area-inset-bottom));
-  width: 72px;
-  height: 72px;
+  bottom: calc(26px + env(safe-area-inset-bottom));
+  width: 64px;
+  height: 64px;
   transform: translateX(-50%);
   border: 0;
   display: grid;
