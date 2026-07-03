@@ -54,6 +54,7 @@ import {
   signUpWithEmail,
   subscribeToAuthChanges,
   updateUserProfile,
+  uploadProfilePhoto,
 } from './services/supabaseClient';
 import './styles/app.css';
 
@@ -383,6 +384,7 @@ function App() {
         {screen === 'settings' && (
           <SettingsScreen
             user={me}
+            userId={currentUserId}
             signedIn={Boolean(authUser)}
             onProfileSave={handleProfileSave}
             onSignOut={handleSignOut}
@@ -999,7 +1001,7 @@ function CreatePostScreen({ onBack, onCreate }) {
   );
 }
 
-function SettingsScreen({ user, signedIn, onProfileSave, onSignOut }) {
+function SettingsScreen({ user, userId, signedIn, onProfileSave, onSignOut }) {
   const [form, setForm] = useState({
     name: user.name || '',
     avatarUrl: user.avatar_url || '',
@@ -1007,6 +1009,8 @@ function SettingsScreen({ user, signedIn, onProfileSave, onSignOut }) {
     publicProfile: user.public_profile ?? true,
   });
   const [saving, setSaving] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoStatus, setPhotoStatus] = useState('');
 
   useEffect(() => {
     setForm({
@@ -1028,6 +1032,27 @@ function SettingsScreen({ user, signedIn, onProfileSave, onSignOut }) {
     setSaving(false);
   }
 
+  async function handlePhotoUpload(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploadingPhoto(true);
+    setPhotoStatus('');
+    const previewUrl = URL.createObjectURL(file);
+    update('avatarUrl', previewUrl);
+
+    const { publicUrl, error } = await uploadProfilePhoto(file, userId);
+    setUploadingPhoto(false);
+
+    if (error) {
+      setPhotoStatus(error.message || 'Profile photo upload failed.');
+      return;
+    }
+
+    update('avatarUrl', publicUrl);
+    setPhotoStatus('Profile photo uploaded. Save profile to keep it.');
+  }
+
   return (
     <section className="screen">
       <ScreenHeader title="Profile settings" subtitle="Update how your Catmunity account appears." icon={Settings} />
@@ -1040,7 +1065,12 @@ function SettingsScreen({ user, signedIn, onProfileSave, onSignOut }) {
           </span>
         </div>
         <Field label="Display name" value={form.name} placeholder="Irdina" onChange={(value) => update('name', value)} />
-        <Field label="Profile picture URL" value={form.avatarUrl} placeholder="https://..." onChange={(value) => update('avatarUrl', value)} />
+        <label className="profile-photo-upload">
+          <span>Profile picture</span>
+          <input type="file" accept="image/*" disabled={!signedIn || uploadingPhoto} onChange={handlePhotoUpload} />
+          <em>{uploadingPhoto ? 'Uploading photo...' : 'Choose image'}</em>
+        </label>
+        {photoStatus && <p className="profile-photo-status">{photoStatus}</p>}
         <label className="field">
           <span>Bio</span>
           <textarea

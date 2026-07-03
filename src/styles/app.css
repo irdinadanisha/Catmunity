@@ -1929,6 +1929,58 @@ button:disabled {
   box-shadow: 0 0 0 4px rgba(40, 185, 232, 0.12);
 }
 
+.profile-photo-upload {
+  position: relative;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 54px;
+  padding: 10px 12px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(80, 55, 40, 0.06);
+}
+
+.profile-photo-upload > span {
+  color: #57443a;
+  font-weight: 900;
+}
+
+.profile-photo-upload input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.profile-photo-upload input:disabled {
+  cursor: not-allowed;
+}
+
+.profile-photo-upload em {
+  position: relative;
+  z-index: 1;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 0 12px;
+  color: #ffffff;
+  background: #28b9e8;
+  font-size: 0.78rem;
+  font-style: normal;
+  font-weight: 950;
+  pointer-events: none;
+}
+
+.profile-photo-status {
+  margin: -4px 0 0;
+  color: #1e7893;
+  font-size: 0.82rem;
+  font-weight: 850;
+}
+
 .privacy-switch {
   grid-template-columns: auto 1fr;
   align-items: center;

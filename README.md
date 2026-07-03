@@ -80,6 +80,8 @@ Service helpers live in `src/services/catServices.js` for:
 
 Signed-in users are stored in Supabase Auth. Cat ownership is saved in `user_cats`, new cats are saved in `cats`, and extra sightings are saved in `cat_sightings`, all linked to the authenticated user id.
 
+Profile pictures upload to a public Supabase Storage bucket named `profile-photos`. Run `supabase/schema.sql` in the Supabase SQL editor after pulling changes so the bucket and storage policies exist before testing profile uploads.
+
 The Supabase schema lives in `supabase/schema.sql` and uses normalized `cats`, `user_cats`, and `cat_sightings` tables plus a public-safe `cat_public_map` view. The app reads live cats from Supabase when the environment variables are present, and falls back to mock data if Supabase is unavailable.
 
 ## Safety And Privacy Defaults

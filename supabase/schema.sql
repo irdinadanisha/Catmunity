@@ -5,6 +5,10 @@
 
 create extension if not exists pgcrypto;
 
+insert into storage.buckets (id, name, public)
+values ('profile-photos', 'profile-photos', true)
+on conflict (id) do update set public = excluded.public;
+
 create table if not exists public.cats (
   id uuid primary key default gen_random_uuid(),
   name text,
@@ -136,3 +140,36 @@ create index if not exists user_cats_user_id_idx
 
 create index if not exists cat_sightings_cat_id_idx
   on public.cat_sightings (cat_id);
+
+drop policy if exists "Public can read profile photos" on storage.objects;
+create policy "Public can read profile photos"
+on storage.objects for select
+using (bucket_id = 'profile-photos');
+
+drop policy if exists "Users can upload own profile photos" on storage.objects;
+create policy "Users can upload own profile photos"
+on storage.objects for insert
+with check (
+  bucket_id = 'profile-photos'
+  and auth.uid()::text = (storage.foldername(name))[1]
+);
+
+drop policy if exists "Users can update own profile photos" on storage.objects;
+create policy "Users can update own profile photos"
+on storage.objects for update
+using (
+  bucket_id = 'profile-photos'
+  and auth.uid()::text = (storage.foldername(name))[1]
+)
+with check (
+  bucket_id = 'profile-photos'
+  and auth.uid()::text = (storage.foldername(name))[1]
+);
+
+drop policy if exists "Users can delete own profile photos" on storage.objects;
+create policy "Users can delete own profile photos"
+on storage.objects for delete
+using (
+  bucket_id = 'profile-photos'
+  and auth.uid()::text = (storage.foldername(name))[1]
+);

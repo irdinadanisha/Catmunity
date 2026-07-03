@@ -131,6 +131,40 @@ export async function updateUserProfile({ name, avatarUrl, bio, publicProfile })
   return { data, error: getAuthError(error) };
 }
 
+export async function uploadProfilePhoto(file, userId) {
+  if (!isSupabaseConfigured) {
+    return { publicUrl: '', error: new Error('Supabase is not configured.') };
+  }
+
+  if (!file) {
+    return { publicUrl: '', error: new Error('Choose an image first.') };
+  }
+
+  if (!file.type.startsWith('image/')) {
+    return { publicUrl: '', error: new Error('Profile photo must be an image file.') };
+  }
+
+  const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+  const path = `${userId}/avatar-${Date.now()}.${extension}`;
+  const { error } = await supabase.storage
+    .from('profile-photos')
+    .upload(path, file, {
+      cacheControl: '3600',
+      contentType: file.type,
+      upsert: true,
+    });
+
+  if (error) {
+    return { publicUrl: '', error: getAuthError(error) };
+  }
+
+  const { data } = supabase.storage
+    .from('profile-photos')
+    .getPublicUrl(path);
+
+  return { publicUrl: data.publicUrl, error: null };
+}
+
 export async function signOutUser() {
   if (!isSupabaseConfigured) return;
   await supabase.auth.signOut();
