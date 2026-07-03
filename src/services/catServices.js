@@ -427,6 +427,14 @@ function getAreaName(latitude, longitude) {
     return 'University Garden area';
   }
 
+  if (latitude >= 3.195 && latitude <= 3.235 && longitude >= 101.725 && longitude <= 101.775) {
+    return 'Melawati area';
+  }
+
+  if (latitude >= 3.13 && latitude <= 3.18 && longitude >= 101.735 && longitude <= 101.79) {
+    return 'Ampang area';
+  }
+
   return 'Central Kuala Lumpur area';
 }
 

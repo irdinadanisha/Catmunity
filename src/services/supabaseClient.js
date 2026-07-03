@@ -131,6 +131,83 @@ export async function updateUserProfile({ name, avatarUrl, bio, publicProfile })
   return { data, error: getAuthError(error) };
 }
 
+export async function upsertCommunityProfile({ id, name, avatarUrl = '', bio = '', publicProfile = true }) {
+  if (!isSupabaseConfigured || !id) return { data: null, error: null };
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .upsert(
+      {
+        id,
+        display_name: name,
+        avatar_url: avatarUrl,
+        bio,
+        public_profile: publicProfile,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'id' },
+    )
+    .select()
+    .single();
+
+  return { data, error };
+}
+
+export async function searchCommunityProfilesByName(query, currentUserId) {
+  if (!isSupabaseConfigured || !query.trim()) return { data: [], error: null };
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, display_name, avatar_url, bio, public_profile')
+    .ilike('display_name', `%${query.trim()}%`)
+    .eq('public_profile', true)
+    .neq('id', currentUserId)
+    .limit(8);
+
+  return { data: data || [], error };
+}
+
+export async function loadFollowingIds(userId) {
+  if (!isSupabaseConfigured || !userId) return { data: [], error: null };
+
+  const { data, error } = await supabase
+    .from('user_follows')
+    .select('following_id')
+    .eq('follower_id', userId);
+
+  return { data: (data || []).map((item) => item.following_id), error };
+}
+
+export async function followUserById(followerId, followingId) {
+  if (!isSupabaseConfigured || !followerId || !followingId || followerId === followingId) {
+    return { error: null };
+  }
+
+  const { error } = await supabase
+    .from('user_follows')
+    .upsert(
+      {
+        follower_id: followerId,
+        following_id: followingId,
+      },
+      { onConflict: 'follower_id,following_id' },
+    );
+
+  return { error };
+}
+
+export async function unfollowUserById(followerId, followingId) {
+  if (!isSupabaseConfigured || !followerId || !followingId) return { error: null };
+
+  const { error } = await supabase
+    .from('user_follows')
+    .delete()
+    .eq('follower_id', followerId)
+    .eq('following_id', followingId);
+
+  return { error };
+}
+
 export async function uploadProfilePhoto(file, userId) {
   if (!isSupabaseConfigured) {
     return { publicUrl: '', error: new Error('Supabase is not configured.') };

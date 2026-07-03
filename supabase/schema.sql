@@ -9,6 +9,24 @@ insert into storage.buckets (id, name, public)
 values ('profile-photos', 'profile-photos', true)
 on conflict (id) do update set public = excluded.public;
 
+create table if not exists public.profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  display_name text not null,
+  avatar_url text,
+  bio text,
+  public_profile boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.user_follows (
+  follower_id uuid not null references auth.users(id) on delete cascade,
+  following_id uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (follower_id, following_id),
+  check (follower_id <> following_id)
+);
+
 create table if not exists public.cats (
   id uuid primary key default gen_random_uuid(),
   name text,
@@ -84,8 +102,41 @@ group by cats.id;
 grant select on public.cat_public_map to anon, authenticated;
 
 alter table public.cats enable row level security;
+alter table public.profiles enable row level security;
+alter table public.user_follows enable row level security;
 alter table public.user_cats enable row level security;
 alter table public.cat_sightings enable row level security;
+
+drop policy if exists "Users can read public profiles" on public.profiles;
+create policy "Users can read public profiles"
+on public.profiles for select
+using (public_profile = true or auth.uid() = id);
+
+drop policy if exists "Users can create own profile" on public.profiles;
+create policy "Users can create own profile"
+on public.profiles for insert
+with check (auth.uid() = id);
+
+drop policy if exists "Users can update own profile" on public.profiles;
+create policy "Users can update own profile"
+on public.profiles for update
+using (auth.uid() = id)
+with check (auth.uid() = id);
+
+drop policy if exists "Users can read own follows" on public.user_follows;
+create policy "Users can read own follows"
+on public.user_follows for select
+using (auth.uid() = follower_id);
+
+drop policy if exists "Users can follow profiles" on public.user_follows;
+create policy "Users can follow profiles"
+on public.user_follows for insert
+with check (auth.uid() = follower_id);
+
+drop policy if exists "Users can unfollow profiles" on public.user_follows;
+create policy "Users can unfollow profiles"
+on public.user_follows for delete
+using (auth.uid() = follower_id);
 
 drop policy if exists "Public can read approximate cat map" on public.cats;
 drop policy if exists "Creators and catchers can read exact cat records" on public.cats;
@@ -134,6 +185,12 @@ with check (auth.uid() = user_id);
 
 create index if not exists cats_approximate_location_idx
   on public.cats (approximate_latitude, approximate_longitude);
+
+create index if not exists profiles_display_name_idx
+  on public.profiles (display_name);
+
+create index if not exists user_follows_follower_id_idx
+  on public.user_follows (follower_id);
 
 create index if not exists user_cats_user_id_idx
   on public.user_cats (user_id);

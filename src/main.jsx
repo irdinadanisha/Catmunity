@@ -42,18 +42,24 @@ import {
   getCatMapPosition,
   getDistanceMeters,
   getCurrentAccurateLocation,
+  getApproximateLocation,
   isWithinDuplicateRadius,
   loadCatsFromSupabase,
 } from './services/catServices';
 import {
+  followUserById,
   getCurrentSession,
   isSupabaseConfigured,
+  loadFollowingIds,
   resendSignupConfirmation,
+  searchCommunityProfilesByName,
   signInWithEmail,
   signOutUser,
   signUpWithEmail,
   subscribeToAuthChanges,
+  unfollowUserById,
   updateUserProfile,
+  upsertCommunityProfile,
   uploadProfilePhoto,
 } from './services/supabaseClient';
 import './styles/app.css';
@@ -79,6 +85,7 @@ function App() {
   const [isProcessingCatPhoto, setIsProcessingCatPhoto] = useState(false);
   const [authUser, setAuthUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(isSupabaseConfigured);
+  const [followingIds, setFollowingIds] = useState([]);
   const [toast, setToast] = useState('');
 
   useEffect(() => {
@@ -108,6 +115,38 @@ function App() {
 
   const currentUserId = authUser?.id || fallbackUserId;
   const me = createAppUser(authUser);
+
+  useEffect(() => {
+    if (!authUser) return;
+
+    upsertCommunityProfile({
+      id: currentUserId,
+      name: me.name,
+      avatarUrl: me.avatar_url,
+      bio: me.bio,
+      publicProfile: me.public_profile,
+    });
+  }, [authUser, currentUserId, me.name, me.avatar_url, me.bio, me.public_profile]);
+
+  useEffect(() => {
+    if (!authUser) {
+      setFollowingIds([]);
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function loadFollows() {
+      const { data } = await loadFollowingIds(currentUserId);
+      if (!cancelled) setFollowingIds(data || []);
+    }
+
+    loadFollows();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser, currentUserId]);
 
   useEffect(() => {
     if (isSupabaseConfigured && !authUser) return undefined;
@@ -191,8 +230,48 @@ function App() {
 
     if (data.user) {
       setAuthUser(data.user);
+      await upsertCommunityProfile({
+        id: data.user.id,
+        name: profile.name,
+        avatarUrl: profile.avatarUrl,
+        bio: profile.bio,
+        publicProfile: profile.publicProfile,
+      });
     }
     showToast('Profile updated.');
+  }
+
+  async function handleSearchFriends(query) {
+    if (!isSupabaseConfigured) {
+      return mockUsers
+        .filter((user) => user.id !== currentUserId)
+        .filter((user) => user.name.toLowerCase().includes(query.trim().toLowerCase()));
+    }
+
+    const { data, error } = await searchCommunityProfilesByName(query, currentUserId);
+    if (error) {
+      showToast(error.message || 'Friend search failed.');
+      return [];
+    }
+
+    return data.map(mapCommunityProfile);
+  }
+
+  async function handleToggleFollow(userId) {
+    const isFollowing = followingIds.includes(userId);
+    const { error } = isFollowing
+      ? await unfollowUserById(currentUserId, userId)
+      : await followUserById(currentUserId, userId);
+
+    if (error) {
+      showToast(error.message || 'Could not update follow.');
+      return;
+    }
+
+    setFollowingIds((ids) =>
+      isFollowing ? ids.filter((id) => id !== userId) : [...new Set([...ids, userId])],
+    );
+    showToast(isFollowing ? 'Friend unfollowed.' : 'Friend followed.');
   }
 
   async function handlePhotoSelected(file) {
@@ -372,6 +451,11 @@ function App() {
             cats={cats}
             users={communityUsers}
             comments={mockComments}
+            currentUser={me}
+            currentUserId={currentUserId}
+            followingIds={followingIds}
+            onSearchFriends={handleSearchFriends}
+            onToggleFollow={handleToggleFollow}
             onCreate={() => navigate('createPost')}
             onOpenUser={(id) => {
               setSelectedUserId(id);
@@ -428,6 +512,16 @@ function createAppUser(authUser) {
     bio: authUser.user_metadata?.bio || 'Saving neighborhood cat memories with Catmunity.',
     public_profile: authUser.user_metadata?.public_profile ?? true,
     email: authUser.email,
+  };
+}
+
+function mapCommunityProfile(profile) {
+  return {
+    id: profile.id,
+    name: profile.display_name,
+    avatar_url: profile.avatar_url || '',
+    bio: profile.bio || '',
+    public_profile: profile.public_profile,
   };
 }
 
@@ -940,22 +1034,115 @@ function PublicProfileScreen({ user, cats, currentUserId, onBack, onSelectCat })
   );
 }
 
-function CommunityScreen({ posts, cats, users, comments, onCreate, onOpenUser }) {
+function CommunityScreen({
+  posts,
+  cats,
+  users,
+  comments,
+  currentUser,
+  currentUserId,
+  followingIds,
+  onSearchFriends,
+  onToggleFollow,
+  onCreate,
+  onOpenUser,
+}) {
+  const [currentArea, setCurrentArea] = useState('Finding your area...');
+  const [friendQuery, setFriendQuery] = useState('');
+  const [friendResults, setFriendResults] = useState([]);
+  const [searchingFriends, setSearchingFriends] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function detectArea() {
+      const position = await getCurrentAccurateLocation();
+      if (cancelled) return;
+      setCurrentArea(getApproximateLocation(position.latitude, position.longitude).areaName);
+    }
+
+    detectArea();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function handleFriendSearch(event) {
+    event.preventDefault();
+    setSearchingFriends(true);
+    const results = await onSearchFriends(friendQuery);
+    setFriendResults(results);
+    setSearchingFriends(false);
+  }
+
+  const visibleUsers = useMemo(() => {
+    const byId = new Map(users.map((user) => [user.id, user]));
+    friendResults.forEach((user) => byId.set(user.id, user));
+    return [...byId.values()];
+  }, [users, friendResults]);
+
+  const localPosts = posts.filter((post) => post.location_name === currentArea);
+  const friendPosts = posts.filter((post) => followingIds.includes(post.user_id) || post.user_id === currentUserId);
+  const timelinePosts = [...friendPosts, ...localPosts.filter((post) => !friendPosts.some((item) => item.id === post.id))];
+
   return (
     <section className="screen">
-      <ScreenHeader title="Community" subtitle="Sightings, reactions, and public collections." icon={Users} />
+      <ScreenHeader title="Community" subtitle="Follow friends and see cats near your current place." icon={Users} />
+      <section className="friend-finder">
+        <div className="section-title-row">
+          <h2>Find friends</h2>
+          <span className="quiet-label">{followingIds.length} following</span>
+        </div>
+        <form className="friend-search-row" onSubmit={handleFriendSearch}>
+          <Search size={18} />
+          <input
+            value={friendQuery}
+            placeholder="Search by registered name"
+            onChange={(event) => setFriendQuery(event.target.value)}
+          />
+          <button type="submit">{searchingFriends ? '...' : 'Search'}</button>
+        </form>
+        <div className="friend-result-list">
+          {friendResults.map((user) => {
+            const following = followingIds.includes(user.id);
+            return (
+              <article className="friend-result" key={user.id}>
+                <UserAvatar user={user} className="post-user-avatar" />
+                <span>
+                  <strong>{user.name}</strong>
+                  <small>{user.bio || 'Catmunity friend'}</small>
+                </span>
+                <button type="button" onClick={() => onToggleFollow(user.id)}>
+                  {following ? 'Following' : 'Follow'}
+                </button>
+              </article>
+            );
+          })}
+          {friendQuery && !searchingFriends && friendResults.length === 0 && (
+            <p className="empty-community-copy">No public users found with that name yet.</p>
+          )}
+        </div>
+      </section>
       <div className="section-title-row">
-        <h2>Recent sightings</h2>
+        <div>
+          <h2>Timeline</h2>
+          <span className="quiet-label">{currentArea}</span>
+        </div>
         <button className="text-button" onClick={onCreate}><Plus size={16} /> Post</button>
       </div>
-      {posts.map((post) => {
-        const user = users.find((item) => item.id === post.user_id) || users[0];
+      {timelinePosts.map((post) => {
+        const user = visibleUsers.find((item) => item.id === post.user_id) || currentUser;
         const cat = cats.find((item) => item.id === post.cat_id);
+        const isFriendPost = followingIds.includes(post.user_id) || post.user_id === currentUserId;
         return (
           <article className="post-card" key={post.id}>
             <button className="post-user" onClick={() => onOpenUser(user.id)}>
               <UserAvatar user={user} className="post-user-avatar" />
-              <span><strong>{user.name}</strong><small>{post.created_at} · {post.location_name}</small></span>
+              <span>
+                <strong>{user.name}</strong>
+                <small>{isFriendPost ? 'Friend post' : 'Nearby'} · {post.created_at} · {post.location_name}</small>
+              </span>
             </button>
             <img className="post-image" src={post.image_url || cat?.cropped_image_url} alt="Community cat sighting" />
             <p>{post.body}</p>
@@ -971,6 +1158,9 @@ function CommunityScreen({ posts, cats, users, comments, onCreate, onOpenUser })
           </article>
         );
       })}
+      {timelinePosts.length === 0 && (
+        <p className="empty-community-copy">No cat posts in {currentArea} yet. Follow friends or create the first sighting here.</p>
+      )}
     </section>
   );
 }

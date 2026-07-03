@@ -125,6 +125,28 @@ export const mockPosts = [
     reactions: { heart: 42, sparkle: 18 },
     comment_ids: ['comment-2'],
   },
+  {
+    id: 'post-3',
+    user_id: 'user-jules',
+    cat_id: 'cat-biscuit',
+    image_url: 'https://images.unsplash.com/photo-1596854407944-bf87f6fdd49e?auto=format&fit=crop&w=900&q=80',
+    body: 'A quiet black cat was watching the evening traffic from a shaded wall.',
+    location_name: 'Melawati area',
+    created_at: '24 min ago',
+    reactions: { heart: 18, sparkle: 7 },
+    comment_ids: [],
+  },
+  {
+    id: 'post-4',
+    user_id: 'user-jules',
+    cat_id: 'cat-mochi',
+    image_url: 'https://images.unsplash.com/photo-1573865526739-10659fec78a5?auto=format&fit=crop&w=900&q=80',
+    body: 'Ampang cafe cat report: extremely fluffy, politely ignored everyone.',
+    location_name: 'Ampang area',
+    created_at: '43 min ago',
+    reactions: { heart: 31, sparkle: 14 },
+    comment_ids: [],
+  },
 ];
 
 export const mockComments = [
