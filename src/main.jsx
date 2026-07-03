@@ -411,8 +411,8 @@ function App() {
   };
 
   const notifications = useMemo(
-    () => createNotifications({ followerProfiles, posts, comments, cats, currentUserId }),
-    [followerProfiles, posts, comments, cats, currentUserId],
+    () => createNotifications({ followerProfiles, posts, comments: mockComments, cats, currentUserId }),
+    [followerProfiles, posts, cats, currentUserId],
   );
 
   if (authLoading) {
