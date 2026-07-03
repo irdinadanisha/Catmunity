@@ -25,6 +25,21 @@ Use the Supabase project URL only for `VITE_SUPABASE_URL`. Do not paste URLs tha
 
 In Supabase, enable **Authentication > Providers > Email**. For quick MVP testing, you can temporarily turn off email confirmation in **Authentication > Sign In / Providers > Email**, or keep it on and confirm the account from the email before logging in.
 
+In **Authentication > URL Configuration**, set **Site URL** to your deployed Vercel URL, for example:
+
+```bash
+https://catmunity.vercel.app
+```
+
+Also add these redirect URLs:
+
+```bash
+https://catmunity.vercel.app/**
+http://localhost:5173/**
+```
+
+Replace `catmunity.vercel.app` with your real Vercel domain. Do not leave the production Site URL as `http://localhost:3000`.
+
 ## Included MVP Flow
 
 - Full-screen explore map with caught and locked nearby cats
