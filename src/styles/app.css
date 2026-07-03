@@ -399,7 +399,7 @@ button {
 .map-brand {
   position: absolute;
   z-index: 22;
-  top: 22px;
+  top: 58px;
   left: 50%;
   transform: translateX(-50%);
   display: inline-flex;
@@ -419,7 +419,7 @@ button {
 .live-hud {
   position: absolute;
   z-index: 12;
-  top: 78px;
+  top: 108px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -459,7 +459,7 @@ button {
 
 .weather-button {
   right: 20px;
-  top: 76px;
+  top: 108px;
   width: 42px;
   height: 42px;
   display: grid;
@@ -470,7 +470,7 @@ button {
 
 .scan-chip {
   right: 18px;
-  top: 128px;
+  top: 160px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -593,16 +593,18 @@ button {
 
 .map-location-status {
   position: absolute;
-  z-index: 14;
-  top: 130px;
-  left: 18px;
-  right: 18px;
+  z-index: 24;
+  top: calc(12px + env(safe-area-inset-top));
+  left: 50%;
+  right: auto;
+  width: min(330px, calc(100% - 36px));
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  min-height: 38px;
-  padding: 7px 8px 7px 13px;
+  gap: 8px;
+  min-height: 32px;
+  padding: 5px 6px 5px 11px;
   border-radius: 999px;
   color: #33535c;
   background: rgba(255, 252, 247, 0.78);
@@ -617,19 +619,19 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 850;
 }
 
 .map-location-status button {
   flex: 0 0 auto;
-  min-height: 28px;
+  min-height: 24px;
   border: 0;
   border-radius: 999px;
-  padding: 5px 10px;
+  padding: 4px 9px;
   color: #ffffff;
   background: #28b9e8;
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 900;
   box-shadow: 0 8px 18px rgba(40, 185, 232, 0.22);
 }
