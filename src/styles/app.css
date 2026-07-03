@@ -416,85 +416,6 @@ button {
   font-weight: 950;
 }
 
-.live-hud {
-  position: absolute;
-  z-index: 12;
-  top: 108px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 6px;
-  padding: 7px;
-  border-radius: 999px;
-  background: rgba(42, 68, 74, 0.62);
-  backdrop-filter: blur(18px);
-  box-shadow: 0 14px 30px rgba(31, 44, 48, 0.2);
-}
-
-.hud-button {
-  width: 45px;
-  height: 45px;
-  border: 0;
-  border-radius: 50%;
-  color: #ffffff;
-  background: transparent;
-  display: grid;
-  place-items: center;
-}
-
-.hud-button.active {
-  background: #28b9e8;
-  box-shadow: 0 8px 18px rgba(40, 185, 232, 0.32);
-}
-
-.weather-button,
-.binoculars-orb,
-.scan-chip {
-  position: absolute;
-  z-index: 12;
-  border: 0;
-  color: #ffffff;
-  backdrop-filter: blur(18px);
-}
-
-.weather-button {
-  right: 20px;
-  top: 108px;
-  width: 42px;
-  height: 42px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.22);
-}
-
-.scan-chip {
-  right: 18px;
-  top: 160px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 34px;
-  padding: 7px 11px;
-  border-radius: 999px;
-  background: rgba(232, 95, 75, 0.78);
-  font-weight: 900;
-  font-size: 0.78rem;
-  box-shadow: 0 12px 24px rgba(154, 70, 51, 0.2);
-}
-
-.binoculars-orb {
-  right: 20px;
-  bottom: 430px;
-  width: 48px;
-  height: 48px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: rgba(240, 138, 89, 0.84);
-  box-shadow: 0 14px 28px rgba(232, 95, 75, 0.28);
-}
-
 .capture-orb {
   position: absolute;
   z-index: 13;
@@ -510,45 +431,6 @@ button {
   color: #ffffff;
   background: transparent;
   filter: drop-shadow(0 18px 18px rgba(232, 95, 75, 0.26));
-}
-
-.player-zone {
-  position: absolute;
-  z-index: 10;
-  left: 50%;
-  bottom: 448px;
-  width: 176px;
-  height: 176px;
-  transform: translateX(-50%);
-  display: grid;
-  place-items: center;
-  pointer-events: none;
-}
-
-.scan-ring {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.7);
-  animation: scanPulse 3.2s ease-out infinite;
-}
-
-.ring-two {
-  inset: 28px;
-  animation-delay: 1.2s;
-  border-color: rgba(255, 240, 200, 0.72);
-}
-
-.player-avatar {
-  width: 58px;
-  height: 72px;
-  border-radius: 24px 24px 18px 18px;
-  display: grid;
-  place-items: center;
-  color: #ffffff;
-  background: linear-gradient(180deg, #325b82, #273a45);
-  border: 3px solid rgba(255, 255, 255, 0.86);
-  box-shadow: 0 18px 30px rgba(39, 58, 69, 0.26);
 }
 
 .mock-map,

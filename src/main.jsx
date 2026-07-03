@@ -288,7 +288,6 @@ function ExploreScreen({ cats, currentUserId, navigate, setSelectedCatId, unlock
   const [hideCaught, setHideCaught] = useState(false);
   const [sortMode, setSortMode] = useState('Recent');
   const [sheetFocusSignal, setSheetFocusSignal] = useState(0);
-  const [mapCenterSignal, setMapCenterSignal] = useState(0);
   const activeCat = cats.find((cat) => cat.id === activeCatId) || cats[0];
   const activeLocked = activeCat && !activeCat.caught_by_users.includes(currentUserId);
   const filters = ['All', 'Nearby', 'Unlocked', 'Locked', 'Friendly', 'Sleepy', 'Food Spots'];
@@ -323,32 +322,17 @@ function ExploreScreen({ cats, currentUserId, navigate, setSelectedCatId, unlock
         <span>Catmunity</span>
       </div>
       <div className="live-map-shell has-google-map">
-        <div className="live-hud">
-          <button className="hud-button active" aria-label="Recenter map" onClick={() => setMapCenterSignal((signal) => signal + 1)}><Compass size={18} /></button>
-          <button className="hud-button" aria-label="Map view"><MapPin size={18} /></button>
-        </div>
-        <button className="weather-button" aria-label="Clear weather"><Sparkles size={18} /></button>
-        <button className="scan-chip"><Search size={15} /> Scan 0:37</button>
         <GoogleCatMap
           cats={cats}
           currentUserId={currentUserId}
           activeCatId={activeCatId}
-          centerSignal={mapCenterSignal}
           onSelect={selectCatOnMap}
         />
-        <div className="player-zone">
-          <span className="scan-ring ring-one" />
-          <span className="scan-ring ring-two" />
-          <div className="player-avatar">
-            <User size={26} />
-          </div>
-        </div>
         <button className="capture-orb" onClick={() => navigate('catch')} aria-label="Catch a cat">
           <CatHeadShape className="cat-head-action" fill="action">
             <Camera size={32} />
           </CatHeadShape>
         </button>
-        <button className="binoculars-orb" aria-label="Nearby cats"><Search size={20} /></button>
       </div>
 
       <DraggableBottomSheet
