@@ -1,5 +1,6 @@
-import React, { useId, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { GoogleMap, OverlayView, useJsApiLoader } from '@react-google-maps/api';
 import { animate, motion, useMotionValue } from 'framer-motion';
 import {
   Bell,
@@ -286,6 +287,8 @@ function ExploreScreen({ cats, currentUserId, navigate, setSelectedCatId, unlock
   const [activeFilter, setActiveFilter] = useState('All');
   const [hideCaught, setHideCaught] = useState(false);
   const [sortMode, setSortMode] = useState('Recent');
+  const [sheetFocusSignal, setSheetFocusSignal] = useState(0);
+  const [mapCenterSignal, setMapCenterSignal] = useState(0);
   const activeCat = cats.find((cat) => cat.id === activeCatId) || cats[0];
   const activeLocked = activeCat && !activeCat.caught_by_users.includes(currentUserId);
   const filters = ['All', 'Nearby', 'Unlocked', 'Locked', 'Friendly', 'Sleepy', 'Food Spots'];
@@ -307,24 +310,31 @@ function ExploreScreen({ cats, currentUserId, navigate, setSelectedCatId, unlock
     navigate('detail');
   }
 
+  function selectCatOnMap(cat) {
+    setActiveCatId(cat.id);
+    setSelectedCatId(cat.id);
+    setSheetFocusSignal((signal) => signal + 1);
+  }
+
   return (
     <section className="explore-live">
       <div className="map-brand">
         <PawPrint size={18} />
         <span>Catmunity</span>
       </div>
-      <div className="live-map-shell">
+      <div className="live-map-shell has-google-map">
         <div className="live-hud">
-          <button className="hud-button active" aria-label="Live view"><Compass size={18} /></button>
+          <button className="hud-button active" aria-label="Recenter map" onClick={() => setMapCenterSignal((signal) => signal + 1)}><Compass size={18} /></button>
           <button className="hud-button" aria-label="Map view"><MapPin size={18} /></button>
         </div>
         <button className="weather-button" aria-label="Clear weather"><Sparkles size={18} /></button>
         <button className="scan-chip"><Search size={15} /> Scan 0:37</button>
-        <MockMap
+        <GoogleCatMap
           cats={cats}
           currentUserId={currentUserId}
           activeCatId={activeCatId}
-          onSelect={(cat) => setActiveCatId(cat.id)}
+          centerSignal={mapCenterSignal}
+          onSelect={selectCatOnMap}
         />
         <div className="player-zone">
           <span className="scan-ring ring-one" />
@@ -342,6 +352,7 @@ function ExploreScreen({ cats, currentUserId, navigate, setSelectedCatId, unlock
       </div>
 
       <DraggableBottomSheet
+        focusSignal={sheetFocusSignal}
         header={(
           <>
             <div className="sheet-search-row">
@@ -668,7 +679,7 @@ function SettingsScreen({ user }) {
   );
 }
 
-function DraggableBottomSheet({ header, children }) {
+function DraggableBottomSheet({ header, children, focusSignal = 0 }) {
   const viewportHeight = typeof window === 'undefined' ? 760 : window.innerHeight;
   // Snap points are heights, not translate offsets: collapsed leaves the map mostly visible,
   // half keeps cards and map in balance, and expanded behaves like a full list panel.
@@ -686,6 +697,13 @@ function DraggableBottomSheet({ header, children }) {
   const [state, setState] = useState('half');
   const [isDragging, setIsDragging] = useState(false);
   const [canDragSheet, setCanDragSheet] = useState(true);
+
+  useEffect(() => {
+    if (!focusSignal) return;
+    if (sheetHeight.get() < snapPoints.half) {
+      animateToSnap(snapPoints.half);
+    }
+  }, [focusSignal, snapPoints.half, sheetHeight]);
 
   function getStateForHeight(height) {
     if (height > (snapPoints.half + snapPoints.expanded) / 2) return 'expanded';
@@ -831,6 +849,143 @@ function CatPreviewCard({ cat, locked, onOpen }) {
         <small>{locked ? `${cat.location_name.split(',')[0]} area` : `${cat.color} · ${cat.location_name}`}</small>
       </div>
     </article>
+  );
+}
+
+const defaultMapCenter = { lat: 3.1478, lng: 101.6953 };
+const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+
+function GoogleCatMap({ cats, currentUserId, activeCatId, centerSignal, onSelect }) {
+  if (!googleMapsApiKey) {
+    return (
+      <div className="mock-map immersive-map google-map-missing" role="img" aria-label="Google Maps API key missing">
+        <div className="map-fallback-message">
+          <MapIcon size={22} />
+          <strong>Google Maps API key missing.</strong>
+          <span>Add `VITE_GOOGLE_MAPS_API_KEY` to `.env.local`, then restart the dev server.</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <RealGoogleMap
+      cats={cats}
+      currentUserId={currentUserId}
+      activeCatId={activeCatId}
+      centerSignal={centerSignal}
+      onSelect={onSelect}
+    />
+  );
+}
+
+function RealGoogleMap({ cats, currentUserId, activeCatId, centerSignal, onSelect }) {
+  const [userPosition, setUserPosition] = useState(null);
+  const [mapCenter, setMapCenter] = useState(defaultMapCenter);
+  const mapRef = useRef(null);
+  const { isLoaded, loadError } = useJsApiLoader({
+    googleMapsApiKey,
+    id: 'catmunity-google-map',
+  });
+
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        const nextPosition = { lat: coords.latitude, lng: coords.longitude };
+        setUserPosition(nextPosition);
+        setMapCenter(nextPosition);
+        mapRef.current?.panTo(nextPosition);
+      },
+      () => {
+        setMapCenter(defaultMapCenter);
+      },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 },
+    );
+  }, []);
+
+  useEffect(() => {
+    const target = userPosition || mapCenter || defaultMapCenter;
+    mapRef.current?.panTo(target);
+    mapRef.current?.setZoom(userPosition ? 15 : 13);
+  }, [centerSignal, userPosition, mapCenter]);
+
+  if (loadError) {
+    return (
+      <div className="mock-map immersive-map google-map-missing" role="img" aria-label="Google Maps loading error">
+        <div className="map-fallback-message">
+          <MapIcon size={22} />
+          <strong>Google Map could not load.</strong>
+          <span>Check the API key, Maps JavaScript API, billing, and referrer restrictions.</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isLoaded) {
+    return (
+      <div className="mock-map immersive-map google-map-missing" role="img" aria-label="Google Map loading">
+        <div className="map-fallback-message">
+          <MapIcon size={22} />
+          <strong>Loading Google Map...</strong>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mock-map immersive-map google-map-layer" aria-label="Live cat discovery map">
+      <GoogleMap
+        mapContainerClassName="google-map-canvas"
+        center={mapCenter}
+        zoom={14}
+        options={{
+          clickableIcons: false,
+          disableDefaultUI: true,
+          fullscreenControl: false,
+          gestureHandling: 'greedy',
+          mapTypeControl: false,
+          streetViewControl: false,
+          zoomControl: false,
+        }}
+        onLoad={(map) => {
+          mapRef.current = map;
+          map.panTo(mapCenter);
+        }}
+      >
+        {userPosition && (
+          <OverlayView
+            position={userPosition}
+            mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+            getPixelPositionOffset={(width, height) => ({ x: -width / 2, y: -height / 2 })}
+          >
+            <div className="google-user-marker" aria-label="Your current location">
+              <User size={20} />
+            </div>
+          </OverlayView>
+        )}
+        {cats.map((cat, index) => {
+          const locked = !cat.caught_by_users.includes(currentUserId);
+          return (
+            <OverlayView
+              key={cat.id}
+              position={{ lat: cat.latitude, lng: cat.longitude }}
+              mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+              getPixelPositionOffset={(width, height) => ({ x: -width / 2, y: -height / 2 })}
+            >
+              <button
+                className={`${locked ? 'map-pin google-map-pin locked' : 'map-pin google-map-pin'} ${cat.id === activeCatId ? 'active' : ''}`}
+                onClick={() => onSelect(cat)}
+                aria-label={`${cat.name}, ${locked ? 'locked' : 'caught'}`}
+              >
+                <CatHeadMarker image={cat.cropped_image_url} locked={locked} count={index + 1} />
+              </button>
+            </OverlayView>
+          );
+        })}
+      </GoogleMap>
+    </div>
   );
 }
 

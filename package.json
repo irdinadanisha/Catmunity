@@ -9,6 +9,7 @@
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
+    "@react-google-maps/api": "^2.20.8",
     "@vitejs/plugin-react": "^5.0.0",
     "framer-motion": "^12.42.0",
     "lucide-react": "^0.468.0",
