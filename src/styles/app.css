@@ -156,8 +156,8 @@ button:disabled {
 }
 
 .bottom-nav--map .nav-item.active {
-  background: rgba(40, 185, 232, 0.16);
-  color: #1e7893;
+  background: rgba(232, 95, 75, 0.14);
+  color: #b34d3e;
 }
 
 .bottom-nav--map .nav-item:nth-child(3) {
@@ -307,8 +307,8 @@ button:disabled {
 }
 
 .auth-card input:focus {
-  border-color: rgba(40, 185, 232, 0.58);
-  box-shadow: 0 0 0 4px rgba(40, 185, 232, 0.12);
+  border-color: rgba(232, 95, 75, 0.48);
+  box-shadow: 0 0 0 4px rgba(232, 95, 75, 0.12);
 }
 
 .auth-status {
@@ -323,7 +323,7 @@ button:disabled {
   min-height: 36px;
   border: 0;
   background: transparent;
-  color: #1e7893;
+  color: #b34d3e;
   font-weight: 950;
 }
 
@@ -542,11 +542,11 @@ button:disabled {
   min-height: 38px;
   padding: 8px 14px;
   border-radius: 999px;
-  color: #2f5d68;
+  color: #8f3f2f;
   background: rgba(255, 255, 255, 0.72);
   border: 1px solid rgba(255, 255, 255, 0.5);
   backdrop-filter: blur(20px);
-  box-shadow: 0 12px 28px rgba(37, 58, 69, 0.12);
+  box-shadow: 0 12px 28px rgba(83, 55, 38, 0.12);
   font-weight: 950;
 }
 
@@ -569,8 +569,8 @@ button:disabled {
   min-height: 100%;
   border-radius: 0;
   background:
-    linear-gradient(180deg, #82d5ff 0%, #d8f6ff 23%, transparent 23%),
-    linear-gradient(160deg, #b9f49b 24%, #80ddb0 56%, #f7d493 100%);
+    linear-gradient(180deg, #ffd9b5 0%, #fff2dd 23%, transparent 23%),
+    linear-gradient(160deg, #f7d493 24%, #f4b49f 56%, #fff0c8 100%);
   box-shadow: none;
 }
 
@@ -605,10 +605,10 @@ button:disabled {
   min-height: 32px;
   padding: 5px 6px 5px 11px;
   border-radius: 999px;
-  color: #33535c;
+  color: #6f3f17;
   background: rgba(255, 252, 247, 0.78);
   border: 1px solid rgba(255, 255, 255, 0.58);
-  box-shadow: 0 14px 30px rgba(37, 58, 69, 0.12);
+  box-shadow: 0 14px 30px rgba(83, 55, 38, 0.12);
   backdrop-filter: blur(18px) saturate(1.15);
   pointer-events: auto;
 }
@@ -629,10 +629,10 @@ button:disabled {
   border-radius: 999px;
   padding: 4px 9px;
   color: #ffffff;
-  background: #28b9e8;
+  background: #e85f4b;
   font-size: 0.68rem;
   font-weight: 900;
-  box-shadow: 0 8px 18px rgba(40, 185, 232, 0.22);
+  box-shadow: 0 8px 18px rgba(232, 95, 75, 0.22);
 }
 
 .google-map-missing {
@@ -652,7 +652,7 @@ button:disabled {
   gap: 8px;
   padding: 16px;
   border-radius: 22px;
-  color: #40575f;
+  color: #6f4a37;
   text-align: center;
   background: rgba(255, 252, 247, 0.82);
   border: 1px solid rgba(255, 255, 255, 0.58);
@@ -661,7 +661,7 @@ button:disabled {
 }
 
 .map-fallback-message strong {
-  color: #2b3d42;
+  color: #2b211d;
 }
 
 .map-fallback-message span {
@@ -679,7 +679,7 @@ button:disabled {
   inset: 0 0 auto;
   height: 34%;
   overflow: hidden;
-  background: linear-gradient(180deg, #5ec6f4, #d8f7ff);
+  background: linear-gradient(180deg, #ffd9b5, #fff2dd);
 }
 
 .cloud {
@@ -855,9 +855,9 @@ button:disabled {
   place-items: center;
   border-radius: 50%;
   color: #ffffff;
-  background: linear-gradient(180deg, #325b82, #273a45);
+  background: linear-gradient(180deg, #e85f4b, #8f3f2f);
   border: 3px solid rgba(255, 255, 255, 0.88);
-  box-shadow: 0 14px 24px rgba(39, 58, 69, 0.26);
+  box-shadow: 0 14px 24px rgba(143, 63, 47, 0.24);
 }
 
 .cat-head-shape {
@@ -933,7 +933,7 @@ button:disabled {
 }
 
 .immersive-map .map-pin.locked small {
-  background: #5d7a83;
+  background: #7b6d66;
 }
 
 .immersive-map .map-pin.active {
@@ -953,7 +953,7 @@ button:disabled {
 }
 
 .map-pin.locked {
-  background: #5d7a83;
+  background: #7b6d66;
 }
 
 .active-cat-panel {
@@ -1093,9 +1093,9 @@ button:disabled {
   gap: 8px;
   padding: 0 10px 0 14px;
   border-radius: 18px;
-  background: rgba(246, 250, 253, 0.78);
-  border: 1px solid rgba(43, 79, 92, 0.07);
-  color: #54717a;
+  background: rgba(255, 247, 236, 0.82);
+  border: 1px solid rgba(92, 62, 44, 0.08);
+  color: #8a5a3e;
 }
 
 .sheet-search-row input {
@@ -1103,7 +1103,7 @@ button:disabled {
   border: 0;
   outline: 0;
   background: transparent;
-  color: #2b3d42;
+  color: #2b211d;
 }
 
 .sheet-search-row button {
@@ -1113,8 +1113,8 @@ button:disabled {
   border-radius: 12px;
   display: grid;
   place-items: center;
-  color: #2f5d68;
-  background: rgba(40, 185, 232, 0.12);
+  color: #b34d3e;
+  background: rgba(232, 95, 75, 0.12);
 }
 
 .filter-rail {
@@ -1136,13 +1136,13 @@ button:disabled {
 .mini-chip {
   min-height: 34px;
   flex: 0 0 auto;
-  border: 1px solid rgba(43, 79, 92, 0.08);
+  border: 1px solid rgba(92, 62, 44, 0.08);
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 7px 12px;
-  color: #526a72;
+  color: #76533f;
   background: rgba(255, 255, 255, 0.72);
   font-size: 0.8rem;
   font-weight: 900;
@@ -1151,9 +1151,9 @@ button:disabled {
 .filter-chip.active,
 .mini-chip.active {
   color: #ffffff;
-  background: #28b9e8;
-  border-color: rgba(40, 185, 232, 0.2);
-  box-shadow: 0 10px 22px rgba(40, 185, 232, 0.24);
+  background: #e85f4b;
+  border-color: rgba(232, 95, 75, 0.2);
+  box-shadow: 0 10px 22px rgba(232, 95, 75, 0.24);
 }
 
 .sheet-meta-row {
@@ -1210,7 +1210,7 @@ button:disabled {
 .cat-preview-card small {
   display: block;
   margin: 0;
-  color: #62777f;
+  color: #74655d;
   line-height: 1.35;
 }
 
@@ -1256,8 +1256,8 @@ button:disabled {
   gap: 5px;
   padding: 6px 10px;
   border-radius: 999px;
-  color: #526a72;
-  background: rgba(246, 250, 253, 0.78);
+  color: #76533f;
+  background: rgba(255, 247, 236, 0.82);
   font-size: 0.75rem;
   font-weight: 900;
 }
@@ -1487,7 +1487,7 @@ button:disabled {
 }
 
 .draggable-sheet .cat-card span {
-  color: #60757d;
+  color: #74655d;
 }
 
 .upload-panel {
@@ -1597,7 +1597,7 @@ button:disabled {
 .existing-cat-choice small {
   display: block;
   margin-top: 3px;
-  color: #62777f;
+  color: #74655d;
   line-height: 1.35;
   font-weight: 750;
 }
@@ -1637,8 +1637,8 @@ button:disabled {
   align-items: center;
   border-radius: 999px;
   padding: 5px 9px;
-  color: #1e7893;
-  background: rgba(40, 185, 232, 0.14);
+  color: #b34d3e;
+  background: rgba(232, 95, 75, 0.14);
   font-size: 0.72rem;
   font-style: normal;
   font-weight: 950;
@@ -1925,8 +1925,8 @@ button:disabled {
 
 .profile-settings-card input:focus,
 .profile-settings-card textarea:focus {
-  border-color: rgba(40, 185, 232, 0.58);
-  box-shadow: 0 0 0 4px rgba(40, 185, 232, 0.12);
+  border-color: rgba(232, 95, 75, 0.48);
+  box-shadow: 0 0 0 4px rgba(232, 95, 75, 0.12);
 }
 
 .profile-photo-upload {
@@ -1967,7 +1967,7 @@ button:disabled {
   border-radius: 999px;
   padding: 0 12px;
   color: #ffffff;
-  background: #28b9e8;
+  background: #e85f4b;
   font-size: 0.78rem;
   font-style: normal;
   font-weight: 950;
@@ -1976,9 +1976,86 @@ button:disabled {
 
 .profile-photo-status {
   margin: -4px 0 0;
-  color: #1e7893;
+  color: #b34d3e;
   font-size: 0.82rem;
   font-weight: 850;
+}
+
+.crop-overlay {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  place-items: end center;
+  padding: 18px;
+  background: rgba(43, 33, 29, 0.42);
+  backdrop-filter: blur(10px);
+}
+
+.crop-panel {
+  width: min(444px, 100%);
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 28px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(255, 248, 239, 0.9)),
+    rgba(255, 252, 247, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.68);
+  box-shadow: 0 28px 70px rgba(43, 33, 29, 0.24);
+}
+
+.crop-preview {
+  position: relative;
+  width: min(320px, 100%);
+  aspect-ratio: 1;
+  justify-self: center;
+  overflow: hidden;
+  border-radius: 30px;
+  background: #fff0c8;
+  box-shadow: inset 0 0 0 2px rgba(232, 95, 75, 0.18), 0 16px 36px rgba(83, 55, 38, 0.16);
+}
+
+.crop-preview::after {
+  content: "";
+  position: absolute;
+  inset: 12px;
+  border: 2px dashed rgba(255, 255, 255, 0.82);
+  border-radius: 24px;
+  pointer-events: none;
+}
+
+.crop-preview img {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform-origin: center;
+}
+
+.crop-controls {
+  display: grid;
+  gap: 10px;
+}
+
+.crop-controls label {
+  display: grid;
+  gap: 6px;
+  color: #57443a;
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.crop-controls input {
+  accent-color: #e85f4b;
+}
+
+.crop-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
 
 .privacy-switch {
@@ -1994,7 +2071,7 @@ button:disabled {
 .privacy-switch input {
   width: 22px;
   height: 22px;
-  accent-color: #28b9e8;
+  accent-color: #e85f4b;
   padding: 0;
 }
 

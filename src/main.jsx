@@ -1011,6 +1011,8 @@ function SettingsScreen({ user, userId, signedIn, onProfileSave, onSignOut }) {
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoStatus, setPhotoStatus] = useState('');
+  const [cropPhoto, setCropPhoto] = useState(null);
+  const [cropSettings, setCropSettings] = useState({ zoom: 1.15, x: 50, y: 50 });
 
   useEffect(() => {
     setForm({
@@ -1032,16 +1034,34 @@ function SettingsScreen({ user, userId, signedIn, onProfileSave, onSignOut }) {
     setSaving(false);
   }
 
-  async function handlePhotoUpload(event) {
+  function handlePhotoSelect(event) {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    if (!file.type.startsWith('image/')) {
+      setPhotoStatus('Profile photo must be an image file.');
+      return;
+    }
+
+    setCropPhoto({
+      file,
+      previewUrl: URL.createObjectURL(file),
+    });
+    setCropSettings({ zoom: 1.15, x: 50, y: 50 });
+    setPhotoStatus('');
+    event.target.value = '';
+  }
+
+  async function handleCropUpload() {
+    if (!cropPhoto) return;
+
     setUploadingPhoto(true);
     setPhotoStatus('');
-    const previewUrl = URL.createObjectURL(file);
-    update('avatarUrl', previewUrl);
+    const croppedFile = await createCroppedProfilePhoto(cropPhoto.previewUrl, cropPhoto.file.name, cropSettings);
+    const localPreviewUrl = URL.createObjectURL(croppedFile);
+    update('avatarUrl', localPreviewUrl);
 
-    const { publicUrl, error } = await uploadProfilePhoto(file, userId);
+    const { publicUrl, error } = await uploadProfilePhoto(croppedFile, userId);
     setUploadingPhoto(false);
 
     if (error) {
@@ -1051,6 +1071,7 @@ function SettingsScreen({ user, userId, signedIn, onProfileSave, onSignOut }) {
 
     update('avatarUrl', publicUrl);
     setPhotoStatus('Profile photo uploaded. Save profile to keep it.');
+    setCropPhoto(null);
   }
 
   return (
@@ -1067,7 +1088,7 @@ function SettingsScreen({ user, userId, signedIn, onProfileSave, onSignOut }) {
         <Field label="Display name" value={form.name} placeholder="Irdina" onChange={(value) => update('name', value)} />
         <label className="profile-photo-upload">
           <span>Profile picture</span>
-          <input type="file" accept="image/*" disabled={!signedIn || uploadingPhoto} onChange={handlePhotoUpload} />
+          <input type="file" accept="image/*" disabled={!signedIn || uploadingPhoto} onChange={handlePhotoSelect} />
           <em>{uploadingPhoto ? 'Uploading photo...' : 'Choose image'}</em>
         </label>
         {photoStatus && <p className="profile-photo-status">{photoStatus}</p>}
@@ -1108,7 +1129,62 @@ function SettingsScreen({ user, userId, signedIn, onProfileSave, onSignOut }) {
         </button>
       )}
       <div className="safety-strip"><ShieldCheck size={17} /> This app is for memories and sightings. Give every cat space and kindness.</div>
+      {cropPhoto && (
+        <ProfilePhotoCropper
+          imageUrl={cropPhoto.previewUrl}
+          settings={cropSettings}
+          uploading={uploadingPhoto}
+          onChange={setCropSettings}
+          onCancel={() => setCropPhoto(null)}
+          onConfirm={handleCropUpload}
+        />
+      )}
     </section>
+  );
+}
+
+function ProfilePhotoCropper({ imageUrl, settings, uploading, onChange, onCancel, onConfirm }) {
+  function update(field, value) {
+    onChange({ ...settings, [field]: Number(value) });
+  }
+
+  return (
+    <div className="crop-overlay" role="dialog" aria-modal="true" aria-label="Crop profile picture">
+      <div className="crop-panel">
+        <div className="crop-preview">
+          <img
+            src={imageUrl}
+            alt="Crop preview"
+            style={{
+              objectPosition: `${settings.x}% ${settings.y}%`,
+              transform: `scale(${settings.zoom})`,
+            }}
+          />
+        </div>
+        <div className="crop-controls">
+          <label>
+            <span>Zoom</span>
+            <input type="range" min="1" max="2.5" step="0.01" value={settings.zoom} onChange={(event) => update('zoom', event.target.value)} />
+          </label>
+          <label>
+            <span>Move side to side</span>
+            <input type="range" min="0" max="100" step="1" value={settings.x} onChange={(event) => update('x', event.target.value)} />
+          </label>
+          <label>
+            <span>Move up and down</span>
+            <input type="range" min="0" max="100" step="1" value={settings.y} onChange={(event) => update('y', event.target.value)} />
+          </label>
+        </div>
+        <div className="crop-actions">
+          <button className="secondary-button" type="button" onClick={onCancel} disabled={uploading}>
+            Cancel
+          </button>
+          <button className="primary-button" type="button" onClick={onConfirm} disabled={uploading}>
+            {uploading ? 'Uploading...' : 'Use this crop'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1687,6 +1763,49 @@ function ToggleRow({ title, text, checked }) {
       <input type="checkbox" checked={checked} readOnly aria-label={title} />
     </div>
   );
+}
+
+async function createCroppedProfilePhoto(imageUrl, filename, settings) {
+  const image = await loadImageElement(imageUrl);
+  const outputSize = 900;
+  const canvas = document.createElement('canvas');
+  canvas.width = outputSize;
+  canvas.height = outputSize;
+  const context = canvas.getContext('2d');
+  const imageWidth = image.naturalWidth || image.width;
+  const imageHeight = image.naturalHeight || image.height;
+  const baseScale = Math.max(outputSize / imageWidth, outputSize / imageHeight);
+  const scale = baseScale * settings.zoom;
+  const drawnWidth = imageWidth * scale;
+  const drawnHeight = imageHeight * scale;
+  const maxOffsetX = Math.min(0, outputSize - drawnWidth);
+  const maxOffsetY = Math.min(0, outputSize - drawnHeight);
+  const offsetX = maxOffsetX * (settings.x / 100);
+  const offsetY = maxOffsetY * (settings.y / 100);
+
+  context.fillStyle = '#fff0c8';
+  context.fillRect(0, 0, outputSize, outputSize);
+  context.drawImage(image, offsetX, offsetY, drawnWidth, drawnHeight);
+
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+  if (!blob) {
+    throw new Error('Could not crop profile photo.');
+  }
+  return new File([blob], getCroppedFilename(filename), { type: 'image/jpeg' });
+}
+
+function loadImageElement(source) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = source;
+  });
+}
+
+function getCroppedFilename(filename) {
+  const baseName = filename.replace(/\.[^.]+$/u, '') || 'profile-photo';
+  return `${baseName}-cropped.jpg`;
 }
 
 function createSampleCatImage() {
