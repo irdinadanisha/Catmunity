@@ -1,13 +1,43 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const rawSupabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const supabaseUrl = normalizeSupabaseProjectUrl(rawSupabaseUrl);
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseKey);
 
 export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseKey)
   : null;
+
+function normalizeSupabaseProjectUrl(value) {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+
+  try {
+    const url = new URL(trimmed);
+    url.pathname = url.pathname
+      .replace(/\/(auth|rest|storage|functions)\/v1\/?$/u, '')
+      .replace(/\/+$/u, '');
+    url.search = '';
+    url.hash = '';
+    return url.toString().replace(/\/$/u, '');
+  } catch {
+    return trimmed.replace(/\/(auth|rest|storage|functions)\/v1\/?$/u, '').replace(/\/+$/u, '');
+  }
+}
+
+function getAuthError(error) {
+  if (!error) return null;
+
+  if (error.message?.toLowerCase().includes('invalid path specified')) {
+    return new Error(
+      'Supabase URL should be your project URL only, like https://your-project-ref.supabase.co. Remove /auth/v1, /rest/v1, or any extra path from VITE_SUPABASE_URL.',
+    );
+  }
+
+  return error;
+}
 
 export async function getCurrentSession() {
   if (!isSupabaseConfigured) return null;
@@ -36,7 +66,7 @@ export async function signUpWithEmail({ name, email, password }) {
     return { data: null, error: new Error('Supabase is not configured.') };
   }
 
-  return supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
@@ -45,6 +75,8 @@ export async function signUpWithEmail({ name, email, password }) {
       },
     },
   });
+
+  return { data, error: getAuthError(error) };
 }
 
 export async function signInWithEmail({ email, password }) {
@@ -52,7 +84,8 @@ export async function signInWithEmail({ email, password }) {
     return { data: null, error: new Error('Supabase is not configured.') };
   }
 
-  return supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  return { data, error: getAuthError(error) };
 }
 
 export async function signOutUser() {

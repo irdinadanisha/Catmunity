@@ -15,9 +15,11 @@ Open `http://localhost:5173/`.
 
 ```bash
 VITE_GOOGLE_MAPS_API_KEY=
-VITE_SUPABASE_URL=
+VITE_SUPABASE_URL=https://your-project-ref.supabase.co
 VITE_SUPABASE_ANON_KEY=
 ```
+
+Use the Supabase project URL only for `VITE_SUPABASE_URL`. Do not paste URLs that end in `/auth/v1`, `/rest/v1`, `/storage/v1`, or any SQL/API page URL.
 
 `VITE_SUPABASE_ANON_KEY` can be Supabase's newer publishable key. When Supabase variables are present, Catmunity shows an email/password sign-up and login screen before users can save cats. If Supabase variables are missing, the app stays in mock mode for UI work.
 
