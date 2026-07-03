@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useId, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { animate, motion, useMotionValue } from 'framer-motion';
 import {
@@ -334,7 +334,9 @@ function ExploreScreen({ cats, currentUserId, navigate, setSelectedCatId, unlock
           </div>
         </div>
         <button className="capture-orb" onClick={() => navigate('catch')} aria-label="Catch a cat">
-          <Camera size={32} />
+          <CatHeadShape className="cat-head-action" fill="action">
+            <Camera size={32} />
+          </CatHeadShape>
         </button>
         <button className="binoculars-orb" aria-label="Nearby cats"><Search size={20} /></button>
       </div>
@@ -801,8 +803,10 @@ function FilterChip({ label, active, onClick }) {
 function CatchButton({ onClick }) {
   return (
     <button className="floating-catch-button" onClick={onClick} aria-label="Catch a new cat">
-      <Plus size={22} />
-      <Camera size={22} />
+      <CatHeadShape className="cat-head-action" fill="action">
+        <Plus size={18} className="catch-plus" />
+        <Camera size={23} />
+      </CatHeadShape>
     </button>
   );
 }
@@ -865,11 +869,47 @@ function CatHeadMarker({ image, locked = false, count }) {
   return (
     <>
       <span className="pin-pulse" />
-      <span className="cat-head-photo">
-        <img src={image} alt="" />
-      </span>
+      <CatHeadShape className="cat-head-photo" image={image} />
       <small>{locked ? <Lock size={11} /> : count}</small>
     </>
+  );
+}
+
+const catHeadPath =
+  'M50 15 C43 15 38 17 34 21 L19 8 C16 6 13 8 14 13 L18 34 C12 42 10 53 12 64 C15 83 31 94 50 94 C69 94 85 83 88 64 C90 53 88 42 82 34 L86 13 C87 8 84 6 81 8 L66 21 C62 17 57 15 50 15 Z';
+
+function CatHeadShape({ image, fill = 'rgba(232, 95, 75, 0.95)', className = '', children }) {
+  const clipId = `cat-head-clip-${useId().replaceAll(':', '')}`;
+  const gradientId = `cat-head-gradient-${useId().replaceAll(':', '')}`;
+  const shapeFill = fill === 'action' ? `url(#${gradientId})` : fill;
+
+  return (
+    <span className={`cat-head-shape ${className}`}>
+      <svg className="cat-head-svg" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
+        <defs>
+          <clipPath id={clipId} clipPathUnits="userSpaceOnUse">
+            <path d={catHeadPath} />
+          </clipPath>
+          <linearGradient id={gradientId} x1="15" y1="14" x2="88" y2="90" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#e85f4b" />
+            <stop offset="1" stopColor="#f08a59" />
+          </linearGradient>
+        </defs>
+        {image ? (
+          <image
+            href={image}
+            width="100"
+            height="100"
+            preserveAspectRatio="xMidYMid slice"
+            clipPath={`url(#${clipId})`}
+          />
+        ) : (
+          <path d={catHeadPath} fill={shapeFill} />
+        )}
+        <path className="cat-head-outline" d={catHeadPath} />
+      </svg>
+      {children && <span className="cat-head-content">{children}</span>}
+    </span>
   );
 }
 
@@ -888,7 +928,7 @@ function MiniMap({ cats, onSelect = () => {}, approximate = false }) {
           onClick={() => onSelect(cat)}
           aria-label={cat.name}
         >
-          <img src={cat.cropped_image_url} alt="" />
+          <CatHeadShape className="mini-cat-head" image={cat.cropped_image_url} />
         </button>
       ))}
     </div>
