@@ -14,6 +14,7 @@ import {
   Home,
   ImagePlus,
   Lock,
+  LogOut,
   Map as MapIcon,
   MapPin,
   MessageCircle,
@@ -44,6 +45,14 @@ import {
   isWithinDuplicateRadius,
   loadCatsFromSupabase,
 } from './services/catServices';
+import {
+  getCurrentSession,
+  isSupabaseConfigured,
+  signInWithEmail,
+  signOutUser,
+  signUpWithEmail,
+  subscribeToAuthChanges,
+} from './services/supabaseClient';
 import './styles/app.css';
 
 const tabs = [
@@ -54,7 +63,7 @@ const tabs = [
   { id: 'settings', label: 'Profile', icon: User },
 ];
 
-const currentUserId = 'user-mira';
+const fallbackUserId = 'user-mira';
 
 function App() {
   const [screen, setScreen] = useState('explore');
@@ -65,9 +74,41 @@ function App() {
   const [selectedCatId, setSelectedCatId] = useState('cat-saffron');
   const [selectedUserId, setSelectedUserId] = useState('user-jules');
   const [isProcessingCatPhoto, setIsProcessingCatPhoto] = useState(false);
+  const [authUser, setAuthUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(isSupabaseConfigured);
   const [toast, setToast] = useState('');
 
   useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setAuthLoading(false);
+      return undefined;
+    }
+
+    let mounted = true;
+
+    getCurrentSession().then((session) => {
+      if (!mounted) return;
+      setAuthUser(session?.user || null);
+      setAuthLoading(false);
+    });
+
+    const unsubscribe = subscribeToAuthChanges((session) => {
+      setAuthUser(session?.user || null);
+      setScreen('explore');
+    });
+
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
+  }, []);
+
+  const currentUserId = authUser?.id || fallbackUserId;
+  const me = createAppUser(authUser);
+
+  useEffect(() => {
+    if (isSupabaseConfigured && !authUser) return undefined;
+
     let cancelled = false;
 
     async function loadLiveCats() {
@@ -83,12 +124,15 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authUser, currentUserId]);
 
-  const me = mockUsers.find((user) => user.id === currentUserId);
   const caughtCats = cats.filter((cat) => cat.caught_by_users.includes(currentUserId));
   const selectedCat = cats.find((cat) => cat.id === selectedCatId) || cats[0];
-  const selectedUser = mockUsers.find((user) => user.id === selectedUserId) || me;
+  const communityUsers = useMemo(
+    () => [me, ...mockUsers.filter((user) => user.id !== me.id)],
+    [me],
+  );
+  const selectedUser = communityUsers.find((user) => user.id === selectedUserId) || me;
   const publicCats = cats.filter((cat) => cat.caught_by_users.includes(selectedUser.id));
 
   const stats = useMemo(
@@ -108,6 +152,31 @@ function App() {
   function showToast(message) {
     setToast(message);
     window.setTimeout(() => setToast(''), 2200);
+  }
+
+  async function handleAuthSubmit({ mode, name, email, password }) {
+    const authAction = mode === 'signup' ? signUpWithEmail : signInWithEmail;
+    const { data, error } = await authAction({ name, email, password });
+
+    if (error) {
+      throw error;
+    }
+
+    if (data.session?.user) {
+      setAuthUser(data.session.user);
+      showToast(mode === 'signup' ? 'Account created. Welcome to Catmunity.' : 'Welcome back.');
+      return;
+    }
+
+    showToast('Check your email to confirm your Catmunity account.');
+  }
+
+  async function handleSignOut() {
+    await signOutUser();
+    setAuthUser(null);
+    setCats(mockCats);
+    setSelectedCatId('cat-saffron');
+    showToast('Signed out.');
   }
 
   async function handlePhotoSelected(file) {
@@ -142,6 +211,7 @@ function App() {
       remarks: '',
       tags: ['new find'],
       location_name: capture.locationName,
+      cropped_image_url: capture.croppedImage,
     });
     navigate('detailsForm');
   }
@@ -214,6 +284,26 @@ function App() {
     unlockExistingCat,
   };
 
+  if (authLoading) {
+    return (
+      <div className="app-shell">
+        <main className="main auth-loading">
+          <Sparkles size={26} />
+          <p>Loading Catmunity...</p>
+        </main>
+      </div>
+    );
+  }
+
+  if (isSupabaseConfigured && !authUser) {
+    return (
+      <div className="app-shell">
+        {toast && <div className="toast"><Sparkles size={16} />{toast}</div>}
+        <AuthScreen onSubmit={handleAuthSubmit} />
+      </div>
+    );
+  }
+
   return (
     <div className="app-shell">
       {toast && <div className="toast"><Sparkles size={16} />{toast}</div>}
@@ -263,7 +353,7 @@ function App() {
           <CommunityScreen
             posts={posts}
             cats={cats}
-            users={mockUsers}
+            users={communityUsers}
             comments={mockComments}
             onCreate={() => navigate('createPost')}
             onOpenUser={(id) => {
@@ -275,7 +365,7 @@ function App() {
         {screen === 'createPost' && (
           <CreatePostScreen onBack={() => navigate('community')} onCreate={handleCreatePost} />
         )}
-        {screen === 'settings' && <SettingsScreen user={me} />}
+        {screen === 'settings' && <SettingsScreen user={me} signedIn={Boolean(authUser)} onSignOut={handleSignOut} />}
       </motion.main>
 
       {screen !== 'welcome' && (
@@ -293,6 +383,111 @@ function App() {
         </nav>
       )}
     </div>
+  );
+}
+
+function createAppUser(authUser) {
+  const fallback = mockUsers.find((user) => user.id === fallbackUserId);
+  if (!authUser) return fallback;
+
+  const displayName =
+    authUser.user_metadata?.full_name ||
+    authUser.user_metadata?.name ||
+    authUser.email?.split('@')[0] ||
+    'Catmunity Friend';
+
+  return {
+    id: authUser.id,
+    name: displayName,
+    avatar_url: authUser.user_metadata?.avatar_url || fallback.avatar_url,
+    bio: 'Saving neighborhood cat memories with Catmunity.',
+    public_profile: true,
+    email: authUser.email,
+  };
+}
+
+function AuthScreen({ onSubmit }) {
+  const [mode, setMode] = useState('signup');
+  const [name, setName] = useState('Irdina');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [status, setStatus] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const isSignup = mode === 'signup';
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setSubmitting(true);
+    setStatus('');
+
+    try {
+      await onSubmit({ mode, name, email, password });
+      setStatus(isSignup ? 'If email confirmation is enabled, check your inbox before signing in.' : '');
+    } catch (error) {
+      setStatus(error.message || 'Authentication failed. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <main className="auth-screen">
+      <div className="auth-brand">
+        <CatHeadShape className="auth-cat-head" fill="#fff0c8">
+          <Cat size={32} />
+        </CatHeadShape>
+        <p className="eyebrow">Catmunity</p>
+        <h1>{isSignup ? 'Create your cat-saving account.' : 'Welcome back.'}</h1>
+        <p>Sign in so your caught cats, map pins, and collection data stay attached to you.</p>
+      </div>
+
+      <form className="auth-card" onSubmit={handleSubmit}>
+        <div className="auth-toggle" aria-label="Authentication mode">
+          <button type="button" className={isSignup ? 'active' : ''} onClick={() => setMode('signup')}>
+            Sign up
+          </button>
+          <button type="button" className={!isSignup ? 'active' : ''} onClick={() => setMode('signin')}>
+            Log in
+          </button>
+        </div>
+
+        {isSignup && (
+          <label>
+            <span>Name</span>
+            <input value={name} placeholder="Irdina" onChange={(event) => setName(event.target.value)} />
+          </label>
+        )}
+        <label>
+          <span>Email</span>
+          <input
+            type="email"
+            value={email}
+            placeholder="you@email.com"
+            autoComplete="email"
+            required
+            onChange={(event) => setEmail(event.target.value)}
+          />
+        </label>
+        <label>
+          <span>Password</span>
+          <input
+            type="password"
+            value={password}
+            placeholder="At least 6 characters"
+            autoComplete={isSignup ? 'new-password' : 'current-password'}
+            minLength={6}
+            required
+            onChange={(event) => setPassword(event.target.value)}
+          />
+        </label>
+
+        {status && <p className="auth-status">{status}</p>}
+
+        <button className="primary-button" type="submit" disabled={submitting}>
+          <ShieldCheck size={18} /> {submitting ? 'Please wait...' : isSignup ? 'Create account' : 'Log in'}
+        </button>
+      </form>
+    </main>
   );
 }
 
@@ -700,7 +895,7 @@ function CommunityScreen({ posts, cats, users, comments, onCreate, onOpenUser })
         <button className="text-button" onClick={onCreate}><Plus size={16} /> Post</button>
       </div>
       {posts.map((post) => {
-        const user = users.find((item) => item.id === post.user_id);
+        const user = users.find((item) => item.id === post.user_id) || users[0];
         const cat = cats.find((item) => item.id === post.cat_id);
         return (
           <article className="post-card" key={post.id}>
@@ -754,7 +949,7 @@ function CreatePostScreen({ onBack, onCreate }) {
   );
 }
 
-function SettingsScreen({ user }) {
+function SettingsScreen({ user, signedIn, onSignOut }) {
   return (
     <section className="screen">
       <ScreenHeader title="Settings" subtitle="Privacy and safety defaults for cat discovering." icon={Settings} />
@@ -764,6 +959,11 @@ function SettingsScreen({ user }) {
         <ToggleRow title="Friendly reminders" text="Show safety prompts before catch sessions." checked />
         <ToggleRow title="Public collection" text={`${user.name}'s caught cats are visible to followers.`} checked />
       </div>
+      {signedIn && (
+        <button className="secondary-button" onClick={onSignOut}>
+          <LogOut size={18} /> Sign out
+        </button>
+      )}
       <div className="safety-strip"><ShieldCheck size={17} /> This app is for memories and sightings. Give every cat space and kindness.</div>
     </section>
   );

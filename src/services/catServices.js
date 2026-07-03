@@ -1,4 +1,4 @@
-import { isSupabaseConfigured, supabase } from './supabaseClient';
+import { getCurrentSession, isSupabaseConfigured, supabase } from './supabaseClient';
 
 export const duplicateLocationRadiusMeters = 200;
 
@@ -324,16 +324,8 @@ function createUserCatRecord({ userId, catId, capture, isUnlocked, userGivenName
 }
 
 async function getSupabaseUser() {
-  const { data: sessionData } = await supabase.auth.getSession();
-  if (sessionData.session?.user) return sessionData.session.user;
-
-  const { data, error } = await supabase.auth.signInAnonymously();
-  if (error) {
-    console.warn('Supabase anonymous auth failed. Enable anonymous sign-ins or add a signed-in user.', error);
-    return null;
-  }
-
-  return data.user;
+  const session = await getCurrentSession();
+  return session?.user || null;
 }
 
 async function createSupabaseUserCat({ userId, catId, capture, userGivenName = '', userNotes = '' }) {

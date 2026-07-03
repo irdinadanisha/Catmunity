@@ -198,6 +198,127 @@ button:disabled {
   gap: 16px;
 }
 
+.auth-loading {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 12px;
+  color: #70564a;
+  font-weight: 900;
+}
+
+.auth-loading svg {
+  color: #e85f4b;
+}
+
+.auth-screen {
+  min-height: 100vh;
+  display: grid;
+  align-content: center;
+  gap: 18px;
+  padding: 36px 18px;
+}
+
+.auth-brand {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: 8px;
+}
+
+.auth-cat-head {
+  width: 82px;
+  height: 82px;
+}
+
+.auth-cat-head .cat-head-content {
+  color: #e85f4b;
+}
+
+.auth-brand h1 {
+  max-width: 330px;
+  margin: 0;
+  color: #2b211d;
+  font-size: 2rem;
+  line-height: 1.04;
+  letter-spacing: 0;
+}
+
+.auth-brand p:not(.eyebrow) {
+  max-width: 340px;
+  margin: 0;
+  color: #74655d;
+  line-height: 1.45;
+}
+
+.auth-card {
+  display: grid;
+  gap: 13px;
+  padding: 14px;
+  border-radius: 28px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 249, 241, 0.78)),
+    rgba(255, 252, 247, 0.74);
+  border: 1px solid rgba(84, 58, 39, 0.07);
+  box-shadow: 0 22px 54px rgba(83, 55, 38, 0.12);
+  backdrop-filter: blur(22px) saturate(1.12);
+}
+
+.auth-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  min-height: 46px;
+  padding: 5px;
+  border-radius: 999px;
+  background: rgba(80, 55, 40, 0.06);
+}
+
+.auth-toggle button {
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #7c6a61;
+  font-weight: 950;
+}
+
+.auth-toggle button.active {
+  background: rgba(255, 255, 255, 0.92);
+  color: #2b211d;
+  box-shadow: 0 10px 22px rgba(83, 55, 38, 0.09);
+}
+
+.auth-card label {
+  display: grid;
+  gap: 7px;
+  color: #57443a;
+  font-weight: 900;
+}
+
+.auth-card input {
+  width: 100%;
+  min-height: 50px;
+  border: 1px solid rgba(92, 62, 44, 0.12);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #2f2823;
+  padding: 0 14px;
+  outline: none;
+}
+
+.auth-card input:focus {
+  border-color: rgba(40, 185, 232, 0.58);
+  box-shadow: 0 0 0 4px rgba(40, 185, 232, 0.12);
+}
+
+.auth-status {
+  margin: 0;
+  color: #9b4c35;
+  font-size: 0.86rem;
+  font-weight: 850;
+  line-height: 1.4;
+}
+
 .screen-header {
   display: flex;
   gap: 12px;

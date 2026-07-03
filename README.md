@@ -19,11 +19,14 @@ VITE_SUPABASE_URL=
 VITE_SUPABASE_ANON_KEY=
 ```
 
-`VITE_SUPABASE_ANON_KEY` can be Supabase's newer publishable key. For live writes from the MVP, enable anonymous sign-ins in Supabase Auth or replace the temporary anonymous session with a real login flow.
+`VITE_SUPABASE_ANON_KEY` can be Supabase's newer publishable key. When Supabase variables are present, Catmunity shows an email/password sign-up and login screen before users can save cats. If Supabase variables are missing, the app stays in mock mode for UI work.
+
+In Supabase, enable **Authentication > Providers > Email**. For quick MVP testing, you can temporarily turn off email confirmation in **Authentication > Sign In / Providers > Email**, or keep it on and confirm the account from the email before logging in.
 
 ## Included MVP Flow
 
 - Full-screen explore map with caught and locked nearby cats
+- Email/password sign-up and login with Supabase Auth
 - Draggable bottom sheet with search, filter chips, preview cards, and nearby list
 - Catch flow with photo upload/sample image, crop confirmation, and success copy
 - New-cat vs existing-cat registration choice to avoid duplicate nearby pins
@@ -48,6 +51,8 @@ Service helpers live in `src/services/catServices.js` for:
 - Linking existing cats to a user collection without creating duplicate pins
 - 200m duplicate cutoff from the original cat pin
 - TODO automatic duplicate detection with image similarity and nearby approximate-cell matching
+
+Signed-in users are stored in Supabase Auth. Cat ownership is saved in `user_cats`, new cats are saved in `cats`, and extra sightings are saved in `cat_sightings`, all linked to the authenticated user id.
 
 The Supabase schema lives in `supabase/schema.sql` and uses normalized `cats`, `user_cats`, and `cat_sightings` tables plus a public-safe `cat_public_map` view. The app reads live cats from Supabase when the environment variables are present, and falls back to mock data if Supabase is unavailable.
 
