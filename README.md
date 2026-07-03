@@ -21,6 +21,13 @@ VITE_SUPABASE_ANON_KEY=
 
 Use the Supabase project URL only for `VITE_SUPABASE_URL`. Do not paste URLs that end in `/auth/v1`, `/rest/v1`, `/storage/v1`, or any SQL/API page URL.
 
+If Google Maps shows "Oops! Something went wrong", check Google Cloud Console for the same API key. Enable **Maps JavaScript API**, make sure billing is active, and add your deployed Vercel domain to the key's HTTP referrer restrictions, for example:
+
+```bash
+https://your-catmunity-site.vercel.app/*
+http://localhost:5173/*
+```
+
 `VITE_SUPABASE_ANON_KEY` can be Supabase's newer publishable key. When Supabase variables are present, Catmunity shows an email/password sign-up and login screen before users can save cats. If Supabase variables are missing, the app stays in mock mode for UI work.
 
 In Supabase, enable **Authentication > Providers > Email**. For quick MVP testing, you can temporarily turn off email confirmation in **Authentication > Sign In / Providers > Email**, or keep it on and confirm the account from the email before logging in.

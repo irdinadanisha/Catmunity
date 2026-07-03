@@ -1857,6 +1857,106 @@ button:disabled {
   gap: 10px;
 }
 
+.profile-settings-card {
+  display: grid;
+  gap: 13px;
+  padding: 14px;
+  border-radius: 24px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(255, 248, 239, 0.78)),
+    rgba(255, 252, 247, 0.76);
+  border: 1px solid rgba(80, 55, 40, 0.06);
+  box-shadow: 0 16px 34px rgba(83, 55, 38, 0.08);
+}
+
+.profile-settings-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 2px;
+}
+
+.profile-settings-preview img {
+  width: 68px;
+  height: 68px;
+  border-radius: 22px;
+  object-fit: cover;
+  background: #fff0c8;
+  box-shadow: 0 12px 28px rgba(83, 55, 38, 0.13);
+}
+
+.profile-settings-preview span {
+  display: grid;
+  gap: 3px;
+}
+
+.profile-settings-preview strong {
+  color: #2b211d;
+  font-size: 1.08rem;
+}
+
+.profile-settings-preview small {
+  color: #75645b;
+  font-weight: 850;
+}
+
+.profile-settings-card label {
+  display: grid;
+  gap: 7px;
+  color: #57443a;
+  font-weight: 850;
+}
+
+.profile-settings-card input,
+.profile-settings-card textarea {
+  width: 100%;
+  border: 1px solid rgba(92, 62, 44, 0.12);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #2f2823;
+  padding: 14px;
+  outline: none;
+}
+
+.profile-settings-card textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.profile-settings-card input:focus,
+.profile-settings-card textarea:focus {
+  border-color: rgba(40, 185, 232, 0.58);
+  box-shadow: 0 0 0 4px rgba(40, 185, 232, 0.12);
+}
+
+.privacy-switch {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(80, 55, 40, 0.06);
+}
+
+.privacy-switch input {
+  width: 22px;
+  height: 22px;
+  accent-color: #28b9e8;
+  padding: 0;
+}
+
+.privacy-switch span {
+  display: grid;
+  gap: 2px;
+}
+
+.privacy-switch small {
+  color: #75645b;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 .info-row,
 .toggle-row {
   display: flex;

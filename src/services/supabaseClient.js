@@ -113,6 +113,24 @@ export async function resendSignupConfirmation(email) {
   return { data, error: getAuthError(error) };
 }
 
+export async function updateUserProfile({ name, avatarUrl, bio, publicProfile }) {
+  if (!isSupabaseConfigured) {
+    return { data: null, error: new Error('Supabase is not configured.') };
+  }
+
+  const { data, error } = await supabase.auth.updateUser({
+    data: {
+      full_name: name,
+      name,
+      avatar_url: avatarUrl,
+      bio,
+      public_profile: publicProfile,
+    },
+  });
+
+  return { data, error: getAuthError(error) };
+}
+
 export async function signOutUser() {
   if (!isSupabaseConfigured) return;
   await supabase.auth.signOut();

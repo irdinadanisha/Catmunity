@@ -53,6 +53,7 @@ import {
   signOutUser,
   signUpWithEmail,
   subscribeToAuthChanges,
+  updateUserProfile,
 } from './services/supabaseClient';
 import './styles/app.css';
 
@@ -178,6 +179,19 @@ function App() {
     setCats(mockCats);
     setSelectedCatId('cat-saffron');
     showToast('Signed out.');
+  }
+
+  async function handleProfileSave(profile) {
+    const { data, error } = await updateUserProfile(profile);
+    if (error) {
+      showToast(error.message || 'Profile update failed.');
+      return;
+    }
+
+    if (data.user) {
+      setAuthUser(data.user);
+    }
+    showToast('Profile updated.');
   }
 
   async function handlePhotoSelected(file) {
@@ -366,7 +380,14 @@ function App() {
         {screen === 'createPost' && (
           <CreatePostScreen onBack={() => navigate('community')} onCreate={handleCreatePost} />
         )}
-        {screen === 'settings' && <SettingsScreen user={me} signedIn={Boolean(authUser)} onSignOut={handleSignOut} />}
+        {screen === 'settings' && (
+          <SettingsScreen
+            user={me}
+            signedIn={Boolean(authUser)}
+            onProfileSave={handleProfileSave}
+            onSignOut={handleSignOut}
+          />
+        )}
       </motion.main>
 
       {screen !== 'welcome' && (
@@ -401,8 +422,8 @@ function createAppUser(authUser) {
     id: authUser.id,
     name: displayName,
     avatar_url: authUser.user_metadata?.avatar_url || fallback.avatar_url,
-    bio: 'Saving neighborhood cat memories with Catmunity.',
-    public_profile: true,
+    bio: authUser.user_metadata?.bio || 'Saving neighborhood cat memories with Catmunity.',
+    public_profile: authUser.user_metadata?.public_profile ?? true,
     email: authUser.email,
   };
 }
@@ -830,7 +851,7 @@ function CollectionScreen({ caughtCats, stats, user, navigate, setSelectedCatId 
           <h1>{user.name}</h1>
           <p>{user.bio}</p>
         </div>
-        <span className="profile-status"><ShieldCheck size={14} /> Public</span>
+        <span className="profile-status"><ShieldCheck size={14} /> {user.public_profile ? 'Public' : 'Private'}</span>
       </div>
       <div className="metric-tabs" aria-label="Collection stats">
         <Stat label="Caught" value={stats.caught} icon={Cat} />
@@ -978,15 +999,78 @@ function CreatePostScreen({ onBack, onCreate }) {
   );
 }
 
-function SettingsScreen({ user, signedIn, onSignOut }) {
+function SettingsScreen({ user, signedIn, onProfileSave, onSignOut }) {
+  const [form, setForm] = useState({
+    name: user.name || '',
+    avatarUrl: user.avatar_url || '',
+    bio: user.bio || '',
+    publicProfile: user.public_profile ?? true,
+  });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setForm({
+      name: user.name || '',
+      avatarUrl: user.avatar_url || '',
+      bio: user.bio || '',
+      publicProfile: user.public_profile ?? true,
+    });
+  }, [user]);
+
+  function update(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setSaving(true);
+    await onProfileSave(form);
+    setSaving(false);
+  }
+
   return (
     <section className="screen">
-      <ScreenHeader title="Settings" subtitle="Privacy and safety defaults for cat discovering." icon={Settings} />
+      <ScreenHeader title="Profile settings" subtitle="Update how your Catmunity account appears." icon={Settings} />
+      <form className="profile-settings-card" onSubmit={handleSubmit}>
+        <div className="profile-settings-preview">
+          <img src={form.avatarUrl || user.avatar_url} alt={form.name || user.name} />
+          <span>
+            <strong>{form.name || 'Catmunity Friend'}</strong>
+            <small>{form.publicProfile ? 'Public collection' : 'Private collection'}</small>
+          </span>
+        </div>
+        <Field label="Display name" value={form.name} placeholder="Irdina" onChange={(value) => update('name', value)} />
+        <Field label="Profile picture URL" value={form.avatarUrl} placeholder="https://..." onChange={(value) => update('avatarUrl', value)} />
+        <label className="field">
+          <span>Bio</span>
+          <textarea
+            value={form.bio}
+            placeholder="Weekend cat spotter and cafe-map maker."
+            onChange={(event) => update('bio', event.target.value)}
+          />
+        </label>
+        <label className="privacy-switch">
+          <input
+            type="checkbox"
+            checked={form.publicProfile}
+            onChange={(event) => update('publicProfile', event.target.checked)}
+          />
+          <span>
+            <strong>Public account</strong>
+            <small>Let others see your public profile and caught-cat collection.</small>
+          </span>
+        </label>
+        {signedIn && (
+          <button className="primary-button" type="submit" disabled={saving}>
+            <Check size={18} /> {saving ? 'Saving...' : 'Save profile'}
+          </button>
+        )}
+      </form>
       <div className="settings-list">
         <ToggleRow title="Approximate public locations" text="Public maps show general areas unless you choose otherwise." checked />
         <ToggleRow title="Hide my live location" text="Community posts never expose real-time location." checked />
         <ToggleRow title="Friendly reminders" text="Show safety prompts before catch sessions." checked />
-        <ToggleRow title="Public collection" text={`${user.name}'s caught cats are visible to followers.`} checked />
+        <ToggleRow title="Public collection" text={`${user.name}'s caught cats are ${user.public_profile ? 'visible' : 'hidden'} to others.`} checked={user.public_profile} />
       </div>
       {signedIn && (
         <button className="secondary-button" onClick={onSignOut}>
@@ -1174,6 +1258,27 @@ function CatPreviewCard({ cat, locked, onOpen }) {
 const defaultMapCenter = { lat: 3.1478, lng: 101.6953 };
 const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
 
+if (typeof window !== 'undefined') {
+  window.gm_authFailure = () => {
+    window.dispatchEvent(new Event('catmunity-google-map-auth-failure'));
+  };
+}
+
+function useGoogleMapsAuthFailure() {
+  const [authFailed, setAuthFailed] = useState(false);
+
+  useEffect(() => {
+    function handleAuthFailure() {
+      setAuthFailed(true);
+    }
+
+    window.addEventListener('catmunity-google-map-auth-failure', handleAuthFailure);
+    return () => window.removeEventListener('catmunity-google-map-auth-failure', handleAuthFailure);
+  }, []);
+
+  return authFailed;
+}
+
 function GoogleCatMap({ cats, currentUserId, activeCatId, centerSignal, onSelect }) {
   if (!googleMapsApiKey) {
     return (
@@ -1202,6 +1307,7 @@ function RealGoogleMap({ cats, currentUserId, activeCatId, centerSignal, onSelec
   const [userPosition, setUserPosition] = useState(null);
   const [mapCenter, setMapCenter] = useState(defaultMapCenter);
   const [locationStatus, setLocationStatus] = useState('locating');
+  const googleAuthFailed = useGoogleMapsAuthFailure();
   const mapRef = useRef(null);
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey,
@@ -1243,13 +1349,13 @@ function RealGoogleMap({ cats, currentUserId, activeCatId, centerSignal, onSelec
     mapRef.current?.setZoom(userPosition ? 15 : 13);
   }, [centerSignal, userPosition, mapCenter]);
 
-  if (loadError) {
+  if (loadError || googleAuthFailed) {
     return (
       <div className="mock-map immersive-map google-map-missing" role="img" aria-label="Google Maps loading error">
         <div className="map-fallback-message">
           <MapIcon size={22} />
           <strong>Google Map could not load.</strong>
-          <span>Check the API key, Maps JavaScript API, billing, and referrer restrictions.</span>
+          <span>Check the API key, Maps JavaScript API, billing, and allowed website referrers for this Vercel domain.</span>
         </div>
       </div>
     );
@@ -1410,17 +1516,18 @@ function CatHeadShape({ image, fill = 'rgba(232, 95, 75, 0.95)', className = '',
 
 function MiniMap({ cats, onSelect = () => {}, approximate = false }) {
   const firstCatPosition = cats[0] ? getCatMapPosition(cats[0]) : defaultMapCenter;
+  const googleAuthFailed = useGoogleMapsAuthFailure();
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey,
     id: 'catmunity-google-map',
   });
 
-  if (!googleMapsApiKey || loadError) {
+  if (!googleMapsApiKey || loadError || googleAuthFailed) {
     return (
       <div className="mini-map google-map-missing">
         <div className="mini-map-label">
           <strong>{!googleMapsApiKey ? 'Google Maps API key missing.' : 'Google Map could not load.'}</strong>
-          <small>{!googleMapsApiKey ? 'Add the key to show discovery pins.' : 'Check key, billing, and referrers.'}</small>
+          <small>{!googleMapsApiKey ? 'Add the key to show discovery pins.' : 'Check key, billing, and Vercel referrer.'}</small>
         </div>
       </div>
     );
