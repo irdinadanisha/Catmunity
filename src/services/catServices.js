@@ -1,3 +1,5 @@
+import { isSupabaseConfigured, supabase } from './supabaseClient';
+
 const defaultAccurateLocation = {
   latitude: 3.1478,
   longitude: 101.6953,
@@ -154,6 +156,117 @@ export function getLockedStateForUser(cat, userId) {
   return !cat.caught_by_users.includes(userId);
 }
 
+export async function loadCatsFromSupabase(uiUserId) {
+  if (!isSupabaseConfigured) return null;
+
+  const user = await getSupabaseUser();
+  if (!user) return null;
+
+  const [{ data: publicCats, error: catsError }, { data: userCats, error: userCatsError }] = await Promise.all([
+    supabase
+      .from('cat_public_map')
+      .select('*')
+      .order('updated_at', { ascending: false }),
+    supabase
+      .from('user_cats')
+      .select('cat_id')
+      .eq('user_id', user.id),
+  ]);
+
+  if (catsError || userCatsError) {
+    console.warn('Supabase cat load failed', catsError || userCatsError);
+    return null;
+  }
+
+  const caughtIds = new Set((userCats || []).map((item) => item.cat_id));
+  return (publicCats || []).map((cat) => mapSupabaseCat(cat, uiUserId, caughtIds.has(cat.id)));
+}
+
+export async function createNewCatInSupabase({ capture, form, uiUserId }) {
+  if (!isSupabaseConfigured) return null;
+
+  const user = await getSupabaseUser();
+  if (!user) return null;
+
+  const localCat = createNewCatWithCanonicalLocation({ capture, form, currentUserId: uiUserId });
+  const catPayload = {
+    name: localCat.name,
+    colour: localCat.colour,
+    breed: localCat.breed || null,
+    weight: localCat.weight || null,
+    fun_facts: localCat.fun_facts,
+    remarks: localCat.remarks,
+    original_image_url: localCat.original_image_url,
+    cropped_image_url: localCat.cropped_image_url,
+    created_by: user.id,
+    canonical_latitude: localCat.canonical_latitude,
+    canonical_longitude: localCat.canonical_longitude,
+    approximate_latitude: localCat.approximate_latitude,
+    approximate_longitude: localCat.approximate_longitude,
+    location_name: localCat.location_name,
+    area_name: localCat.area_name,
+    city: localCat.city,
+    country: localCat.country,
+  };
+
+  const { data: createdCat, error: catError } = await supabase
+    .from('cats')
+    .insert(catPayload)
+    .select()
+    .single();
+
+  if (catError) {
+    console.warn('Supabase new cat insert failed', catError);
+    return null;
+  }
+
+  await createSupabaseUserCat({
+    userId: user.id,
+    catId: createdCat.id,
+    capture,
+    userGivenName: localCat.name,
+    userNotes: localCat.remarks,
+  });
+
+  await createSupabaseSighting({
+    userId: user.id,
+    catId: createdCat.id,
+    capture,
+    remarks: localCat.remarks,
+    photoUrl: localCat.cropped_image_url,
+  });
+
+  return {
+    ...localCat,
+    id: createdCat.id,
+    created_by: user.id,
+    discovered_by: uiUserId,
+  };
+}
+
+export async function addExistingCatToSupabase({ catId, capture }) {
+  if (!isSupabaseConfigured) return false;
+
+  const user = await getSupabaseUser();
+  if (!user) return false;
+
+  const userCatResult = await createSupabaseUserCat({
+    userId: user.id,
+    catId,
+    capture,
+  });
+
+  if (!userCatResult) return false;
+
+  await createSupabaseSighting({
+    userId: user.id,
+    catId,
+    capture,
+  });
+
+  return true;
+}
+
 function createUserCatRecord({ userId, catId, capture, isUnlocked, userGivenName = '', userNotes = '' }) {
   const approximate = capture
     ? getApproximateLocation(capture.latitude, capture.longitude)
@@ -170,6 +283,103 @@ function createUserCatRecord({ userId, catId, capture, isUnlocked, userGivenName
     sighting_area_name: approximate.areaName,
     approximate_sighting_latitude: approximate.latitude,
     approximate_sighting_longitude: approximate.longitude,
+  };
+}
+
+async function getSupabaseUser() {
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (sessionData.session?.user) return sessionData.session.user;
+
+  const { data, error } = await supabase.auth.signInAnonymously();
+  if (error) {
+    console.warn('Supabase anonymous auth failed. Enable anonymous sign-ins or add a signed-in user.', error);
+    return null;
+  }
+
+  return data.user;
+}
+
+async function createSupabaseUserCat({ userId, catId, capture, userGivenName = '', userNotes = '' }) {
+  const approximate = capture
+    ? getApproximateLocation(capture.latitude, capture.longitude)
+    : getApproximateLocation(null, null);
+
+  const { data, error } = await supabase
+    .from('user_cats')
+    .upsert(
+      {
+        user_id: userId,
+        cat_id: catId,
+        user_given_name: userGivenName || null,
+        user_notes: userNotes || null,
+        is_unlocked: true,
+        sighting_area_name: approximate.areaName,
+        approximate_sighting_latitude: approximate.latitude,
+        approximate_sighting_longitude: approximate.longitude,
+      },
+      { onConflict: 'user_id,cat_id' },
+    )
+    .select()
+    .single();
+
+  if (error) {
+    console.warn('Supabase user_cats upsert failed', error);
+    return null;
+  }
+
+  return data;
+}
+
+async function createSupabaseSighting({ userId, catId, capture, photoUrl = null, remarks = '' }) {
+  const approximate = capture
+    ? getApproximateLocation(capture.latitude, capture.longitude)
+    : getApproximateLocation(null, null);
+
+  const { error } = await supabase
+    .from('cat_sightings')
+    .insert({
+      user_id: userId,
+      cat_id: catId,
+      approximate_latitude: approximate.latitude,
+      approximate_longitude: approximate.longitude,
+      area_name: approximate.areaName,
+      photo_url: photoUrl,
+      remarks: remarks || null,
+    });
+
+  if (error) {
+    console.warn('Supabase cat_sightings insert failed', error);
+  }
+}
+
+function mapSupabaseCat(cat, uiUserId, caught) {
+  return {
+    id: cat.id,
+    name: cat.name || 'Unnamed Cat',
+    image_url: cat.cropped_image_url,
+    cropped_image_url: cat.cropped_image_url,
+    color: cat.colour || '',
+    colour: cat.colour || '',
+    breed: cat.breed || '',
+    fun_info: cat.fun_facts || 'A neighborhood cat waiting to be discovered.',
+    fun_facts: cat.fun_facts || '',
+    remarks: '',
+    tags: ['nearby'],
+    discovered_by: '',
+    created_by: '',
+    caught_by_users: caught ? [uiUserId] : [],
+    latitude: cat.latitude,
+    longitude: cat.longitude,
+    approximate_latitude: cat.latitude,
+    approximate_longitude: cat.longitude,
+    location_name: cat.location_name || cat.area_name || 'Approximate area',
+    area_name: cat.area_name || 'Approximate area',
+    city: cat.city || '',
+    country: cat.country || '',
+    sighting_count: cat.sighting_count || 0,
+    created_at: cat.created_at,
+    updated_at: cat.updated_at,
+    map: { x: 52, y: 48 },
   };
 }
 

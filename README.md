@@ -11,6 +11,16 @@ npm run dev
 
 Open `http://localhost:5173/`.
 
+## Environment Variables
+
+```bash
+VITE_GOOGLE_MAPS_API_KEY=
+VITE_SUPABASE_URL=
+VITE_SUPABASE_ANON_KEY=
+```
+
+`VITE_SUPABASE_ANON_KEY` can be Supabase's newer publishable key. For live writes from the MVP, enable anonymous sign-ins in Supabase Auth or replace the temporary anonymous session with a real login flow.
+
 ## Included MVP Flow
 
 - Full-screen explore map with caught and locked nearby cats
@@ -37,7 +47,7 @@ Service helpers live in `src/services/catServices.js` for:
 - Linking existing cats to a user collection without creating duplicate pins
 - TODO automatic duplicate detection with image similarity and nearby approximate-cell matching
 
-The planned Supabase schema lives in `supabase/schema.sql` and uses normalized `cats`, `user_cats`, and `cat_sightings` tables plus a public-safe `cat_public_map` view.
+The Supabase schema lives in `supabase/schema.sql` and uses normalized `cats`, `user_cats`, and `cat_sightings` tables plus a public-safe `cat_public_map` view. The app reads live cats from Supabase when the environment variables are present, and falls back to mock data if Supabase is unavailable.
 
 ## Safety And Privacy Defaults
 

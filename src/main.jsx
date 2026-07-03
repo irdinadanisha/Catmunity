@@ -32,11 +32,14 @@ import {
 import { mockCats, mockComments, mockPosts, mockUsers } from './data/mockData';
 import {
   addExistingCatToUserCollection,
+  addExistingCatToSupabase,
   approximateLocation,
   autoDetectCatCrop,
+  createNewCatInSupabase,
   createNewCatWithCanonicalLocation,
   getCatMapPosition,
   getCurrentAccurateLocation,
+  loadCatsFromSupabase,
 } from './services/catServices';
 import './styles/app.css';
 
@@ -59,6 +62,24 @@ function App() {
   const [selectedCatId, setSelectedCatId] = useState('cat-saffron');
   const [selectedUserId, setSelectedUserId] = useState('user-jules');
   const [toast, setToast] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadLiveCats() {
+      const liveCats = await loadCatsFromSupabase(currentUserId);
+      if (cancelled || !liveCats?.length) return;
+
+      setCats(liveCats);
+      setSelectedCatId(liveCats[0].id);
+    }
+
+    loadLiveCats();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const me = mockUsers.find((user) => user.id === currentUserId);
   const caughtCats = cats.filter((cat) => cat.caught_by_users.includes(currentUserId));
@@ -116,26 +137,34 @@ function App() {
     navigate('detailsForm');
   }
 
-  function handleExistingCatRegistration(catId) {
+  async function handleExistingCatRegistration(catId) {
+    await addExistingCatToSupabase({ catId, capture });
     setCats((items) => addExistingCatToUserCollection(items, catId, currentUserId, capture));
     setSelectedCatId(catId);
     showToast('Existing cat added to your collection.');
     navigate('detail');
   }
 
-  function handleSaveDetails(form) {
-    const saved = createNewCatWithCanonicalLocation({
+  async function handleSaveDetails(form) {
+    const localCat = createNewCatWithCanonicalLocation({
       capture,
       form: { ...draftCat, ...form },
       currentUserId,
     });
+    const saved = await createNewCatInSupabase({
+      capture,
+      form: { ...draftCat, ...form },
+      uiUserId: currentUserId,
+    }) || localCat;
+
     setCats((items) => [saved, ...items]);
     setSelectedCatId(saved.id);
     showToast('New cat saved with one map pin.');
     navigate('collection');
   }
 
-  function unlockExistingCat(catId) {
+  async function unlockExistingCat(catId) {
+    await addExistingCatToSupabase({ catId });
     setCats((items) => addExistingCatToUserCollection(items, catId, currentUserId));
     setSelectedCatId(catId);
     showToast('Details unlocked for your collection.');
