@@ -1,7 +1,7 @@
 export const mockUsers = [
   {
     id: 'user-mira',
-    name: 'Mira',
+    name: 'Irdina',
     avatar_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80',
     bio: 'Weekend cat spotter and cafe-map maker.',
     public_profile: true,
