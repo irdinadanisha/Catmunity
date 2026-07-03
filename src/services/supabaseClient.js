@@ -178,6 +178,28 @@ export async function loadFollowingIds(userId) {
   return { data: (data || []).map((item) => item.following_id), error };
 }
 
+export async function loadFollowerIds(userId) {
+  if (!isSupabaseConfigured || !userId) return { data: [], error: null };
+
+  const { data, error } = await supabase
+    .from('user_follows')
+    .select('follower_id')
+    .eq('following_id', userId);
+
+  return { data: (data || []).map((item) => item.follower_id), error };
+}
+
+export async function loadProfilesByIds(ids) {
+  if (!isSupabaseConfigured || !ids.length) return { data: [], error: null };
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, display_name, avatar_url, bio, public_profile')
+    .in('id', ids);
+
+  return { data: data || [], error };
+}
+
 export async function followUserById(followerId, followingId) {
   if (!isSupabaseConfigured || !followerId || !followingId || followerId === followingId) {
     return { error: null };

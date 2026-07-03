@@ -126,7 +126,7 @@ with check (auth.uid() = id);
 drop policy if exists "Users can read own follows" on public.user_follows;
 create policy "Users can read own follows"
 on public.user_follows for select
-using (auth.uid() = follower_id);
+using (auth.uid() = follower_id or auth.uid() = following_id);
 
 drop policy if exists "Users can follow profiles" on public.user_follows;
 create policy "Users can follow profiles"

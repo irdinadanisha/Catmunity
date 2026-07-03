@@ -50,7 +50,9 @@ import {
   followUserById,
   getCurrentSession,
   isSupabaseConfigured,
+  loadFollowerIds,
   loadFollowingIds,
+  loadProfilesByIds,
   resendSignupConfirmation,
   searchCommunityProfilesByName,
   signInWithEmail,
@@ -86,6 +88,10 @@ function App() {
   const [authUser, setAuthUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(isSupabaseConfigured);
   const [followingIds, setFollowingIds] = useState([]);
+  const [followingProfiles, setFollowingProfiles] = useState([]);
+  const [followerProfiles, setFollowerProfiles] = useState([]);
+  const [socialUsers, setSocialUsers] = useState([]);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [toast, setToast] = useState('');
 
   useEffect(() => {
@@ -131,17 +137,31 @@ function App() {
   useEffect(() => {
     if (!authUser) {
       setFollowingIds([]);
+      setFollowingProfiles([]);
+      setFollowerProfiles([]);
+      setSocialUsers([]);
       return undefined;
     }
 
     let cancelled = false;
 
-    async function loadFollows() {
-      const { data } = await loadFollowingIds(currentUserId);
-      if (!cancelled) setFollowingIds(data || []);
+    async function loadSocialGraph() {
+      const [{ data: following = [] }, { data: followers = [] }] = await Promise.all([
+        loadFollowingIds(currentUserId),
+        loadFollowerIds(currentUserId),
+      ]);
+      const profileIds = [...new Set([...following, ...followers])];
+      const { data: profiles = [] } = await loadProfilesByIds(profileIds);
+      if (cancelled) return;
+
+      const mappedProfiles = profiles.map(mapCommunityProfile);
+      setFollowingIds(following);
+      setFollowingProfiles(mappedProfiles.filter((profile) => following.includes(profile.id)));
+      setFollowerProfiles(mappedProfiles.filter((profile) => followers.includes(profile.id)));
+      setSocialUsers(mappedProfiles);
     }
 
-    loadFollows();
+    loadSocialGraph();
 
     return () => {
       cancelled = true;
@@ -171,8 +191,8 @@ function App() {
   const caughtCats = cats.filter((cat) => cat.caught_by_users.includes(currentUserId));
   const selectedCat = cats.find((cat) => cat.id === selectedCatId) || cats[0];
   const communityUsers = useMemo(
-    () => [me, ...mockUsers.filter((user) => user.id !== me.id)],
-    [me],
+    () => mergeUsers([me, ...mockUsers, ...socialUsers]),
+    [me, socialUsers],
   );
   const selectedUser = communityUsers.find((user) => user.id === selectedUserId) || me;
   const publicCats = cats.filter((cat) => cat.caught_by_users.includes(selectedUser.id));
@@ -243,9 +263,11 @@ function App() {
 
   async function handleSearchFriends(query) {
     if (!isSupabaseConfigured) {
-      return mockUsers
+      const results = mockUsers
         .filter((user) => user.id !== currentUserId)
         .filter((user) => user.name.toLowerCase().includes(query.trim().toLowerCase()));
+      setSocialUsers((users) => mergeUsers([...users, ...results]));
+      return results;
     }
 
     const { data, error } = await searchCommunityProfilesByName(query, currentUserId);
@@ -254,7 +276,9 @@ function App() {
       return [];
     }
 
-    return data.map(mapCommunityProfile);
+    const results = data.map(mapCommunityProfile);
+    setSocialUsers((users) => mergeUsers([...users, ...results]));
+    return results;
   }
 
   async function handleToggleFollow(userId) {
@@ -271,6 +295,12 @@ function App() {
     setFollowingIds((ids) =>
       isFollowing ? ids.filter((id) => id !== userId) : [...new Set([...ids, userId])],
     );
+    const user = communityUsers.find((item) => item.id === userId);
+    if (user) {
+      setFollowingProfiles((profiles) =>
+        isFollowing ? profiles.filter((item) => item.id !== userId) : mergeUsers([...profiles, user]),
+      );
+    }
     showToast(isFollowing ? 'Friend unfollowed.' : 'Friend followed.');
   }
 
@@ -380,6 +410,11 @@ function App() {
     unlockExistingCat,
   };
 
+  const notifications = useMemo(
+    () => createNotifications({ followerProfiles, posts, comments, cats, currentUserId }),
+    [followerProfiles, posts, comments, cats, currentUserId],
+  );
+
   if (authLoading) {
     return (
       <div className="app-shell">
@@ -403,7 +438,25 @@ function App() {
   return (
     <div className="app-shell">
       {toast && <div className="toast"><Sparkles size={16} />{toast}</div>}
-      {screen !== 'welcome' && screen !== 'explore' && <TopBar user={me} stats={stats} />}
+      {screen !== 'welcome' && screen !== 'explore' && (
+        <TopBar
+          user={me}
+          stats={stats}
+          notificationCount={notifications.length}
+          onOpenNotifications={() => setNotificationsOpen(true)}
+        />
+      )}
+      {notificationsOpen && (
+        <NotificationCenter
+          notifications={notifications}
+          onClose={() => setNotificationsOpen(false)}
+          onOpenUser={(id) => {
+            setSelectedUserId(id);
+            setNotificationsOpen(false);
+            navigate('publicProfile');
+          }}
+        />
+      )}
 
       <motion.main
         key={screen}
@@ -454,6 +507,8 @@ function App() {
             currentUser={me}
             currentUserId={currentUserId}
             followingIds={followingIds}
+            followingProfiles={followingProfiles}
+            followerProfiles={followerProfiles}
             onSearchFriends={handleSearchFriends}
             onToggleFollow={handleToggleFollow}
             onCreate={() => navigate('createPost')}
@@ -523,6 +578,53 @@ function mapCommunityProfile(profile) {
     bio: profile.bio || '',
     public_profile: profile.public_profile,
   };
+}
+
+function mergeUsers(users) {
+  const byId = new Map();
+  users.filter(Boolean).forEach((user) => byId.set(user.id, user));
+  return [...byId.values()];
+}
+
+function createNotifications({ followerProfiles, posts, comments, cats, currentUserId }) {
+  const followerNotifications = followerProfiles.map((user) => ({
+    id: `follow-${user.id}`,
+    type: 'follow',
+    user,
+    title: `${user.name} followed you`,
+    text: 'Tap to view their Catmunity profile.',
+  }));
+
+  const interactionNotifications = posts
+    .filter((post) => post.user_id === currentUserId)
+    .flatMap((post) => {
+      const cat = cats.find((item) => item.id === post.cat_id);
+      const items = [];
+
+      if ((post.reactions?.heart || 0) > 0 || (post.reactions?.sparkle || 0) > 0) {
+        items.push({
+          id: `reaction-${post.id}`,
+          type: 'reaction',
+          title: 'People reacted to your post',
+          text: `${post.reactions.heart} hearts and ${post.reactions.sparkle} sparkles${cat ? ` on ${cat.name}` : ''}.`,
+        });
+      }
+
+      post.comment_ids.forEach((commentId) => {
+        const comment = comments.find((item) => item.id === commentId);
+        if (!comment) return;
+        items.push({
+          id: `comment-${commentId}`,
+          type: 'comment',
+          title: 'New comment on your post',
+          text: comment.body,
+        });
+      });
+
+      return items;
+    });
+
+  return [...followerNotifications, ...interactionNotifications];
 }
 
 function AuthScreen({ onSubmit }) {
@@ -638,18 +740,53 @@ function AuthScreen({ onSubmit }) {
   );
 }
 
-function TopBar({ user, stats }) {
+function TopBar({ user, stats, notificationCount = 0, onOpenNotifications }) {
   return (
     <header className="top-bar">
       <div>
-        <p className="eyebrow">Catmunity</p>
+        <p className="eyebrow top-brand"><PawPrint size={13} /> Catmunity</p>
         <h1>Hi, {user.name}</h1>
       </div>
       <div className="top-actions">
         <span className="pill"><Cat size={15} />{stats.caught}</span>
-        <button className="icon-button" aria-label="Notifications"><Bell size={20} /></button>
+        <button className="icon-button notification-button" aria-label="Notifications" onClick={onOpenNotifications}>
+          <Bell size={20} />
+          {notificationCount > 0 && <span>{notificationCount}</span>}
+        </button>
       </div>
     </header>
+  );
+}
+
+function NotificationCenter({ notifications, onClose, onOpenUser }) {
+  return (
+    <div className="notification-overlay" role="dialog" aria-modal="true" aria-label="Notifications">
+      <section className="notification-panel">
+        <div className="section-title-row">
+          <h2>Notifications</h2>
+          <button className="icon-button" onClick={onClose} aria-label="Close notifications"><X size={18} /></button>
+        </div>
+        <div className="notification-list">
+          {notifications.map((item) => (
+            <button
+              className="notification-item"
+              key={item.id}
+              type="button"
+              onClick={() => item.user && onOpenUser(item.user.id)}
+            >
+              {item.user ? <UserAvatar user={item.user} className="post-user-avatar" /> : <span className="notification-icon"><Sparkles size={18} /></span>}
+              <span>
+                <strong>{item.title}</strong>
+                <small>{item.text}</small>
+              </span>
+            </button>
+          ))}
+          {notifications.length === 0 && (
+            <p className="empty-community-copy">No notifications yet. New follows and post interactions will appear here.</p>
+          )}
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -1042,6 +1179,8 @@ function CommunityScreen({
   currentUser,
   currentUserId,
   followingIds,
+  followingProfiles,
+  followerProfiles,
   onSearchFriends,
   onToggleFollow,
   onCreate,
@@ -1051,6 +1190,7 @@ function CommunityScreen({
   const [friendQuery, setFriendQuery] = useState('');
   const [friendResults, setFriendResults] = useState([]);
   const [searchingFriends, setSearchingFriends] = useState(false);
+  const [friendTab, setFriendTab] = useState('following');
 
   useEffect(() => {
     let cancelled = false;
@@ -1082,6 +1222,8 @@ function CommunityScreen({
     return [...byId.values()];
   }, [users, friendResults]);
 
+  const activeFriendList = friendTab === 'followers' ? followerProfiles : followingProfiles;
+
   const localPosts = posts.filter((post) => post.location_name === currentArea);
   const friendPosts = posts.filter((post) => followingIds.includes(post.user_id) || post.user_id === currentUserId);
   const timelinePosts = [...friendPosts, ...localPosts.filter((post) => !friendPosts.some((item) => item.id === post.id))];
@@ -1092,7 +1234,7 @@ function CommunityScreen({
       <section className="friend-finder">
         <div className="section-title-row">
           <h2>Find friends</h2>
-          <span className="quiet-label">{followingIds.length} following</span>
+          <span className="quiet-label">{followingProfiles.length} following · {followerProfiles.length} followers</span>
         </div>
         <form className="friend-search-row" onSubmit={handleFriendSearch}>
           <Search size={18} />
@@ -1103,16 +1245,47 @@ function CommunityScreen({
           />
           <button type="submit">{searchingFriends ? '...' : 'Search'}</button>
         </form>
+        <div className="social-tabs" aria-label="Friend lists">
+          <button type="button" className={friendTab === 'following' ? 'active' : ''} onClick={() => setFriendTab('following')}>
+            Following
+          </button>
+          <button type="button" className={friendTab === 'followers' ? 'active' : ''} onClick={() => setFriendTab('followers')}>
+            Followers
+          </button>
+        </div>
         <div className="friend-result-list">
-          {friendResults.map((user) => {
-            const following = followingIds.includes(user.id);
-            return (
-              <article className="friend-result" key={user.id}>
+          {activeFriendList.map((user) => (
+            <article className="friend-result" key={user.id}>
+              <button className="friend-profile-link" type="button" onClick={() => onOpenUser(user.id)}>
                 <UserAvatar user={user} className="post-user-avatar" />
                 <span>
                   <strong>{user.name}</strong>
                   <small>{user.bio || 'Catmunity friend'}</small>
                 </span>
+              </button>
+              <button type="button" onClick={() => onToggleFollow(user.id)}>
+                {followingIds.includes(user.id) ? 'Following' : 'Follow'}
+              </button>
+            </article>
+          ))}
+          {activeFriendList.length === 0 && (
+            <p className="empty-community-copy">
+              {friendTab === 'following' ? 'You are not following anyone yet.' : 'No followers yet.'}
+            </p>
+          )}
+        </div>
+        <div className="friend-result-list">
+          {friendResults.map((user) => {
+            const following = followingIds.includes(user.id);
+            return (
+              <article className="friend-result" key={user.id}>
+                <button className="friend-profile-link" type="button" onClick={() => onOpenUser(user.id)}>
+                  <UserAvatar user={user} className="post-user-avatar" />
+                  <span>
+                    <strong>{user.name}</strong>
+                    <small>{user.bio || 'Catmunity friend'}</small>
+                  </span>
+                </button>
                 <button type="button" onClick={() => onToggleFollow(user.id)}>
                   {following ? 'Following' : 'Follow'}
                 </button>
