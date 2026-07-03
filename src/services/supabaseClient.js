@@ -61,9 +61,20 @@ export function subscribeToAuthChanges(callback) {
   return () => data.subscription.unsubscribe();
 }
 
-export async function signUpWithEmail({ name, email, password }) {
+export async function signUpWithEmail({ username, email, password }) {
   if (!isSupabaseConfigured) {
     return { data: null, error: new Error('Supabase is not configured.') };
+  }
+
+  const cleanUsername = normalizeUsername(username);
+  if (!cleanUsername) {
+    return { data: null, error: new Error('Choose a username using letters, numbers, or underscores.') };
+  }
+
+  const { available, error: usernameError } = await checkUsernameAvailability(cleanUsername);
+  if (usernameError) return { data: null, error: usernameError };
+  if (!available) {
+    return { data: null, error: new Error('That username is already taken. Try another one.') };
   }
 
   const emailRedirectTo = typeof window === 'undefined'
@@ -76,7 +87,9 @@ export async function signUpWithEmail({ name, email, password }) {
     options: {
       emailRedirectTo,
       data: {
-        full_name: name,
+        username: cleanUsername,
+        full_name: cleanUsername,
+        name: cleanUsername,
       },
     },
   });
@@ -131,35 +144,62 @@ export async function updateUserProfile({ name, avatarUrl, bio, publicProfile })
   return { data, error: getAuthError(error) };
 }
 
-export async function upsertCommunityProfile({ id, name, avatarUrl = '', bio = '', publicProfile = true }) {
+export async function checkUsernameAvailability(username, currentUserId = '') {
+  if (!isSupabaseConfigured || !username.trim()) return { available: false, error: null };
+
+  const cleanUsername = normalizeUsername(username);
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('username', cleanUsername)
+    .maybeSingle();
+
+  if (error) {
+    if (error.message?.toLowerCase().includes('username')) {
+      return {
+        available: false,
+        error: new Error('Username checking needs the latest Supabase schema. Please run supabase/schema.sql again.'),
+      };
+    }
+    return { available: false, error };
+  }
+
+  return { available: !data || data.id === currentUserId, error: null };
+}
+
+export async function upsertCommunityProfile({ id, username, name, avatarUrl = '', bio = '', publicProfile = true }) {
   if (!isSupabaseConfigured || !id) return { data: null, error: null };
+
+  const row = {
+    id,
+    display_name: name,
+    avatar_url: avatarUrl,
+    bio,
+    public_profile: publicProfile,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (username) {
+    row.username = normalizeUsername(username);
+  }
 
   const { data, error } = await supabase
     .from('profiles')
-    .upsert(
-      {
-        id,
-        display_name: name,
-        avatar_url: avatarUrl,
-        bio,
-        public_profile: publicProfile,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'id' },
-    )
+    .upsert(row, { onConflict: 'id' })
     .select()
     .single();
 
   return { data, error };
 }
 
-export async function searchCommunityProfilesByName(query, currentUserId) {
+export async function searchCommunityProfilesByUsername(query, currentUserId) {
   if (!isSupabaseConfigured || !query.trim()) return { data: [], error: null };
 
+  const cleanQuery = normalizeUsername(query);
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, display_name, avatar_url, bio, public_profile')
-    .ilike('display_name', `%${query.trim()}%`)
+    .select('id, username, display_name, avatar_url, bio, public_profile')
+    .ilike('username', `%${cleanQuery}%`)
     .eq('public_profile', true)
     .neq('id', currentUserId)
     .limit(8);
@@ -194,10 +234,18 @@ export async function loadProfilesByIds(ids) {
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, display_name, avatar_url, bio, public_profile')
+    .select('id, username, display_name, avatar_url, bio, public_profile')
     .in('id', ids);
 
   return { data: data || [], error };
+}
+
+export function normalizeUsername(value = '') {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/^@/u, '')
+    .replace(/[^a-z0-9_]/gu, '');
 }
 
 export async function followUserById(followerId, followingId) {

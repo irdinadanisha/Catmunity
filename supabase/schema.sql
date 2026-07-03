@@ -11,6 +11,7 @@ on conflict (id) do update set public = excluded.public;
 
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
+  username text,
   display_name text not null,
   avatar_url text,
   bio text,
@@ -18,6 +19,9 @@ create table if not exists public.profiles (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.profiles
+add column if not exists username text;
 
 create table if not exists public.user_follows (
   follower_id uuid not null references auth.users(id) on delete cascade,
@@ -188,6 +192,13 @@ create index if not exists cats_approximate_location_idx
 
 create index if not exists profiles_display_name_idx
   on public.profiles (display_name);
+
+create unique index if not exists profiles_username_unique_idx
+  on public.profiles (lower(username))
+  where username is not null;
+
+create index if not exists profiles_username_idx
+  on public.profiles (username);
 
 create index if not exists user_follows_follower_id_idx
   on public.user_follows (follower_id);

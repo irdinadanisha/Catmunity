@@ -53,8 +53,9 @@ import {
   loadFollowerIds,
   loadFollowingIds,
   loadProfilesByIds,
+  normalizeUsername,
   resendSignupConfirmation,
-  searchCommunityProfilesByName,
+  searchCommunityProfilesByUsername,
   signInWithEmail,
   signOutUser,
   signUpWithEmail,
@@ -127,12 +128,13 @@ function App() {
 
     upsertCommunityProfile({
       id: currentUserId,
+      username: me.username,
       name: me.name,
       avatarUrl: me.avatar_url,
       bio: me.bio,
       publicProfile: me.public_profile,
     });
-  }, [authUser, currentUserId, me.name, me.avatar_url, me.bio, me.public_profile]);
+  }, [authUser, currentUserId, me.username, me.name, me.avatar_url, me.bio, me.public_profile]);
 
   useEffect(() => {
     if (!authUser) {
@@ -216,9 +218,9 @@ function App() {
     window.setTimeout(() => setToast(''), 2200);
   }
 
-  async function handleAuthSubmit({ mode, name, email, password }) {
+  async function handleAuthSubmit({ mode, username, email, password }) {
     const authAction = mode === 'signup' ? signUpWithEmail : signInWithEmail;
-    const { data, error } = await authAction({ name, email, password });
+    const { data, error } = await authAction({ username, email, password });
 
     if (error) {
       throw error;
@@ -252,6 +254,7 @@ function App() {
       setAuthUser(data.user);
       await upsertCommunityProfile({
         id: data.user.id,
+        username: data.user.user_metadata?.username,
         name: profile.name,
         avatarUrl: profile.avatarUrl,
         bio: profile.bio,
@@ -265,12 +268,12 @@ function App() {
     if (!isSupabaseConfigured) {
       const results = mockUsers
         .filter((user) => user.id !== currentUserId)
-        .filter((user) => user.name.toLowerCase().includes(query.trim().toLowerCase()));
+        .filter((user) => (user.username || user.name).toLowerCase().includes(normalizeUsername(query)));
       setSocialUsers((users) => mergeUsers([...users, ...results]));
       return results;
     }
 
-    const { data, error } = await searchCommunityProfilesByName(query, currentUserId);
+    const { data, error } = await searchCommunityProfilesByUsername(query, currentUserId);
     if (error) {
       showToast(error.message || 'Friend search failed.');
       return [];
@@ -557,11 +560,14 @@ function createAppUser(authUser) {
   const displayName =
     authUser.user_metadata?.full_name ||
     authUser.user_metadata?.name ||
+    authUser.user_metadata?.username ||
     authUser.email?.split('@')[0] ||
     'Catmunity Friend';
+  const username = normalizeUsername(authUser.user_metadata?.username || authUser.email?.split('@')[0] || displayName);
 
   return {
     id: authUser.id,
+    username,
     name: displayName,
     avatar_url: authUser.user_metadata?.avatar_url || '',
     bio: authUser.user_metadata?.bio || 'Saving neighborhood cat memories with Catmunity.',
@@ -573,7 +579,8 @@ function createAppUser(authUser) {
 function mapCommunityProfile(profile) {
   return {
     id: profile.id,
-    name: profile.display_name,
+    username: profile.username || '',
+    name: profile.display_name || profile.username || 'Catmunity Friend',
     avatar_url: profile.avatar_url || '',
     bio: profile.bio || '',
     public_profile: profile.public_profile,
@@ -627,9 +634,14 @@ function createNotifications({ followerProfiles, posts, comments, cats, currentU
   return [...followerNotifications, ...interactionNotifications];
 }
 
+function UserHandle({ user }) {
+  if (!user?.username) return null;
+  return <small className="username-line">@{user.username}</small>;
+}
+
 function AuthScreen({ onSubmit }) {
   const [mode, setMode] = useState('signup');
-  const [name, setName] = useState('Irdina');
+  const [username, setUsername] = useState('irdina');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [status, setStatus] = useState('');
@@ -643,7 +655,7 @@ function AuthScreen({ onSubmit }) {
     setStatus('');
 
     try {
-      await onSubmit({ mode, name, email, password });
+      await onSubmit({ mode, username, email, password });
       setStatus(isSignup ? 'If email confirmation is enabled, check your inbox before signing in.' : '');
       setCanResendConfirmation(isSignup);
     } catch (error) {
@@ -677,11 +689,9 @@ function AuthScreen({ onSubmit }) {
   return (
     <main className="auth-screen">
       <div className="auth-brand">
-        <CatHeadShape className="auth-cat-head" fill="#fff0c8">
-          <Cat size={32} />
-        </CatHeadShape>
-        <p className="eyebrow">Catmunity</p>
-        <h1>{isSignup ? 'Create your cat-saving account.' : 'Welcome back.'}</h1>
+        <span className="auth-paw-mark"><PawPrint size={25} /></span>
+        <p className="eyebrow auth-wordmark">Catmunity</p>
+        <h1>{isSignup ? 'Create your cat hunt profile!' : 'Welcome back.'}</h1>
         <p>Sign in so your caught cats, map pins, and collection data stay attached to you.</p>
       </div>
 
@@ -697,8 +707,14 @@ function AuthScreen({ onSubmit }) {
 
         {isSignup && (
           <label>
-            <span>Name</span>
-            <input value={name} placeholder="Irdina" onChange={(event) => setName(event.target.value)} />
+            <span>Username</span>
+            <input
+              value={username}
+              placeholder="irdina"
+              autoComplete="username"
+              required
+              onChange={(event) => setUsername(normalizeUsername(event.target.value))}
+            />
           </label>
         )}
         <label>
@@ -1084,6 +1100,7 @@ function CollectionScreen({ caughtCats, stats, user, navigate, setSelectedCatId 
         <div>
           <p className="eyebrow">Public profile</p>
           <h1>{user.name}</h1>
+          <UserHandle user={user} />
           <p>{user.bio}</p>
         </div>
         <span className="profile-status"><ShieldCheck size={14} /> {user.public_profile ? 'Public' : 'Private'}</span>
@@ -1153,6 +1170,7 @@ function PublicProfileScreen({ user, cats, currentUserId, onBack, onSelectCat })
         <div>
           <p className="eyebrow">Public profile</p>
           <h1>{user.name}</h1>
+          <UserHandle user={user} />
           <p>{user.bio}</p>
         </div>
       </div>
@@ -1240,7 +1258,7 @@ function CommunityScreen({
           <Search size={18} />
           <input
             value={friendQuery}
-            placeholder="Search by registered name"
+            placeholder="Search by username"
             onChange={(event) => setFriendQuery(event.target.value)}
           />
           <button type="submit">{searchingFriends ? '...' : 'Search'}</button>
@@ -1260,6 +1278,7 @@ function CommunityScreen({
                 <UserAvatar user={user} className="post-user-avatar" />
                 <span>
                   <strong>{user.name}</strong>
+                  <UserHandle user={user} />
                   <small>{user.bio || 'Catmunity friend'}</small>
                 </span>
               </button>
@@ -1283,6 +1302,7 @@ function CommunityScreen({
                   <UserAvatar user={user} className="post-user-avatar" />
                   <span>
                     <strong>{user.name}</strong>
+                    <UserHandle user={user} />
                     <small>{user.bio || 'Catmunity friend'}</small>
                   </span>
                 </button>
@@ -1293,7 +1313,7 @@ function CommunityScreen({
             );
           })}
           {friendQuery && !searchingFriends && friendResults.length === 0 && (
-            <p className="empty-community-copy">No public users found with that name yet.</p>
+            <p className="empty-community-copy">No public users found with that username yet.</p>
           )}
         </div>
       </section>
@@ -1450,6 +1470,7 @@ function SettingsScreen({ user, userId, signedIn, onProfileSave, onSignOut }) {
           />
           <span>
             <strong>{form.name || 'Catmunity Friend'}</strong>
+            <UserHandle user={user} />
             <small>{form.publicProfile ? 'Public collection' : 'Private collection'}</small>
           </span>
         </div>

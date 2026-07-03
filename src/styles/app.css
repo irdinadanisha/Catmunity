@@ -232,13 +232,22 @@ button:disabled {
   gap: 8px;
 }
 
-.auth-cat-head {
-  width: 82px;
-  height: 82px;
+.auth-paw-mark {
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  border-radius: 19px;
+  color: #e85f4b;
+  background: linear-gradient(145deg, #fff2dc, #ffe2cd);
+  border: 1px solid rgba(232, 95, 75, 0.12);
+  box-shadow: 0 16px 34px rgba(232, 95, 75, 0.16);
 }
 
-.auth-cat-head .cat-head-content {
-  color: #e85f4b;
+.auth-wordmark {
+  margin-top: 2px;
+  font-size: 1rem;
+  letter-spacing: 0.08em;
 }
 
 .auth-brand h1 {
@@ -2379,6 +2388,11 @@ button:disabled {
 .empty-community-copy {
   color: #75645b;
   line-height: 1.35;
+}
+
+.username-line {
+  color: #b34d3e;
+  font-weight: 900;
 }
 
 .empty-community-copy {

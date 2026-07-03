@@ -1,6 +1,7 @@
 export const mockUsers = [
   {
     id: 'user-mira',
+    username: 'irdina',
     name: 'Irdina',
     avatar_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80',
     bio: 'Weekend cat spotter and cafe-map maker.',
@@ -8,6 +9,7 @@ export const mockUsers = [
   },
   {
     id: 'user-jules',
+    username: 'jules',
     name: 'Jules',
     avatar_url: 'https://images.unsplash.com/photo-1527980965255-d3b416303d12?auto=format&fit=crop&w=200&q=80',
     bio: 'Collecting tiny city legends one cat photo at a time.',
