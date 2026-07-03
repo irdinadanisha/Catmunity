@@ -16,6 +16,7 @@ Open `http://localhost:5173/`.
 - Full-screen explore map with caught and locked nearby cats
 - Draggable bottom sheet with search, filter chips, preview cards, and nearby list
 - Catch flow with photo upload/sample image, crop confirmation, and success copy
+- New-cat vs existing-cat registration choice to avoid duplicate nearby pins
 - Add/edit cat details form with name, color, fun info, remarks, tags, date, and location
 - Personal collection gallery and caught-location map
 - Cat detail screen with locked/unlocked detail behavior
@@ -25,15 +26,18 @@ Open `http://localhost:5173/`.
 
 ## Data Models
 
-Mock structures for `User`, `Cat`, `CatCatch` style ownership via `caught_by_users`, `CatLocation`, `CommunityPost`, `Comment`, and reactions live in `src/data/mockData.js`.
+Mock structures for `User`, `Cat`, `user_cats` style ownership via `caught_by_users`, privacy-aware cat locations, `CommunityPost`, `Comment`, and reactions live in `src/data/mockData.js`.
 
-Placeholder service functions live in `src/services/catServices.js` and are marked with TODO comments for:
+Service helpers live in `src/services/catServices.js` for:
 
 - Cat detection/cropping
-- Manual crop fallback routing
-- GPS/geolocation permissions
-- Privacy-preserving reverse geocoding
-- Backend persistence
+- Accurate current location capture for brand-new cats
+- Approximate public coordinates for map display and later sightings
+- Creating one canonical cat record
+- Linking existing cats to a user collection without creating duplicate pins
+- TODO automatic duplicate detection with image similarity and nearby approximate-cell matching
+
+The planned Supabase schema lives in `supabase/schema.sql` and uses normalized `cats`, `user_cats`, and `cat_sightings` tables plus a public-safe `cat_public_map` view.
 
 ## Safety And Privacy Defaults
 

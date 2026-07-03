@@ -31,10 +31,12 @@ import {
 } from 'lucide-react';
 import { mockCats, mockComments, mockPosts, mockUsers } from './data/mockData';
 import {
+  addExistingCatToUserCollection,
   approximateLocation,
   autoDetectCatCrop,
-  getCurrentPosition,
-  saveCatCatch,
+  createNewCatWithCanonicalLocation,
+  getCatMapPosition,
+  getCurrentAccurateLocation,
 } from './services/catServices';
 import './styles/app.css';
 
@@ -86,7 +88,7 @@ function App() {
   async function handlePhotoSelected(file) {
     const previewUrl = file ? URL.createObjectURL(file) : createSampleCatImage();
     const crop = await autoDetectCatCrop(previewUrl);
-    const position = await getCurrentPosition();
+    const position = await getCurrentAccurateLocation();
     setCapture({
       originalImage: previewUrl,
       croppedImage: crop.croppedImageUrl,
@@ -99,44 +101,42 @@ function App() {
   }
 
   function handleConfirmCatch() {
-    const base = {
-      id: `cat-${Date.now()}`,
+    navigate('registrationChoice');
+  }
+
+  function startNewCatRegistration() {
+    setDraftCat({
       name: 'Unnamed Cat',
-      image_url: capture.originalImage,
-      cropped_image_url: capture.croppedImage,
       color: '',
       fun_info: '',
       remarks: '',
       tags: ['new find'],
-      discovered_by: currentUserId,
-      caught_by_users: [currentUserId],
-      latitude: capture.latitude,
-      longitude: capture.longitude,
       location_name: capture.locationName,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      map: { x: 52, y: 48 },
-    };
-    setDraftCat(base);
+    });
     navigate('detailsForm');
   }
 
+  function handleExistingCatRegistration(catId) {
+    setCats((items) => addExistingCatToUserCollection(items, catId, currentUserId, capture));
+    setSelectedCatId(catId);
+    showToast('Existing cat added to your collection.');
+    navigate('detail');
+  }
+
   function handleSaveDetails(form) {
-    const saved = saveCatCatch({ ...draftCat, ...form, updated_at: new Date().toISOString() });
+    const saved = createNewCatWithCanonicalLocation({
+      capture,
+      form: { ...draftCat, ...form },
+      currentUserId,
+    });
     setCats((items) => [saved, ...items]);
     setSelectedCatId(saved.id);
-    showToast('Cat caught and saved.');
+    showToast('New cat saved with one map pin.');
     navigate('collection');
   }
 
   function unlockExistingCat(catId) {
-    setCats((items) =>
-      items.map((cat) =>
-        cat.id === catId && !cat.caught_by_users.includes(currentUserId)
-          ? { ...cat, caught_by_users: [...cat.caught_by_users, currentUserId] }
-          : cat,
-      ),
-    );
+    setCats((items) => addExistingCatToUserCollection(items, catId, currentUserId));
     setSelectedCatId(catId);
     showToast('Details unlocked for your collection.');
     navigate('detail');
@@ -187,6 +187,15 @@ function App() {
         {screen === 'catch' && <CatchScreen onPhotoSelected={handlePhotoSelected} />}
         {screen === 'confirm' && (
           <ConfirmScreen capture={capture} onBack={() => navigate('catch')} onConfirm={handleConfirmCatch} />
+        )}
+        {screen === 'registrationChoice' && (
+          <RegistrationChoiceScreen
+            cats={cats}
+            currentUserId={currentUserId}
+            onBack={() => navigate('confirm')}
+            onNewCat={startNewCatRegistration}
+            onExistingCat={handleExistingCatRegistration}
+          />
         )}
         {screen === 'detailsForm' && (
           <CatDetailsForm cat={draftCat} onSave={handleSaveDetails} onBack={() => navigate('confirm')} />
@@ -436,6 +445,49 @@ function ConfirmScreen({ capture, onBack, onConfirm }) {
       <div className="confirm-actions">
         <button className="secondary-button" onClick={onBack}><X size={18} /> Retake</button>
         <button className="primary-button" onClick={onConfirm}><Check size={18} /> Cat caught!</button>
+      </div>
+    </section>
+  );
+}
+
+function RegistrationChoiceScreen({ cats, currentUserId, onBack, onNewCat, onExistingCat }) {
+  return (
+    <section className="screen registration-choice-screen">
+      <BackButton onBack={onBack} />
+      <ScreenHeader
+        title="Is this a new cat?"
+        subtitle="Choose an existing map cat to avoid duplicate nearby pins."
+        icon={ShieldCheck}
+      />
+      <button className="new-cat-choice" onClick={onNewCat}>
+        <Plus size={20} />
+        <span>
+          <strong>Register as a new cat</strong>
+          <small>Create one canonical map pin for this cat.</small>
+        </span>
+      </button>
+      <div className="section-title-row">
+        <h2>Already on the map?</h2>
+        <span className="quiet-label">{cats.length} cats</span>
+      </div>
+      <div className="existing-cat-list">
+        {cats.map((cat) => {
+          const caught = cat.caught_by_users.includes(currentUserId);
+          return (
+            <button key={cat.id} className="existing-cat-choice" onClick={() => onExistingCat(cat.id)}>
+              <img src={cat.cropped_image_url} alt={cat.name || 'Cat'} />
+              <span>
+                <strong>{cat.name || 'Unnamed Cat'}</strong>
+                <small>{cat.area_name || cat.location_name}</small>
+              </span>
+              <em>{caught ? 'Already yours' : 'Add'}</em>
+            </button>
+          );
+        })}
+      </div>
+      <div className="safety-strip">
+        <ShieldCheck size={17} />
+        Existing cats are linked to your collection without moving their original map pin.
       </div>
     </section>
   );
@@ -833,12 +885,6 @@ function CatPreviewCard({ cat, locked, onOpen }) {
 
 const defaultMapCenter = { lat: 3.1478, lng: 101.6953 };
 const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
-const nearbyCatOffsets = [
-  { lat: 0.0011, lng: -0.0012 },
-  { lat: -0.001, lng: 0.0014 },
-  { lat: 0.0017, lng: 0.001 },
-  { lat: -0.0015, lng: -0.0008 },
-];
 
 function GoogleCatMap({ cats, currentUserId, activeCatId, centerSignal, onSelect }) {
   if (!googleMapsApiKey) {
@@ -909,19 +955,6 @@ function RealGoogleMap({ cats, currentUserId, activeCatId, centerSignal, onSelec
     mapRef.current?.setZoom(userPosition ? 15 : 13);
   }, [centerSignal, userPosition, mapCenter]);
 
-  const positionedCats = useMemo(() => {
-    if (!userPosition) return cats;
-
-    return cats.map((cat, index) => {
-      const offset = nearbyCatOffsets[index % nearbyCatOffsets.length];
-      return {
-        ...cat,
-        latitude: userPosition.lat + offset.lat,
-        longitude: userPosition.lng + offset.lng,
-      };
-    });
-  }, [cats, userPosition]);
-
   if (loadError) {
     return (
       <div className="mock-map immersive-map google-map-missing" role="img" aria-label="Google Maps loading error">
@@ -978,12 +1011,13 @@ function RealGoogleMap({ cats, currentUserId, activeCatId, centerSignal, onSelec
             </div>
           </OverlayView>
         )}
-        {positionedCats.map((cat, index) => {
+        {cats.map((cat, index) => {
           const locked = !cat.caught_by_users.includes(currentUserId);
+          const position = getCatMapPosition(cat);
           return (
             <OverlayView
               key={cat.id}
-              position={{ lat: cat.latitude, lng: cat.longitude }}
+              position={position}
               mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
               getPixelPositionOffset={(width, height) => ({ x: -width / 2, y: -height / 2 })}
             >
@@ -992,7 +1026,7 @@ function RealGoogleMap({ cats, currentUserId, activeCatId, centerSignal, onSelec
                 onClick={() => onSelect(cat)}
                 aria-label={`${cat.name}, ${locked ? 'locked' : 'caught'}`}
               >
-                <CatHeadMarker image={cat.cropped_image_url} locked={locked} count={index + 1} />
+                <CatHeadMarker image={cat.cropped_image_url} locked={locked} count={cat.sighting_count || cat.caught_by_users.length || index + 1} />
               </button>
             </OverlayView>
           );

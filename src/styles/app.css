@@ -1412,6 +1412,88 @@ button {
   bottom: 14px;
 }
 
+.registration-choice-screen {
+  gap: 14px;
+}
+
+.new-cat-choice,
+.existing-cat-choice {
+  width: 100%;
+  border: 0;
+  text-align: left;
+  display: grid;
+  align-items: center;
+  color: #32484f;
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(43, 79, 92, 0.08);
+  box-shadow: 0 14px 30px rgba(52, 74, 82, 0.1);
+}
+
+.new-cat-choice {
+  grid-template-columns: 42px 1fr;
+  gap: 11px;
+  min-height: 78px;
+  padding: 14px;
+  border-radius: 24px;
+}
+
+.new-cat-choice > svg {
+  color: #ffffff;
+  width: 42px;
+  height: 42px;
+  padding: 10px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #e85f4b, #f08a59);
+}
+
+.new-cat-choice strong,
+.existing-cat-choice strong {
+  display: block;
+  color: #263b42;
+  font-weight: 950;
+}
+
+.new-cat-choice small,
+.existing-cat-choice small {
+  display: block;
+  margin-top: 3px;
+  color: #62777f;
+  line-height: 1.35;
+  font-weight: 750;
+}
+
+.existing-cat-list {
+  display: grid;
+  gap: 9px;
+}
+
+.existing-cat-choice {
+  grid-template-columns: 58px 1fr auto;
+  gap: 10px;
+  padding: 8px 10px 8px 8px;
+  border-radius: 20px;
+}
+
+.existing-cat-choice img {
+  width: 58px;
+  height: 58px;
+  object-fit: cover;
+  border-radius: 16px;
+}
+
+.existing-cat-choice em {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 5px 9px;
+  color: #1e7893;
+  background: rgba(40, 185, 232, 0.14);
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 950;
+}
+
 .details-form {
   display: grid;
   gap: 13px;
