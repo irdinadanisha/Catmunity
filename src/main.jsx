@@ -64,6 +64,7 @@ function App() {
   const [draftCat, setDraftCat] = useState(null);
   const [selectedCatId, setSelectedCatId] = useState('cat-saffron');
   const [selectedUserId, setSelectedUserId] = useState('user-jules');
+  const [isProcessingCatPhoto, setIsProcessingCatPhoto] = useState(false);
   const [toast, setToast] = useState('');
 
   useEffect(() => {
@@ -110,18 +111,24 @@ function App() {
   }
 
   async function handlePhotoSelected(file) {
+    setIsProcessingCatPhoto(true);
     const previewUrl = file ? URL.createObjectURL(file) : createSampleCatImage();
-    const crop = await autoDetectCatCrop(previewUrl);
-    const position = await getCurrentAccurateLocation();
-    setCapture({
-      originalImage: previewUrl,
-      croppedImage: crop.croppedImageUrl,
-      cropMode: crop.mode,
-      latitude: position.latitude,
-      longitude: position.longitude,
-      locationName: approximateLocation(position.latitude, position.longitude),
-    });
-    navigate('confirm');
+    try {
+      const crop = await autoDetectCatCrop(previewUrl);
+      const position = await getCurrentAccurateLocation();
+      setCapture({
+        originalImage: previewUrl,
+        croppedImage: crop.croppedImageUrl,
+        cropMode: crop.mode,
+        backgroundColor: crop.backgroundColor,
+        latitude: position.latitude,
+        longitude: position.longitude,
+        locationName: approximateLocation(position.latitude, position.longitude),
+      });
+      navigate('confirm');
+    } finally {
+      setIsProcessingCatPhoto(false);
+    }
   }
 
   function handleConfirmCatch() {
@@ -222,7 +229,7 @@ function App() {
       >
         {screen === 'welcome' && <WelcomeScreen onStart={() => navigate('explore')} />}
         {screen === 'explore' && <ExploreScreen {...commonProps} />}
-        {screen === 'catch' && <CatchScreen onPhotoSelected={handlePhotoSelected} />}
+        {screen === 'catch' && <CatchScreen onPhotoSelected={handlePhotoSelected} processing={isProcessingCatPhoto} />}
         {screen === 'confirm' && (
           <ConfirmScreen capture={capture} onBack={() => navigate('catch')} onConfirm={handleConfirmCatch} />
         )}
@@ -448,22 +455,23 @@ function ExploreScreen({ cats, currentUserId, navigate, setSelectedCatId, unlock
   );
 }
 
-function CatchScreen({ onPhotoSelected }) {
+function CatchScreen({ onPhotoSelected, processing = false }) {
   return (
     <section className="screen catch-screen">
       <ScreenHeader title="Catch a cat" subtitle="Use a photo, then confirm the cropped cat memory." icon={Camera} />
-      <label className="upload-panel">
+      <label className={processing ? 'upload-panel processing' : 'upload-panel'}>
         <input
           type="file"
           accept="image/*"
           capture="environment"
+          disabled={processing}
           onChange={(event) => onPhotoSelected(event.target.files?.[0])}
         />
         <Camera size={38} />
-        <strong>Take or upload a cat photo</strong>
-        <span>Automatic crop will run first. Manual crop is available when detection needs help.</span>
+        <strong>{processing ? 'Preparing cat cutout...' : 'Take or upload a cat photo'}</strong>
+        <span>{processing ? 'Removing the background and matching the backdrop to the cat fur.' : 'Automatic crop will run first. Manual crop is available when detection needs help.'}</span>
       </label>
-      <button className="secondary-button" onClick={() => onPhotoSelected(null)}>
+      <button className="secondary-button" disabled={processing} onClick={() => onPhotoSelected(null)}>
         <ImagePlus size={18} /> Use sample cat photo
       </button>
       <div className="safety-strip"><ShieldCheck size={17} /> Keep paws, people, and private spaces respected.</div>

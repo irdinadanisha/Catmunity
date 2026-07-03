@@ -36,6 +36,11 @@ button {
   cursor: pointer;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
 .app-shell {
   max-width: 480px;
   min-height: 100vh;
@@ -1387,6 +1392,12 @@ button {
 .upload-panel span {
   color: #75645b;
   line-height: 1.4;
+}
+
+.upload-panel.processing {
+  border-style: solid;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 246, 238, 0.86));
 }
 
 .confirm-frame,
