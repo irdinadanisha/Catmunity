@@ -328,11 +328,6 @@ function ExploreScreen({ cats, currentUserId, navigate, setSelectedCatId, unlock
           activeCatId={activeCatId}
           onSelect={selectCatOnMap}
         />
-        <button className="capture-orb" onClick={() => navigate('catch')} aria-label="Catch a cat">
-          <CatHeadShape className="cat-head-action" fill="action">
-            <Camera size={32} />
-          </CatHeadShape>
-        </button>
       </div>
 
       <DraggableBottomSheet
