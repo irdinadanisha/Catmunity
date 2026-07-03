@@ -868,7 +868,6 @@ function MockMap({ cats, currentUserId, activeCatId, onSelect }) {
 function CatHeadMarker({ image, locked = false, count }) {
   return (
     <>
-      <span className="pin-pulse" />
       <CatHeadShape className="cat-head-photo" image={image} />
       <small>{locked ? <Lock size={11} /> : count}</small>
     </>
