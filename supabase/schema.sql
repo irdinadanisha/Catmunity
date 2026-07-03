@@ -1,6 +1,7 @@
 -- Catmunity Supabase schema
--- Public UI should read cat_public_map instead of cats so exact canonical
--- coordinates are not exposed to other users.
+-- Public UI reads cat_public_map for one stable pin per cat. The map now uses
+-- the original canonical coordinates, while later duplicate sightings keep their
+-- own approximate coordinates in user_cats/cat_sightings.
 
 create extension if not exists pgcrypto;
 
@@ -61,8 +62,10 @@ select
   cats.breed,
   cats.fun_facts,
   cats.cropped_image_url,
-  cats.approximate_latitude as latitude,
-  cats.approximate_longitude as longitude,
+  cats.canonical_latitude as latitude,
+  cats.canonical_longitude as longitude,
+  cats.approximate_latitude,
+  cats.approximate_longitude,
   cats.location_name,
   cats.area_name,
   cats.city,

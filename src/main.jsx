@@ -37,8 +37,11 @@ import {
   autoDetectCatCrop,
   createNewCatInSupabase,
   createNewCatWithCanonicalLocation,
+  duplicateLocationRadiusMeters,
   getCatMapPosition,
+  getDistanceMeters,
   getCurrentAccurateLocation,
+  isWithinDuplicateRadius,
   loadCatsFromSupabase,
 } from './services/catServices';
 import './styles/app.css';
@@ -138,6 +141,12 @@ function App() {
   }
 
   async function handleExistingCatRegistration(catId) {
+    const existingCat = cats.find((cat) => cat.id === catId);
+    if (!isWithinDuplicateRadius(existingCat, capture)) {
+      showToast(`This sighting is more than ${duplicateLocationRadiusMeters}m from the original pin. Register it as a new cat.`);
+      return;
+    }
+
     await addExistingCatToSupabase({ catId, capture });
     setCats((items) => addExistingCatToUserCollection(items, catId, currentUserId, capture));
     setSelectedCatId(catId);
@@ -220,6 +229,7 @@ function App() {
         {screen === 'registrationChoice' && (
           <RegistrationChoiceScreen
             cats={cats}
+            capture={capture}
             currentUserId={currentUserId}
             onBack={() => navigate('confirm')}
             onNewCat={startNewCatRegistration}
@@ -479,7 +489,7 @@ function ConfirmScreen({ capture, onBack, onConfirm }) {
   );
 }
 
-function RegistrationChoiceScreen({ cats, currentUserId, onBack, onNewCat, onExistingCat }) {
+function RegistrationChoiceScreen({ cats, capture, currentUserId, onBack, onNewCat, onExistingCat }) {
   return (
     <section className="screen registration-choice-screen">
       <BackButton onBack={onBack} />
@@ -502,21 +512,34 @@ function RegistrationChoiceScreen({ cats, currentUserId, onBack, onNewCat, onExi
       <div className="existing-cat-list">
         {cats.map((cat) => {
           const caught = cat.caught_by_users.includes(currentUserId);
+          const tooFar = !isWithinDuplicateRadius(cat, capture);
+          const distance = Math.round(getDistanceMeters({
+            latitude: cat.canonical_latitude ?? cat.latitude,
+            longitude: cat.canonical_longitude ?? cat.longitude,
+          }, capture));
           return (
-            <button key={cat.id} className="existing-cat-choice" onClick={() => onExistingCat(cat.id)}>
+            <button
+              key={cat.id}
+              className={tooFar ? 'existing-cat-choice disabled' : 'existing-cat-choice'}
+              disabled={tooFar}
+              onClick={() => onExistingCat(cat.id)}
+            >
               <img src={cat.cropped_image_url} alt={cat.name || 'Cat'} />
               <span>
                 <strong>{cat.name || 'Unnamed Cat'}</strong>
-                <small>{cat.area_name || cat.location_name}</small>
+                <small>
+                  {cat.area_name || cat.location_name}
+                  {Number.isFinite(distance) ? ` · ${distance}m from original pin` : ''}
+                </small>
               </span>
-              <em>{caught ? 'Already yours' : 'Add'}</em>
+              <em>{tooFar ? 'Too far' : caught ? 'Already yours' : 'Add'}</em>
             </button>
           );
         })}
       </div>
       <div className="safety-strip">
         <ShieldCheck size={17} />
-        Existing cats are linked to your collection without moving their original map pin.
+        Existing cats can be linked only within {duplicateLocationRadiusMeters}m and never move their original map pin.
       </div>
     </section>
   );

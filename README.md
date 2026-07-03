@@ -42,9 +42,11 @@ Service helpers live in `src/services/catServices.js` for:
 
 - Cat detection/cropping
 - Accurate current location capture for brand-new cats
-- Approximate public coordinates for map display and later sightings
+- Accurate original coordinates for stable map pins
+- Approximate coordinates for later sightings and area labels
 - Creating one canonical cat record
 - Linking existing cats to a user collection without creating duplicate pins
+- 200m duplicate cutoff from the original cat pin
 - TODO automatic duplicate detection with image similarity and nearby approximate-cell matching
 
 The Supabase schema lives in `supabase/schema.sql` and uses normalized `cats`, `user_cats`, and `cat_sightings` tables plus a public-safe `cat_public_map` view. The app reads live cats from Supabase when the environment variables are present, and falls back to mock data if Supabase is unavailable.

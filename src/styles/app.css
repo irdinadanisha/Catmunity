@@ -1474,6 +1474,16 @@ button {
   border-radius: 20px;
 }
 
+.existing-cat-choice.disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+
+.existing-cat-choice.disabled em {
+  color: #7b6d66;
+  background: rgba(123, 109, 102, 0.12);
+}
+
 .existing-cat-choice img {
   width: 58px;
   height: 58px;

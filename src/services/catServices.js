@@ -1,5 +1,7 @@
 import { isSupabaseConfigured, supabase } from './supabaseClient';
 
+export const duplicateLocationRadiusMeters = 200;
+
 const defaultAccurateLocation = {
   latitude: 3.1478,
   longitude: 101.6953,
@@ -95,8 +97,8 @@ export function createNewCatWithCanonicalLocation({ capture, form = {}, currentU
     canonical_longitude: capture.longitude,
     approximate_latitude: approximate.latitude,
     approximate_longitude: approximate.longitude,
-    latitude: approximate.latitude,
-    longitude: approximate.longitude,
+    latitude: capture.latitude,
+    longitude: capture.longitude,
     location_name: form.location_name || approximate.locationName,
     area_name: approximate.areaName,
     city: approximate.city,
@@ -141,9 +143,44 @@ export function addExistingCatToUserCollection(cats, catId, userId, capture = nu
 
 export function getCatMapPosition(cat) {
   return {
-    lat: cat.approximate_latitude ?? cat.latitude ?? cat.canonical_latitude ?? defaultAccurateLocation.latitude,
-    lng: cat.approximate_longitude ?? cat.longitude ?? cat.canonical_longitude ?? defaultAccurateLocation.longitude,
+    lat: cat.canonical_latitude ?? cat.latitude ?? cat.approximate_latitude ?? defaultAccurateLocation.latitude,
+    lng: cat.canonical_longitude ?? cat.longitude ?? cat.approximate_longitude ?? defaultAccurateLocation.longitude,
   };
+}
+
+export function getDistanceMeters(from, to) {
+  if (!from || !to) return Number.POSITIVE_INFINITY;
+
+  const fromLatitude = from.latitude ?? from.lat;
+  const fromLongitude = from.longitude ?? from.lng;
+  const toLatitude = to.latitude ?? to.lat;
+  const toLongitude = to.longitude ?? to.lng;
+
+  if (![fromLatitude, fromLongitude, toLatitude, toLongitude].every(Number.isFinite)) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  const earthRadiusMeters = 6371000;
+  const latitudeDelta = toRadians(toLatitude - fromLatitude);
+  const longitudeDelta = toRadians(toLongitude - fromLongitude);
+  const fromRadians = toRadians(fromLatitude);
+  const toRadiansValue = toRadians(toLatitude);
+  const haversine =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(fromRadians) * Math.cos(toRadiansValue) * Math.sin(longitudeDelta / 2) ** 2;
+
+  return earthRadiusMeters * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+}
+
+export function isWithinDuplicateRadius(cat, capture, radiusMeters = duplicateLocationRadiusMeters) {
+  if (!cat || !capture) return true;
+
+  const originalLocation = {
+    latitude: cat.canonical_latitude ?? cat.latitude,
+    longitude: cat.canonical_longitude ?? cat.longitude,
+  };
+
+  return getDistanceMeters(originalLocation, capture) <= radiusMeters;
 }
 
 export function saveCatCatch(cat) {
@@ -370,8 +407,10 @@ function mapSupabaseCat(cat, uiUserId, caught) {
     caught_by_users: caught ? [uiUserId] : [],
     latitude: cat.latitude,
     longitude: cat.longitude,
-    approximate_latitude: cat.latitude,
-    approximate_longitude: cat.longitude,
+    canonical_latitude: cat.latitude,
+    canonical_longitude: cat.longitude,
+    approximate_latitude: cat.approximate_latitude ?? cat.latitude,
+    approximate_longitude: cat.approximate_longitude ?? cat.longitude,
     location_name: cat.location_name || cat.area_name || 'Approximate area',
     area_name: cat.area_name || 'Approximate area',
     city: cat.city || '',
@@ -397,4 +436,8 @@ function getAreaName(latitude, longitude) {
   }
 
   return 'Central Kuala Lumpur area';
+}
+
+function toRadians(value) {
+  return (value * Math.PI) / 180;
 }
