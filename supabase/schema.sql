@@ -37,6 +37,8 @@ create table if not exists public.cats (
   colour text,
   breed text,
   weight text,
+  behavior text,
+  gender text,
   fun_facts text,
   remarks text,
   original_image_url text,
@@ -70,6 +72,10 @@ create table if not exists public.user_cats (
   updated_at timestamptz not null default now(),
   unique (user_id, cat_id)
 );
+
+alter table public.cats
+add column if not exists behavior text,
+add column if not exists gender text;
 
 alter table public.user_cats
 add column if not exists discovery_method text,
@@ -143,6 +149,8 @@ select
   cats.colour,
   cats.breed,
   cats.weight,
+  cats.behavior,
+  cats.gender,
   cats.fun_facts,
   cats.remarks,
   cats.cropped_image_url,
@@ -172,6 +180,8 @@ select
   cats.colour,
   cats.breed,
   cats.weight,
+  cats.behavior,
+  cats.gender,
   cats.fun_facts,
   cats.remarks,
   cats.cropped_image_url,
@@ -254,10 +264,29 @@ on public.cats for insert
 with check (auth.uid() = created_by);
 
 drop policy if exists "Creators can update own cats" on public.cats;
-create policy "Creators can update own cats"
+drop policy if exists "Unlocked users can update discovered cats" on public.cats;
+create policy "Unlocked users can update discovered cats"
 on public.cats for update
-using (auth.uid() = created_by)
-with check (auth.uid() = created_by);
+using (
+  auth.uid() = created_by
+  or exists (
+    select 1
+    from public.user_cats
+    where user_cats.cat_id = cats.id
+      and user_cats.user_id = auth.uid()
+      and user_cats.is_unlocked = true
+  )
+)
+with check (
+  auth.uid() = created_by
+  or exists (
+    select 1
+    from public.user_cats
+    where user_cats.cat_id = cats.id
+      and user_cats.user_id = auth.uid()
+      and user_cats.is_unlocked = true
+  )
+);
 
 drop policy if exists "Users can read own cat links" on public.user_cats;
 create policy "Users can read own cat links"

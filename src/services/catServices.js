@@ -86,6 +86,8 @@ export function createNewCatWithCanonicalLocation({ capture, form = {}, currentU
     colour: form.color || '',
     breed: form.breed || '',
     weight: form.weight || '',
+    behavior: form.behavior || '',
+    gender: form.gender || '',
     fun_info: form.fun_info || '',
     fun_facts: form.fun_info || '',
     remarks: form.remarks || '',
@@ -103,6 +105,7 @@ export function createNewCatWithCanonicalLocation({ capture, form = {}, currentU
     area_name: approximate.areaName,
     city: approximate.city,
     country: approximate.country,
+    discovered_at: form.date_found ? new Date(`${form.date_found}T12:00:00`).toISOString() : now,
     user_cats: [
       createUserCatRecord({
         userId: currentUserId,
@@ -111,6 +114,7 @@ export function createNewCatWithCanonicalLocation({ capture, form = {}, currentU
         isUnlocked: true,
         userGivenName: form.name,
         userNotes: form.remarks,
+        discoveredAt: form.date_found,
       }),
     ],
     sighting_count: 1,
@@ -210,7 +214,7 @@ export async function fetchCatsForMap(uiUserId) {
       .order('updated_at', { ascending: false }),
     supabase
       .from('user_cats')
-      .select('cat_id, is_unlocked')
+      .select('cat_id, is_unlocked, discovered_at')
       .eq('user_id', user.id)
       .eq('is_unlocked', true),
   ]);
@@ -220,8 +224,8 @@ export async function fetchCatsForMap(uiUserId) {
     return null;
   }
 
-  const caughtIds = new Set((userCats || []).map((item) => item.cat_id));
-  return (publicCats || []).map((cat) => mapSupabaseCat(cat, uiUserId, caughtIds.has(cat.id)));
+  const userCatsByCatId = new Map((userCats || []).map((item) => [item.cat_id, item]));
+  return (publicCats || []).map((cat) => mapSupabaseCat(cat, uiUserId, userCatsByCatId.has(cat.id), userCatsByCatId.get(cat.id)));
 }
 
 export async function fetchUserCollection(userId) {
@@ -240,7 +244,7 @@ export async function fetchPublicUserCollection(profileUserId, viewerUserId) {
     viewerUserId
       ? supabase
         .from('user_cats')
-        .select('cat_id, is_unlocked')
+        .select('cat_id, is_unlocked, discovered_at')
         .eq('user_id', viewerUserId)
         .eq('is_unlocked', true)
       : Promise.resolve({ data: [], error: null }),
@@ -251,8 +255,8 @@ export async function fetchPublicUserCollection(profileUserId, viewerUserId) {
     return [];
   }
 
-  const viewerUnlockedIds = new Set((viewerCats || []).map((item) => item.cat_id));
-  return (profileCats || []).map((cat) => mapSupabaseCat(cat, viewerUserId, viewerUnlockedIds.has(cat.id)));
+  const viewerCatsByCatId = new Map((viewerCats || []).map((item) => [item.cat_id, item]));
+  return (profileCats || []).map((cat) => mapSupabaseCat(cat, viewerUserId, viewerCatsByCatId.has(cat.id), viewerCatsByCatId.get(cat.id)));
 }
 
 export async function findNearbyCats(latitude, longitude, radiusMeters = duplicateLocationRadiusMeters) {
@@ -284,6 +288,8 @@ export async function createNewCatInSupabase({ capture, form, uiUserId }) {
     colour: localCat.colour,
     breed: localCat.breed || null,
     weight: localCat.weight || null,
+    behavior: localCat.behavior || null,
+    gender: localCat.gender || null,
     fun_facts: localCat.fun_facts,
     remarks: localCat.remarks,
     original_image_url: localCat.original_image_url,
@@ -316,6 +322,7 @@ export async function createNewCatInSupabase({ capture, form, uiUserId }) {
     capture,
     userGivenName: localCat.name,
     userNotes: localCat.remarks,
+    discoveredAt: form.date_found,
   });
 
   await createSupabaseSighting({
@@ -374,7 +381,45 @@ export async function removeCatFromUserCollection(userId, catId) {
   return { error };
 }
 
-function createUserCatRecord({ userId, catId, capture, isUnlocked, userGivenName = '', userNotes = '' }) {
+export async function updateCatDetailsInSupabase(catId, form) {
+  if (!isSupabaseConfigured || !catId) return { data: null, error: new Error('Supabase is not configured.') };
+
+  const user = await getSupabaseUser();
+  if (!user) return { data: null, error: new Error('You need to be signed in to edit cat details.') };
+
+  const { data, error } = await supabase
+    .from('cats')
+    .update({
+      name: form.name?.trim() || 'Unnamed Cat',
+      colour: form.color || null,
+      breed: form.breed || null,
+      weight: form.weight || null,
+      behavior: form.behavior || null,
+      gender: form.gender || null,
+      fun_facts: form.fun_info || null,
+      remarks: form.remarks || null,
+      location_name: form.location_name || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', catId)
+    .select()
+    .single();
+
+  if (!error && form.date_found) {
+    await supabase
+      .from('user_cats')
+      .update({
+        discovered_at: new Date(`${form.date_found}T12:00:00`).toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', user.id)
+      .eq('cat_id', catId);
+  }
+
+  return { data, error };
+}
+
+function createUserCatRecord({ userId, catId, capture, isUnlocked, userGivenName = '', userNotes = '', discoveredAt = '' }) {
   const approximate = capture
     ? getApproximateLocation(capture.latitude, capture.longitude)
     : getApproximateLocation(null, null);
@@ -383,7 +428,7 @@ function createUserCatRecord({ userId, catId, capture, isUnlocked, userGivenName
     id: `user-cat-${userId}-${catId}-${Date.now()}`,
     user_id: userId,
     cat_id: catId,
-    discovered_at: new Date().toISOString(),
+    discovered_at: discoveredAt ? new Date(`${discoveredAt}T12:00:00`).toISOString() : new Date().toISOString(),
     user_given_name: userGivenName || null,
     user_notes: userNotes || null,
     is_unlocked: isUnlocked,
@@ -398,7 +443,7 @@ async function getSupabaseUser() {
   return session?.user || null;
 }
 
-async function createSupabaseUserCat({ userId, catId, capture, userGivenName = '', userNotes = '' }) {
+async function createSupabaseUserCat({ userId, catId, capture, userGivenName = '', userNotes = '', discoveredAt = '' }) {
   const approximate = capture
     ? getApproximateLocation(capture.latitude, capture.longitude)
     : getApproximateLocation(null, null);
@@ -411,6 +456,7 @@ async function createSupabaseUserCat({ userId, catId, capture, userGivenName = '
         cat_id: catId,
         user_given_name: userGivenName || null,
         user_notes: userNotes || null,
+        discovered_at: discoveredAt ? new Date(`${discoveredAt}T12:00:00`).toISOString() : new Date().toISOString(),
         is_unlocked: true,
         sighting_area_name: approximate.areaName,
         approximate_sighting_latitude: approximate.latitude,
@@ -451,7 +497,7 @@ async function createSupabaseSighting({ userId, catId, capture, photoUrl = null,
   }
 }
 
-function mapSupabaseCat(cat, uiUserId, caught) {
+function mapSupabaseCat(cat, uiUserId, caught, userCat = null) {
   const limitedInfo = !caught;
   return {
     id: cat.id,
@@ -462,6 +508,8 @@ function mapSupabaseCat(cat, uiUserId, caught) {
     colour: limitedInfo ? '' : cat.colour || '',
     breed: limitedInfo ? '' : cat.breed || '',
     weight: limitedInfo ? '' : cat.weight || '',
+    behavior: limitedInfo ? '' : cat.behavior || '',
+    gender: limitedInfo ? '' : cat.gender || '',
     fun_info: limitedInfo ? '' : cat.fun_facts || '',
     fun_facts: limitedInfo ? '' : cat.fun_facts || '',
     remarks: limitedInfo ? '' : cat.remarks || '',
@@ -480,6 +528,7 @@ function mapSupabaseCat(cat, uiUserId, caught) {
     city: cat.city || '',
     country: cat.country || '',
     sighting_count: cat.sighting_count || 0,
+    discovered_at: userCat?.discovered_at || cat.discovered_at || cat.created_at,
     created_at: cat.created_at,
     updated_at: cat.updated_at,
     map: { x: 52, y: 48 },

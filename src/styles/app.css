@@ -1582,6 +1582,12 @@ button:disabled {
   flex: 0 0 auto;
 }
 
+.discovered-date {
+  color: #8a6a58;
+  font-size: 0.76rem;
+  font-weight: 850;
+}
+
 .discovered-card-actions {
   display: flex;
   flex-wrap: wrap;
@@ -2597,6 +2603,30 @@ button:disabled {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+}
+
+.confirm-remove-panel {
+  width: min(340px, calc(100% - 36px));
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border-radius: 26px;
+  color: #3c2b24;
+  background: rgba(255, 250, 242, 0.94);
+  border: 1px solid rgba(93, 65, 45, 0.08);
+  box-shadow: 0 24px 58px rgba(52, 34, 25, 0.22);
+}
+
+.confirm-remove-panel h2 {
+  margin: 0;
+  font-size: 1.14rem;
+  line-height: 1.25;
+}
+
+.confirm-remove-actions {
+  display: grid;
+  grid-template-columns: 0.8fr 1.2fr;
+  gap: 9px;
 }
 
 .comment-list {

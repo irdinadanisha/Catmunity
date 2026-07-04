@@ -18,6 +18,7 @@ import {
   MapPin,
   MessageCircle,
   PawPrint,
+  Pencil,
   Plus,
   Search,
   Settings,
@@ -45,6 +46,7 @@ import {
   isWithinDuplicateRadius,
   loadCatsFromSupabase,
   removeCatFromUserCollection,
+  updateCatDetailsInSupabase,
 } from './services/catServices';
 import {
   createCommunityComment,
@@ -94,6 +96,8 @@ function App() {
   const [posts, setPosts] = useState([]);
   const [capture, setCapture] = useState(null);
   const [draftCat, setDraftCat] = useState(null);
+  const [editingCatId, setEditingCatId] = useState('');
+  const [pendingRemoveCatId, setPendingRemoveCatId] = useState('');
   const [selectedCatId, setSelectedCatId] = useState('');
   const [selectedUserId, setSelectedUserId] = useState('');
   const [publicProfileCats, setPublicProfileCats] = useState([]);
@@ -431,6 +435,9 @@ function App() {
     setDraftCat({
       name: 'Unnamed Cat',
       color: '',
+      weight: '',
+      behavior: '',
+      gender: '',
       fun_info: '',
       remarks: '',
       tags: ['new find'],
@@ -456,6 +463,41 @@ function App() {
   }
 
   async function handleSaveDetails(form) {
+    if (editingCatId) {
+      const { error } = await updateCatDetailsInSupabase(editingCatId, form);
+      if (error) {
+        showToast(error.message || 'Cat details could not be updated.');
+        return;
+      }
+      const liveCats = await loadCatsFromSupabase(currentUserId);
+      setCats(liveCats || ((items) => items.map((cat) => (
+        cat.id === editingCatId
+          ? {
+            ...cat,
+            name: form.name.trim() || 'Unnamed Cat',
+            color: form.color,
+            colour: form.color,
+            breed: form.breed,
+            weight: form.weight,
+            behavior: form.behavior,
+            gender: form.gender,
+            fun_info: form.fun_info,
+            fun_facts: form.fun_info,
+            remarks: form.remarks,
+            location_name: form.location_name,
+            discovered_at: form.date_found ? new Date(`${form.date_found}T12:00:00`).toISOString() : cat.discovered_at,
+            updated_at: new Date().toISOString(),
+          }
+          : cat
+      ))));
+      setSelectedCatId(editingCatId);
+      setEditingCatId('');
+      setDraftCat(null);
+      showToast('Cat details updated.');
+      navigate('collection');
+      return;
+    }
+
     const localCat = createNewCatWithCanonicalLocation({
       capture,
       form: { ...draftCat, ...form },
@@ -471,6 +513,14 @@ function App() {
     setSelectedCatId(saved.id);
     showToast('New cat saved with one map pin.');
     navigate('collection');
+  }
+
+  function startEditCat(catId) {
+    const cat = cats.find((item) => item.id === catId);
+    if (!cat) return;
+    setEditingCatId(catId);
+    setDraftCat(cat);
+    navigate('detailsForm');
   }
 
   function startCommunityPost(catId) {
@@ -604,6 +654,17 @@ function App() {
     showToast('Cat removed from your collection.');
   }
 
+  function requestRemoveCatFromCollection(catId) {
+    setPendingRemoveCatId(catId);
+  }
+
+  async function confirmRemoveCatFromCollection() {
+    if (!pendingRemoveCatId) return;
+    const catId = pendingRemoveCatId;
+    setPendingRemoveCatId('');
+    await handleRemoveCatFromCollection(catId);
+  }
+
   async function openPublicProfile(userId) {
     setSelectedUserId(userId);
     const collection = await fetchPublicUserCollection(userId, currentUserId);
@@ -684,6 +745,12 @@ function App() {
           }}
         />
       )}
+      {pendingRemoveCatId && (
+        <ConfirmRemoveCatModal
+          onCancel={() => setPendingRemoveCatId('')}
+          onConfirm={confirmRemoveCatFromCollection}
+        />
+      )}
 
       <motion.main
         key={screen}
@@ -709,7 +776,16 @@ function App() {
           />
         )}
         {screen === 'detailsForm' && (
-          <CatDetailsForm cat={draftCat} onSave={handleSaveDetails} onBack={() => navigate('confirm')} />
+          <CatDetailsForm
+            cat={draftCat}
+            mode={editingCatId ? 'edit' : 'create'}
+            onSave={handleSaveDetails}
+            onBack={() => {
+              setEditingCatId('');
+              setDraftCat(null);
+              navigate(editingCatId ? 'collection' : 'confirm');
+            }}
+          />
         )}
         {screen === 'collection' && (
           <CollectionScreen
@@ -717,7 +793,8 @@ function App() {
             stats={stats}
             user={me}
             onPostCat={startCommunityPost}
-            onRemoveCat={handleRemoveCatFromCollection}
+            onEditCat={startEditCat}
+            onRemoveCat={requestRemoveCatFromCollection}
           />
         )}
         {screen === 'detail' && <CatDetailScreen {...commonProps} />}
@@ -916,6 +993,18 @@ function formatPostTime(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return 'Just now';
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function formatDiscoveryDate(value) {
+  if (!value) return 'Not recorded';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Not recorded';
+  return new Intl.DateTimeFormat('en', {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(date);
 }
 
 function renderMentionText(text = '') {
@@ -1341,15 +1430,19 @@ function RegistrationChoiceScreen({ cats, capture, currentUserId, onBack, onNewC
   );
 }
 
-function CatDetailsForm({ cat, onSave, onBack }) {
+function CatDetailsForm({ cat, mode = 'create', onSave, onBack }) {
   const [form, setForm] = useState({
     name: cat?.name || '',
     color: cat?.color || '',
+    breed: cat?.breed || '',
+    weight: cat?.weight || '',
+    behavior: cat?.behavior || '',
+    gender: cat?.gender || '',
     fun_info: cat?.fun_info || '',
     remarks: cat?.remarks || '',
     tags: cat?.tags?.join(', ') || '',
     location_name: cat?.location_name || '',
-    date_found: new Date().toISOString().slice(0, 10),
+    date_found: cat?.discovered_at ? cat.discovered_at.slice(0, 10) : new Date().toISOString().slice(0, 10),
   });
 
   function update(field, value) {
@@ -1359,7 +1452,11 @@ function CatDetailsForm({ cat, onSave, onBack }) {
   return (
     <section className="screen">
       <BackButton onBack={onBack} />
-      <ScreenHeader title="Add cat details" subtitle="A few notes make your collection feel personal." icon={Cat} />
+      <ScreenHeader
+        title={mode === 'edit' ? 'Edit cat details' : 'Add cat details'}
+        subtitle={mode === 'edit' ? 'Update anything that needs a little correction.' : 'A few notes make your collection feel personal.'}
+        icon={Cat}
+      />
       <form
         className="details-form"
         onSubmit={(event) => {
@@ -1374,18 +1471,22 @@ function CatDetailsForm({ cat, onSave, onBack }) {
         <img className="form-photo" src={cat?.cropped_image_url} alt="Newly caught cat" />
         <Field label="Cat name" value={form.name} placeholder="Unnamed Cat" onChange={(value) => update('name', value)} />
         <Field label="Color" value={form.color} placeholder="Orange, black, tabby..." onChange={(value) => update('color', value)} />
+        <Field label="Breed" value={form.breed} placeholder="Domestic shorthair, Persian..." onChange={(value) => update('breed', value)} />
+        <Field label="Weight" value={form.weight} placeholder="PHAT, chonky, 4.5 kg..." onChange={(value) => update('weight', value)} />
+        <Field label="Behavior" value={form.behavior} placeholder="Friendly, shy, sleepy, food motivated..." onChange={(value) => update('behavior', value)} />
+        <Field label="Gender" value={form.gender} placeholder="Female, male, unknown..." onChange={(value) => update('gender', value)} />
         <Field label="Personality / fun info" value={form.fun_info} placeholder="Sleepy window watcher" onChange={(value) => update('fun_info', value)} />
         <Field label="Your remarks" value={form.remarks} placeholder="Seen near the cafe steps" onChange={(value) => update('remarks', value)} />
         <Field label="Tags" value={form.tags} placeholder="sleepy, friendly, fluffy" onChange={(value) => update('tags', value)} />
         <Field label="Location found" value={form.location_name} onChange={(value) => update('location_name', value)} />
         <Field label="Date found" type="date" value={form.date_found} onChange={(value) => update('date_found', value)} />
-        <button className="primary-button" type="submit"><Check size={18} /> Save to collection</button>
+        <button className="primary-button" type="submit"><Check size={18} /> {mode === 'edit' ? 'Save changes' : 'Save to collection'}</button>
       </form>
     </section>
   );
 }
 
-function CollectionScreen({ caughtCats, stats, user, navigate, setSelectedCatId, onPostCat, onRemoveCat }) {
+function CollectionScreen({ caughtCats, stats, user, navigate, setSelectedCatId, onPostCat, onEditCat, onRemoveCat }) {
   return (
     <section className="screen collection-screen">
       <div className="profile-hero">
@@ -1426,6 +1527,7 @@ function CollectionScreen({ caughtCats, stats, user, navigate, setSelectedCatId,
               navigate('detail');
             }}
             onPostToCommunity={() => onPostCat(cat.id)}
+            onEdit={() => onEditCat(cat.id)}
             onRemoveFromCollection={() => onRemoveCat(cat.id)}
           />
         ))}
@@ -1467,6 +1569,11 @@ function CatDetailScreen({ selectedCat, currentUserId }) {
       {!locked && (
         <div className="detail-panel">
           <InfoRow label="Color" value={selectedCat.color} />
+          <InfoRow label="Breed" value={selectedCat.breed} />
+          <InfoRow label="Weight" value={selectedCat.weight} />
+          <InfoRow label="Behavior" value={selectedCat.behavior} />
+          <InfoRow label="Gender" value={selectedCat.gender} />
+          <InfoRow label="Discovered" value={formatDiscoveryDate(selectedCat.discovered_at)} />
           <InfoRow label="Fun info" value={selectedCat.fun_info} />
           <InfoRow label="Remarks" value={selectedCat.remarks} />
           <InfoRow label="Area" value={selectedCat.location_name} />
@@ -1535,6 +1642,7 @@ function DiscoveredCatCard({
   viewerHasUnlocked,
   onOpen,
   onPostToCommunity,
+  onEdit,
   onRemoveFromCollection,
 }) {
   const locked = !viewerHasUnlocked;
@@ -1549,14 +1657,19 @@ function DiscoveredCatCard({
         </div>
         {!locked && (
           <>
-            <p>{cat.color} · {cat.fun_info}</p>
+            <p>{[cat.color, cat.weight, cat.behavior, cat.gender].filter(Boolean).join(' · ') || cat.fun_info}</p>
             <span className="discovered-location">
               <MapPin size={13} />
               {cat.location_name}
             </span>
+            {cat.discovered_at && (
+              <span className="discovered-date">
+                {formatDiscoveryDate(cat.discovered_at)}
+              </span>
+            )}
           </>
         )}
-        {(onPostToCommunity || (isOwnProfile && onRemoveFromCollection)) && (
+        {(onPostToCommunity || (isOwnProfile && (onEdit || onRemoveFromCollection))) && (
           <div className="discovered-card-actions">
             {onPostToCommunity && (
               <button
@@ -1568,6 +1681,18 @@ function DiscoveredCatCard({
                 }}
               >
                 <Plus size={14} /> Post to Community
+              </button>
+            )}
+            {isOwnProfile && onEdit && (
+              <button
+                className="text-button post-cat-button"
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onEdit();
+                }}
+              >
+                <Pencil size={14} /> Edit
               </button>
             )}
             {isOwnProfile && onRemoveFromCollection && (
@@ -1586,6 +1711,20 @@ function DiscoveredCatCard({
         )}
       </div>
     </article>
+  );
+}
+
+function ConfirmRemoveCatModal({ onConfirm, onCancel }) {
+  return (
+    <div className="notification-overlay" role="dialog" aria-modal="true" aria-label="Confirm remove cat">
+      <section className="confirm-remove-panel">
+        <h2>Are you sure you're getting rid of this PHAT cat?</h2>
+        <div className="confirm-remove-actions">
+          <button className="text-button danger-text-button" type="button" onClick={onConfirm}>Yes</button>
+          <button className="text-button" type="button" onClick={onCancel}>Oop- ok I'll keep em'</button>
+        </div>
+      </section>
+    </div>
   );
 }
 
