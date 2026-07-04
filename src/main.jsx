@@ -473,15 +473,6 @@ function App() {
     navigate('collection');
   }
 
-  async function unlockExistingCat(catId) {
-    await addExistingCatToSupabase({ catId });
-    const liveCats = await loadCatsFromSupabase(currentUserId);
-    setCats(liveCats || ((items) => addExistingCatToUserCollection(items, catId, currentUserId)));
-    setSelectedCatId(catId);
-    showToast('Details unlocked for your collection.');
-    navigate('detail');
-  }
-
   function startCommunityPost(catId) {
     setPostCatId(catId);
     navigate('createPost');
@@ -649,7 +640,6 @@ function App() {
     navigate,
     selectedCat,
     setSelectedCatId,
-    unlockExistingCat,
   };
 
 
@@ -1133,7 +1123,7 @@ function WelcomeScreen({ onStart }) {
   );
 }
 
-function ExploreScreen({ cats, currentUser, currentUserId, navigate, setSelectedCatId, unlockExistingCat }) {
+function ExploreScreen({ cats, currentUser, currentUserId, navigate, setSelectedCatId }) {
   const [activeCatId, setActiveCatId] = useState(cats[0]?.id);
   const [query, setQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('All');
@@ -1225,7 +1215,7 @@ function ExploreScreen({ cats, currentUser, currentUserId, navigate, setSelected
             cat={activeCat}
             locked={activeLocked}
             currentUserId={currentUserId}
-            onOpen={() => (activeLocked ? unlockExistingCat(activeCat.id) : openCat(activeCat))}
+            onOpen={() => openCat(activeCat)}
           />
         )}
         <div className="sheet-expanded-tools">
@@ -1242,8 +1232,9 @@ function ExploreScreen({ cats, currentUser, currentUserId, navigate, setSelected
               onOpen={() => {
                 setActiveCatId(cat.id);
                 setSelectedCatId(cat.id);
+                navigate('detail');
               }}
-              action={!cat.caught_by_users.includes(currentUserId) ? () => unlockExistingCat(cat.id) : () => openCat(cat)}
+              action={() => openCat(cat)}
             />
           ))}
           {nearbyCats.length === 0 && (
@@ -1456,7 +1447,7 @@ function CollectionScreen({ caughtCats, stats, user, navigate, setSelectedCatId,
   );
 }
 
-function CatDetailScreen({ selectedCat, currentUserId, unlockExistingCat }) {
+function CatDetailScreen({ selectedCat, currentUserId }) {
   if (!selectedCat) {
     return (
       <section className="screen">
@@ -1466,13 +1457,23 @@ function CatDetailScreen({ selectedCat, currentUserId, unlockExistingCat }) {
   }
 
   const locked = !selectedCat.caught_by_users.includes(currentUserId);
+  const estimatedCat = getEstimatedMapCat(selectedCat);
   return (
     <section className="screen">
-      <ScreenHeader title={selectedCat.name || 'Unnamed Cat'} subtitle={locked ? 'Catch this cat to unlock full details.' : selectedCat.location_name} icon={locked ? Lock : Cat} />
+      <ScreenHeader title={selectedCat.name || 'Unnamed Cat'} subtitle={locked ? 'Estimated discovery area' : selectedCat.location_name} icon={locked ? Lock : Cat} />
       <div className="detail-hero">
         <img src={selectedCat.cropped_image_url} alt={selectedCat.name || 'Cat'} />
         {locked && <div className="lock-overlay"><Lock size={30} /> Limited preview</div>}
       </div>
+      {locked && (
+        <div className="locked-location-panel">
+          <div className="section-title-row">
+            <h2>Estimated location</h2>
+            <span className="quiet-label">{selectedCat.area_name || 'Approximate area'}</span>
+          </div>
+          <MiniMap cats={[estimatedCat]} approximate />
+        </div>
+      )}
       {!locked && (
         <div className="detail-panel">
           <InfoRow label="Color" value={selectedCat.color} />
@@ -1484,9 +1485,22 @@ function CatDetailScreen({ selectedCat, currentUserId, unlockExistingCat }) {
           </div>
         </div>
       )}
-      {locked && <button className="primary-button" onClick={() => unlockExistingCat(selectedCat.id)}><Camera size={18} /> I found this cat</button>}
     </section>
   );
+}
+
+function getEstimatedMapCat(cat) {
+  const latitude = cat.approximate_latitude ?? cat.latitude;
+  const longitude = cat.approximate_longitude ?? cat.longitude;
+
+  return {
+    ...cat,
+    latitude,
+    longitude,
+    canonical_latitude: latitude,
+    canonical_longitude: longitude,
+    location_name: cat.area_name || 'Approximate area',
+  };
 }
 
 function PublicProfileScreen({ user, cats, currentUserId, onBack, onSelectCat, onPostCat }) {
