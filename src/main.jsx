@@ -638,6 +638,7 @@ function App() {
           })}
         </nav>
       )}
+      {screen !== 'welcome' && <CatchButton onClick={() => navigate('catch')} />}
     </div>
   );
 }
@@ -1110,7 +1111,6 @@ function ExploreScreen({ cats, currentUser, currentUserId, navigate, setSelected
           )}
         </div>
       </DraggableBottomSheet>
-      <CatchButton onClick={() => navigate('catch')} />
     </section>
   );
 }
