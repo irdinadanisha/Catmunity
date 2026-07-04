@@ -502,7 +502,8 @@ function mapSupabaseCat(cat, uiUserId, caught, userCat = null) {
   return {
     id: cat.id,
     name: cat.name || 'Unnamed Cat',
-    image_url: cat.cropped_image_url,
+    image_url: cat.original_image_url || cat.cropped_image_url,
+    original_image_url: cat.original_image_url || cat.cropped_image_url,
     cropped_image_url: cat.cropped_image_url,
     color: limitedInfo ? '' : cat.colour || '',
     colour: limitedInfo ? '' : cat.colour || '',

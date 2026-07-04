@@ -550,7 +550,7 @@ function App() {
       userId: currentUserId,
       catId: cat.id,
       caption: post.body,
-      imageUrl: cat.cropped_image_url,
+      imageUrl: cat.original_image_url || cat.image_url || cat.cropped_image_url,
       locationName: cat.area_name || cat.location_name,
       mentions: extractMentions(post.body),
     });

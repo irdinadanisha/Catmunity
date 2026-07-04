@@ -2561,9 +2561,10 @@ button:disabled {
 
 .post-image {
   width: 100%;
-  aspect-ratio: 16 / 11;
+  max-height: 520px;
   border-radius: 18px;
-  object-fit: cover;
+  object-fit: contain;
+  background: rgba(255, 245, 232, 0.82);
 }
 
 .post-card p {
