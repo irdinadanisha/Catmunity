@@ -59,14 +59,25 @@ create table if not exists public.user_cats (
   user_id uuid not null references auth.users(id) on delete cascade,
   cat_id uuid not null references public.cats(id) on delete cascade,
   discovered_at timestamptz not null default now(),
+  discovery_method text,
   user_given_name text,
   user_notes text,
-  is_unlocked boolean not null default true,
+  is_unlocked boolean not null default false,
   sighting_area_name text,
   approximate_sighting_latitude double precision,
   approximate_sighting_longitude double precision,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
   unique (user_id, cat_id)
 );
+
+alter table public.user_cats
+add column if not exists discovery_method text,
+add column if not exists created_at timestamptz not null default now(),
+add column if not exists updated_at timestamptz not null default now();
+
+alter table public.user_cats
+alter column is_unlocked set default false;
 
 create table if not exists public.cat_sightings (
   id uuid primary key default gen_random_uuid(),
@@ -108,13 +119,29 @@ create table if not exists public.comments (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.notifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  actor_user_id uuid references auth.users(id) on delete set null,
+  type text not null,
+  title text not null,
+  body text,
+  related_post_id uuid references public.community_posts(id) on delete cascade,
+  related_cat_id uuid references public.cats(id) on delete cascade,
+  is_read boolean not null default false,
+  created_at timestamptz not null default now(),
+  read_at timestamptz
+);
+
 create or replace view public.cat_public_map as
 select
   cats.id,
   cats.name,
   cats.colour,
   cats.breed,
+  cats.weight,
   cats.fun_facts,
+  cats.remarks,
   cats.cropped_image_url,
   cats.canonical_latitude as latitude,
   cats.canonical_longitude as longitude,
@@ -133,6 +160,36 @@ group by cats.id;
 
 grant select on public.cat_public_map to anon, authenticated;
 
+create or replace view public.public_user_cat_map as
+select
+  user_cats.user_id as profile_user_id,
+  user_cats.discovered_at,
+  cats.id,
+  cats.name,
+  cats.colour,
+  cats.breed,
+  cats.weight,
+  cats.fun_facts,
+  cats.remarks,
+  cats.cropped_image_url,
+  cats.canonical_latitude as latitude,
+  cats.canonical_longitude as longitude,
+  cats.approximate_latitude,
+  cats.approximate_longitude,
+  cats.location_name,
+  cats.area_name,
+  cats.city,
+  cats.country,
+  cats.created_at,
+  cats.updated_at
+from public.user_cats
+join public.cats on cats.id = user_cats.cat_id
+join public.profiles on profiles.id = user_cats.user_id
+where user_cats.is_unlocked = true
+  and profiles.public_profile = true;
+
+grant select on public.public_user_cat_map to anon, authenticated;
+
 alter table public.cats enable row level security;
 alter table public.profiles enable row level security;
 alter table public.user_follows enable row level security;
@@ -141,6 +198,7 @@ alter table public.cat_sightings enable row level security;
 alter table public.community_posts enable row level security;
 alter table public.post_likes enable row level security;
 alter table public.comments enable row level security;
+alter table public.notifications enable row level security;
 
 drop policy if exists "Users can read public profiles" on public.profiles;
 create policy "Users can read public profiles"
@@ -207,6 +265,17 @@ drop policy if exists "Users can link cats to themselves" on public.user_cats;
 create policy "Users can link cats to themselves"
 on public.user_cats for insert
 with check (auth.uid() = user_id);
+
+drop policy if exists "Users can update own cat links" on public.user_cats;
+create policy "Users can update own cat links"
+on public.user_cats for update
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "Users can remove own cat links" on public.user_cats;
+create policy "Users can remove own cat links"
+on public.user_cats for delete
+using (auth.uid() = user_id);
 
 drop policy if exists "Users can read own sightings" on public.cat_sightings;
 create policy "Users can read own sightings"
@@ -287,6 +356,22 @@ create policy "Users can delete own comments"
 on public.comments for delete
 using (auth.uid() = user_id);
 
+drop policy if exists "Users can read own notifications" on public.notifications;
+create policy "Users can read own notifications"
+on public.notifications for select
+using (auth.uid() = user_id);
+
+drop policy if exists "Users can update own notifications" on public.notifications;
+create policy "Users can update own notifications"
+on public.notifications for update
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "Authenticated users can create notifications" on public.notifications;
+create policy "Authenticated users can create notifications"
+on public.notifications for insert
+with check (auth.uid() = actor_user_id);
+
 create index if not exists cats_approximate_location_idx
   on public.cats (approximate_latitude, approximate_longitude);
 
@@ -320,6 +405,9 @@ create index if not exists post_likes_post_id_idx
 
 create index if not exists comments_post_id_idx
   on public.comments (post_id);
+
+create index if not exists notifications_user_unread_idx
+  on public.notifications (user_id, is_read, created_at desc);
 
 drop policy if exists "Public can read profile photos" on storage.objects;
 create policy "Public can read profile photos"

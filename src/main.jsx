@@ -37,16 +37,22 @@ import {
   createNewCatInSupabase,
   createNewCatWithCanonicalLocation,
   duplicateLocationRadiusMeters,
+  fetchPublicUserCollection,
   getCatMapPosition,
   getDistanceMeters,
   getCurrentAccurateLocation,
   getApproximateLocation,
   isWithinDuplicateRadius,
   loadCatsFromSupabase,
+  removeCatFromUserCollection,
 } from './services/catServices';
 import {
   createCommunityComment,
   createCommunityPost,
+  createNotification,
+  deleteCommunityPost,
+  fetchNotifications,
+  fetchUnreadNotificationCount,
   followUserById,
   getCurrentSession,
   isSupabaseConfigured,
@@ -55,6 +61,8 @@ import {
   loadFollowerIds,
   loadFollowingIds,
   loadProfilesByIds,
+  loadProfilesByUsernames,
+  markNotificationsAsRead,
   normalizeUsername,
   resendSignupConfirmation,
   searchCommunityProfilesByUsername,
@@ -88,6 +96,7 @@ function App() {
   const [draftCat, setDraftCat] = useState(null);
   const [selectedCatId, setSelectedCatId] = useState('');
   const [selectedUserId, setSelectedUserId] = useState('');
+  const [publicProfileCats, setPublicProfileCats] = useState([]);
   const [postCatId, setPostCatId] = useState('');
   const [isProcessingCatPhoto, setIsProcessingCatPhoto] = useState(false);
   const [authUser, setAuthUser] = useState(null);
@@ -96,6 +105,8 @@ function App() {
   const [followingProfiles, setFollowingProfiles] = useState([]);
   const [followerProfiles, setFollowerProfiles] = useState([]);
   const [socialUsers, setSocialUsers] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [toast, setToast] = useState('');
 
@@ -175,6 +186,36 @@ function App() {
   }, [authUser, currentUserId]);
 
   useEffect(() => {
+    if (!authUser) {
+      setNotifications([]);
+      setUnreadNotificationCount(0);
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function loadNotifications() {
+      const [{ data = [] }, { count = 0 }] = await Promise.all([
+        fetchNotifications(currentUserId),
+        fetchUnreadNotificationCount(currentUserId),
+      ]);
+      const actorIds = [...new Set(data.map((item) => item.actor_user_id).filter(Boolean))];
+      const { data: actorProfiles = [] } = await loadProfilesByIds(actorIds);
+      const actors = actorProfiles.map(mapCommunityProfile);
+      if (cancelled) return;
+      setSocialUsers((users) => mergeUsers([...users, ...actors]));
+      setNotifications(data.map((item) => mapNotification(item, actors)));
+      setUnreadNotificationCount(count);
+    }
+
+    loadNotifications();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser, currentUserId]);
+
+  useEffect(() => {
     if (isSupabaseConfigured && !authUser) return undefined;
 
     let cancelled = false;
@@ -225,7 +266,7 @@ function App() {
     [me, socialUsers],
   );
   const selectedUser = communityUsers.find((user) => user.id === selectedUserId) || me;
-  const publicCats = cats.filter((cat) => cat.caught_by_users.includes(selectedUser.id));
+  const publicCats = selectedUser.id === currentUserId ? caughtCats : publicProfileCats;
 
   const stats = useMemo(
     () => ({
@@ -244,6 +285,26 @@ function App() {
   function showToast(message) {
     setToast(message);
     window.setTimeout(() => setToast(''), 2200);
+  }
+
+  async function openNotifications() {
+    setNotificationsOpen(true);
+    setUnreadNotificationCount(0);
+    setNotifications((items) => items.map((item) => ({ ...item, isRead: true })));
+    await markNotificationsAsRead(currentUserId);
+  }
+
+  async function refreshNotifications() {
+    const [{ data = [] }, { count = 0 }] = await Promise.all([
+      fetchNotifications(currentUserId),
+      fetchUnreadNotificationCount(currentUserId),
+    ]);
+    const actorIds = [...new Set(data.map((item) => item.actor_user_id).filter(Boolean))];
+    const { data: actorProfiles = [] } = await loadProfilesByIds(actorIds);
+    const actors = actorProfiles.map(mapCommunityProfile);
+    setSocialUsers((users) => mergeUsers([...users, ...actors]));
+    setNotifications(data.map((item) => mapNotification(item, actors)));
+    setUnreadNotificationCount(count);
   }
 
   async function handleAuthSubmit({ mode, username, email, password }) {
@@ -329,6 +390,15 @@ function App() {
         isFollowing ? profiles.filter((item) => item.id !== userId) : mergeUsers([...profiles, user]),
       );
     }
+    if (!isFollowing) {
+      await createNotification({
+        userId,
+        actorUserId: currentUserId,
+        type: 'follow',
+        title: `${me.name} followed you`,
+        body: 'Tap to view their Catmunity profile.',
+      });
+    }
     showToast(isFollowing ? 'Friend unfollowed.' : 'Friend followed.');
   }
 
@@ -378,7 +448,8 @@ function App() {
     }
 
     await addExistingCatToSupabase({ catId, capture });
-    setCats((items) => addExistingCatToUserCollection(items, catId, currentUserId, capture));
+    const liveCats = await loadCatsFromSupabase(currentUserId);
+    setCats(liveCats || ((items) => addExistingCatToUserCollection(items, catId, currentUserId, capture)));
     setSelectedCatId(catId);
     showToast('Existing cat added to your collection.');
     navigate('detail');
@@ -404,7 +475,8 @@ function App() {
 
   async function unlockExistingCat(catId) {
     await addExistingCatToSupabase({ catId });
-    setCats((items) => addExistingCatToUserCollection(items, catId, currentUserId));
+    const liveCats = await loadCatsFromSupabase(currentUserId);
+    setCats(liveCats || ((items) => addExistingCatToUserCollection(items, catId, currentUserId)));
     setSelectedCatId(catId);
     showToast('Details unlocked for your collection.');
     navigate('detail');
@@ -433,7 +505,7 @@ function App() {
       return;
     }
 
-    const { error } = await createCommunityPost({
+    const { data: createdPost, error } = await createCommunityPost({
       userId: currentUserId,
       catId: cat.id,
       caption: post.body,
@@ -448,6 +520,14 @@ function App() {
     }
 
     await refreshCommunityPosts();
+    await notifyMentionedUsers({
+      text: post.body,
+      type: 'mention',
+      title: `${me.name} mentioned you`,
+      body: post.body,
+      relatedPostId: createdPost?.id,
+      relatedCatId: cat.id,
+    });
     showToast('Sighting posted.');
     navigate('community');
   }
@@ -459,6 +539,17 @@ function App() {
     if (error) {
       showToast(error.message || 'Could not update like.');
       return;
+    }
+    if (!post.likedByMe && post.user_id !== currentUserId) {
+      await createNotification({
+        userId: post.user_id,
+        actorUserId: currentUserId,
+        type: 'like',
+        title: `${me.name} liked your post`,
+        body: post.body,
+        relatedPostId: post.id,
+        relatedCatId: post.cat_id,
+      });
     }
     await refreshCommunityPosts();
   }
@@ -477,7 +568,77 @@ function App() {
       showToast(error.message || 'Comment could not be posted.');
       return;
     }
+    const post = posts.find((item) => item.id === postId);
+    if (post && post.user_id !== currentUserId) {
+      await createNotification({
+        userId: post.user_id,
+        actorUserId: currentUserId,
+        type: 'comment',
+        title: `${me.name} commented on your post`,
+        body: text,
+        relatedPostId: post.id,
+        relatedCatId: post.cat_id,
+      });
+    }
+    await notifyMentionedUsers({
+      text,
+      type: 'mention',
+      title: `${me.name} mentioned you`,
+      body: text,
+      relatedPostId: postId,
+      relatedCatId: post?.cat_id,
+    });
     await refreshCommunityPosts();
+  }
+
+  async function handleDeletePost(postId) {
+    const { error } = await deleteCommunityPost(postId, currentUserId);
+    if (error) {
+      showToast(error.message || 'Post could not be deleted.');
+      return;
+    }
+    await refreshCommunityPosts();
+    showToast('Post deleted.');
+  }
+
+  async function handleRemoveCatFromCollection(catId) {
+    const { error } = await removeCatFromUserCollection(currentUserId, catId);
+    if (error) {
+      showToast(error.message || 'Cat could not be removed.');
+      return;
+    }
+    const liveCats = await loadCatsFromSupabase(currentUserId);
+    setCats(liveCats || []);
+    setSelectedCatId('');
+    showToast('Cat removed from your collection.');
+  }
+
+  async function openPublicProfile(userId) {
+    setSelectedUserId(userId);
+    const collection = await fetchPublicUserCollection(userId, currentUserId);
+    setPublicProfileCats(collection);
+    navigate('publicProfile');
+  }
+
+  async function notifyMentionedUsers({ text, type, title, body, relatedPostId, relatedCatId }) {
+    const mentions = extractMentions(text);
+    if (!mentions.length) return;
+    const { data: mentionedProfiles = [] } = await loadProfilesByUsernames(mentions);
+    await Promise.all(
+      mentionedProfiles
+        .filter((profile) => profile.id !== currentUserId)
+        .map((profile) =>
+          createNotification({
+            userId: profile.id,
+            actorUserId: currentUserId,
+            type,
+            title,
+            body,
+            relatedPostId,
+            relatedCatId,
+          }),
+        ),
+    );
   }
 
   const commonProps = {
@@ -491,10 +652,6 @@ function App() {
     unlockExistingCat,
   };
 
-  const notifications = useMemo(
-    () => createNotifications({ followerProfiles, posts, cats, currentUserId }),
-    [followerProfiles, posts, cats, currentUserId],
-  );
 
   if (authLoading) {
     return (
@@ -523,8 +680,8 @@ function App() {
         <TopBar
           user={me}
           stats={stats}
-          notificationCount={notifications.length}
-          onOpenNotifications={() => setNotificationsOpen(true)}
+          notificationCount={unreadNotificationCount}
+          onOpenNotifications={openNotifications}
         />
       )}
       {notificationsOpen && (
@@ -532,9 +689,8 @@ function App() {
           notifications={notifications}
           onClose={() => setNotificationsOpen(false)}
           onOpenUser={(id) => {
-            setSelectedUserId(id);
             setNotificationsOpen(false);
-            navigate('publicProfile');
+            openPublicProfile(id);
           }}
         />
       )}
@@ -565,7 +721,15 @@ function App() {
         {screen === 'detailsForm' && (
           <CatDetailsForm cat={draftCat} onSave={handleSaveDetails} onBack={() => navigate('confirm')} />
         )}
-        {screen === 'collection' && <CollectionScreen {...commonProps} stats={stats} user={me} onPostCat={startCommunityPost} />}
+        {screen === 'collection' && (
+          <CollectionScreen
+            {...commonProps}
+            stats={stats}
+            user={me}
+            onPostCat={startCommunityPost}
+            onRemoveCat={handleRemoveCatFromCollection}
+          />
+        )}
         {screen === 'detail' && <CatDetailScreen {...commonProps} />}
         {screen === 'publicProfile' && (
           <PublicProfileScreen
@@ -600,9 +764,9 @@ function App() {
             }}
             onToggleLike={handleTogglePostLike}
             onComment={handleCreateComment}
+            onDeletePost={handleDeletePost}
             onOpenUser={(id) => {
-              setSelectedUserId(id);
-              navigate('publicProfile');
+              openPublicProfile(id);
             }}
           />
         )}
@@ -686,6 +850,20 @@ function mapCommunityProfile(profile) {
   };
 }
 
+function mapNotification(notification, actors = []) {
+  const actor = actors.find((user) => user.id === notification.actor_user_id);
+  return {
+    id: notification.id,
+    type: notification.type,
+    user: actor || (notification.actor_user_id ? { id: notification.actor_user_id, name: 'Catmunity friend' } : null),
+    title: notification.title,
+    text: notification.body || '',
+    isRead: notification.is_read,
+    relatedPostId: notification.related_post_id,
+    relatedCatId: notification.related_cat_id,
+  };
+}
+
 function mergeUsers(users) {
   const byId = new Map();
   users.filter(Boolean).forEach((user) => byId.set(user.id, user));
@@ -756,45 +934,6 @@ function renderMentionText(text = '') {
       ? <strong className="mention" key={`${piece}-${index}`}>{piece}</strong>
       : <React.Fragment key={`${piece}-${index}`}>{piece}</React.Fragment>
   ));
-}
-
-function createNotifications({ followerProfiles, posts, cats, currentUserId }) {
-  const followerNotifications = followerProfiles.map((user) => ({
-    id: `follow-${user.id}`,
-    type: 'follow',
-    user,
-    title: `${user.name} followed you`,
-    text: 'Tap to view their Catmunity profile.',
-  }));
-
-  const interactionNotifications = posts
-    .filter((post) => post.user_id === currentUserId)
-    .flatMap((post) => {
-      const cat = cats.find((item) => item.id === post.cat_id);
-      const items = [];
-
-      if ((post.likeCount || 0) > 0) {
-        items.push({
-          id: `reaction-${post.id}`,
-          type: 'reaction',
-          title: 'People reacted to your post',
-          text: `${post.likeCount} likes${cat ? ` on ${cat.name}` : ''}.`,
-        });
-      }
-
-      post.comments.forEach((comment) => {
-        items.push({
-          id: `comment-${comment.id}`,
-          type: 'comment',
-          title: 'New comment on your post',
-          text: comment.body,
-        });
-      });
-
-      return items;
-    });
-
-  return [...followerNotifications, ...interactionNotifications];
 }
 
 function UserHandle({ user }) {
@@ -1159,52 +1298,58 @@ function ConfirmScreen({ capture, onBack, onConfirm }) {
 }
 
 function RegistrationChoiceScreen({ cats, capture, currentUserId, onBack, onNewCat, onExistingCat }) {
+  const nearbyCats = cats
+    .map((cat) => ({
+      cat,
+      distance: Math.round(getDistanceMeters({
+        latitude: cat.canonical_latitude ?? cat.latitude,
+        longitude: cat.canonical_longitude ?? cat.longitude,
+      }, capture)),
+    }))
+    .filter(({ distance }) => Number.isFinite(distance) && distance <= duplicateLocationRadiusMeters);
+
   return (
     <section className="screen registration-choice-screen">
       <BackButton onBack={onBack} />
       <ScreenHeader
-        title="Is this a new cat?"
-        subtitle="Choose an existing map cat to avoid duplicate nearby pins."
+        title="Is this one of the cats already discovered nearby?"
+        subtitle="Choose a nearby cat to avoid duplicate pins, or continue as a new cat."
         icon={ShieldCheck}
       />
       <button className="new-cat-choice" onClick={onNewCat}>
         <Plus size={20} />
         <span>
-          <strong>Register as a new cat</strong>
+          <strong>No, this is a new cat</strong>
           <small>Create one canonical map pin for this cat.</small>
         </span>
       </button>
       <div className="section-title-row">
-        <h2>Already on the map?</h2>
-        <span className="quiet-label">{cats.length} cats</span>
+        <h2>Nearby matches</h2>
+        <span className="quiet-label">{nearbyCats.length} within {duplicateLocationRadiusMeters}m</span>
       </div>
       <div className="existing-cat-list">
-        {cats.map((cat) => {
+        {nearbyCats.map(({ cat, distance }) => {
           const caught = cat.caught_by_users.includes(currentUserId);
-          const tooFar = !isWithinDuplicateRadius(cat, capture);
-          const distance = Math.round(getDistanceMeters({
-            latitude: cat.canonical_latitude ?? cat.latitude,
-            longitude: cat.canonical_longitude ?? cat.longitude,
-          }, capture));
           return (
             <button
               key={cat.id}
-              className={tooFar ? 'existing-cat-choice disabled' : 'existing-cat-choice'}
-              disabled={tooFar}
+              className="existing-cat-choice"
               onClick={() => onExistingCat(cat.id)}
             >
               <img src={cat.cropped_image_url} alt={cat.name || 'Cat'} />
               <span>
                 <strong>{cat.name || 'Unnamed Cat'}</strong>
                 <small>
-                  {cat.area_name || cat.location_name}
-                  {Number.isFinite(distance) ? ` · ${distance}m from original pin` : ''}
+                  {distance}m from original pin
                 </small>
               </span>
-              <em>{tooFar ? 'Too far' : caught ? 'Already yours' : 'Add'}</em>
+              <em>{caught ? 'Already yours' : 'Yes, this is the same cat'}</em>
             </button>
           );
         })}
+        {nearbyCats.length === 0 && (
+          <p className="empty-community-copy">No cats found within {duplicateLocationRadiusMeters}m. Continue as a new cat.</p>
+        )}
       </div>
       <div className="safety-strip">
         <ShieldCheck size={17} />
@@ -1258,7 +1403,7 @@ function CatDetailsForm({ cat, onSave, onBack }) {
   );
 }
 
-function CollectionScreen({ caughtCats, stats, user, navigate, setSelectedCatId, onPostCat }) {
+function CollectionScreen({ caughtCats, stats, user, navigate, setSelectedCatId, onPostCat, onRemoveCat }) {
   return (
     <section className="screen collection-screen">
       <div className="profile-hero">
@@ -1301,6 +1446,9 @@ function CollectionScreen({ caughtCats, stats, user, navigate, setSelectedCatId,
             <button className="text-button post-cat-button" type="button" onClick={() => onPostCat(cat.id)}>
               <Plus size={15} /> Post to Community
             </button>
+            <button className="text-button danger-text-button post-cat-button" type="button" onClick={() => onRemoveCat(cat.id)}>
+              <X size={15} /> Remove from collection
+            </button>
           </div>
         ))}
         {caughtCats.length === 0 && (
@@ -1328,15 +1476,17 @@ function CatDetailScreen({ selectedCat, currentUserId, unlockExistingCat }) {
         <img src={selectedCat.cropped_image_url} alt={selectedCat.name || 'Cat'} />
         {locked && <div className="lock-overlay"><Lock size={30} /> Limited preview</div>}
       </div>
-      <div className="detail-panel">
-        <InfoRow label="Color" value={locked ? 'Locked' : selectedCat.color} />
-        <InfoRow label="Fun info" value={locked ? 'Catch to reveal' : selectedCat.fun_info} />
-        <InfoRow label="Remarks" value={locked ? 'Catch to reveal' : selectedCat.remarks} />
-        <InfoRow label="Area" value={locked ? selectedCat.location_name.split(',')[0] : selectedCat.location_name} />
-        <div className="tag-row">
-          {(locked ? ['locked', 'nearby'] : selectedCat.tags).map((tag) => <span key={tag}>{tag}</span>)}
+      {!locked && (
+        <div className="detail-panel">
+          <InfoRow label="Color" value={selectedCat.color} />
+          <InfoRow label="Fun info" value={selectedCat.fun_info} />
+          <InfoRow label="Remarks" value={selectedCat.remarks} />
+          <InfoRow label="Area" value={selectedCat.location_name} />
+          <div className="tag-row">
+            {selectedCat.tags.map((tag) => <span key={tag}>{tag}</span>)}
+          </div>
         </div>
-      </div>
+      )}
       {locked && <button className="primary-button" onClick={() => unlockExistingCat(selectedCat.id)}><Camera size={18} /> I found this cat</button>}
     </section>
   );
@@ -1387,6 +1537,7 @@ function CommunityScreen({
   onCreate,
   onToggleLike,
   onComment,
+  onDeletePost,
   onOpenUser,
 }) {
   const [currentArea, setCurrentArea] = useState('Finding your area...');
@@ -1523,6 +1674,7 @@ function CommunityScreen({
             onOpenUser={onOpenUser}
             onToggleLike={() => onToggleLike(post)}
             onComment={(body) => onComment(post.id, body)}
+            onDelete={post.user_id === currentUserId ? () => onDeletePost(post.id) : null}
           />
         );
       })}
@@ -1533,7 +1685,7 @@ function CommunityScreen({
   );
 }
 
-function CommunityPostCard({ post, user, cat, isFriendPost, onOpenUser, onToggleLike, onComment }) {
+function CommunityPostCard({ post, user, cat, isFriendPost, onOpenUser, onToggleLike, onComment, onDelete }) {
   const [commentText, setCommentText] = useState('');
 
   function submitComment(event) {
@@ -1562,6 +1714,11 @@ function CommunityPostCard({ post, user, cat, isFriendPost, onOpenUser, onToggle
         </button>
         <span>{post.likeCount} {post.likeCount === 1 ? 'like' : 'likes'}</span>
         <span><MessageCircle size={16} /> {post.comments.length}</span>
+        {onDelete && (
+          <button className="post-action-button danger" type="button" onClick={onDelete}>
+            <X size={16} /> Delete
+          </button>
+        )}
       </div>
       <div className="comment-list">
         {post.comments.map((comment) => (
@@ -1993,10 +2150,10 @@ function CatPreviewCard({ cat, locked, onOpen }) {
     <article className="cat-preview-card" onClick={onOpen}>
       <img className={locked ? 'dimmed-cat' : ''} src={cat.cropped_image_url} alt={cat.name || 'Cat'} />
       <div>
-        <CatStatusBadge locked={locked} />
+        {!locked && <CatStatusBadge locked={false} />}
         <h2>{cat.name || 'Unknown Cat'}</h2>
-        <p>{locked ? 'Catch this cat to unlock full info' : cat.fun_info}</p>
-        <small>{locked ? `${cat.location_name.split(',')[0]} area` : `${cat.color} · ${cat.location_name}`}</small>
+        {!locked && <p>{cat.fun_info}</p>}
+        {!locked && <small>{cat.color} · {cat.location_name}</small>}
       </div>
     </article>
   );
@@ -2345,12 +2502,14 @@ function CatCard({ cat, locked, onOpen, action }) {
           <h3>{locked ? cat.name || 'Unknown Cat' : cat.name || 'Unnamed Cat'}</h3>
           <CatStatusBadge locked={locked} />
         </div>
-        <p>{locked ? 'Catch this cat to unlock full info' : `${cat.color} · ${cat.fun_info}`}</p>
-        <span>
-          <MapPin size={13} />
-          {locked ? `${cat.location_name.split(',')[0]} area` : cat.location_name}
-          {cat.distance ? ` · ${cat.distance}` : ''}
-        </span>
+        {!locked && <p>{cat.color} · {cat.fun_info}</p>}
+        {!locked && (
+          <span>
+            <MapPin size={13} />
+            {cat.location_name}
+            {cat.distance ? ` · ${cat.distance}` : ''}
+          </span>
+        )}
       </div>
       {action && <button aria-label={locked ? 'Unlock cat' : 'Open cat'} onClick={(event) => { event.stopPropagation(); action(); }}>
         {locked ? <Lock size={16} /> : <Cat size={16} />}

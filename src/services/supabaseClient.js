@@ -311,6 +311,18 @@ export async function createCommunityPost({ userId, catId, caption, imageUrl, lo
   return { data, error };
 }
 
+export async function deleteCommunityPost(postId, userId) {
+  if (!isSupabaseConfigured) return { error: new Error('Supabase is not configured.') };
+
+  const { error } = await supabase
+    .from('community_posts')
+    .delete()
+    .eq('id', postId)
+    .eq('user_id', userId);
+
+  return { error };
+}
+
 export async function likeCommunityPost(postId, userId) {
   if (!isSupabaseConfigured) return { error: new Error('Supabase is not configured.') };
 
@@ -348,6 +360,74 @@ export async function createCommunityComment({ postId, userId, body, mentions = 
     .single();
 
   return { data, error };
+}
+
+export async function fetchNotifications(userId) {
+  if (!isSupabaseConfigured || !userId) return { data: [], error: null };
+
+  const { data, error } = await supabase
+    .from('notifications')
+    .select('id, user_id, actor_user_id, type, title, body, related_post_id, related_cat_id, is_read, created_at, read_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(40);
+
+  return { data: data || [], error };
+}
+
+export async function fetchUnreadNotificationCount(userId) {
+  if (!isSupabaseConfigured || !userId) return { count: 0, error: null };
+
+  const { count, error } = await supabase
+    .from('notifications')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .eq('is_read', false);
+
+  return { count: count || 0, error };
+}
+
+export async function markNotificationsAsRead(userId) {
+  if (!isSupabaseConfigured || !userId) return { error: null };
+
+  const { error } = await supabase
+    .from('notifications')
+    .update({ is_read: true, read_at: new Date().toISOString() })
+    .eq('user_id', userId)
+    .eq('is_read', false);
+
+  return { error };
+}
+
+export async function createNotification(notificationData) {
+  if (!isSupabaseConfigured || !notificationData?.userId) return { data: null, error: null };
+
+  const { data, error } = await supabase
+    .from('notifications')
+    .insert({
+      user_id: notificationData.userId,
+      actor_user_id: notificationData.actorUserId || null,
+      type: notificationData.type,
+      title: notificationData.title,
+      body: notificationData.body || '',
+      related_post_id: notificationData.relatedPostId || null,
+      related_cat_id: notificationData.relatedCatId || null,
+    })
+    .select()
+    .single();
+
+  return { data, error };
+}
+
+export async function loadProfilesByUsernames(usernames) {
+  if (!isSupabaseConfigured || !usernames.length) return { data: [], error: null };
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, username, display_name, avatar_url, bio, public_profile')
+    .in('username', usernames);
+
+  return { data: data || [], error };
 }
 
 export function normalizeUsername(value = '') {

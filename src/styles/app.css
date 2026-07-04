@@ -589,6 +589,11 @@ button:disabled {
   border: 1px solid rgba(93, 65, 45, 0.1);
 }
 
+.danger-text-button {
+  color: #a63a2d;
+  background: rgba(255, 225, 218, 0.9);
+}
+
 .back-button {
   width: fit-content;
 }
@@ -2502,6 +2507,11 @@ button:disabled {
 .post-action-button.active {
   color: #ffffff;
   background: #e85f4b;
+}
+
+.post-action-button.danger {
+  color: #a63a2d;
+  background: rgba(255, 225, 218, 0.9);
 }
 
 .post-actions span {

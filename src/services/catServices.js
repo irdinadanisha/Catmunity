@@ -1,6 +1,6 @@
 import { getCurrentSession, isSupabaseConfigured, supabase } from './supabaseClient';
 
-export const duplicateLocationRadiusMeters = 200;
+export const duplicateLocationRadiusMeters = 20;
 
 const defaultAccurateLocation = {
   latitude: 3.1478,
@@ -194,6 +194,10 @@ export function getLockedStateForUser(cat, userId) {
 }
 
 export async function loadCatsFromSupabase(uiUserId) {
+  return fetchCatsForMap(uiUserId);
+}
+
+export async function fetchCatsForMap(uiUserId) {
   if (!isSupabaseConfigured) return null;
 
   const user = await getSupabaseUser();
@@ -206,8 +210,9 @@ export async function loadCatsFromSupabase(uiUserId) {
       .order('updated_at', { ascending: false }),
     supabase
       .from('user_cats')
-      .select('cat_id')
-      .eq('user_id', user.id),
+      .select('cat_id, is_unlocked')
+      .eq('user_id', user.id)
+      .eq('is_unlocked', true),
   ]);
 
   if (catsError || userCatsError) {
@@ -217,6 +222,54 @@ export async function loadCatsFromSupabase(uiUserId) {
 
   const caughtIds = new Set((userCats || []).map((item) => item.cat_id));
   return (publicCats || []).map((cat) => mapSupabaseCat(cat, uiUserId, caughtIds.has(cat.id)));
+}
+
+export async function fetchUserCollection(userId) {
+  return fetchPublicUserCollection(userId, userId);
+}
+
+export async function fetchPublicUserCollection(profileUserId, viewerUserId) {
+  if (!isSupabaseConfigured || !profileUserId) return [];
+
+  const [{ data: profileCats, error: profileError }, { data: viewerCats, error: viewerError }] = await Promise.all([
+    supabase
+      .from('public_user_cat_map')
+      .select('*')
+      .eq('profile_user_id', profileUserId)
+      .order('discovered_at', { ascending: false }),
+    viewerUserId
+      ? supabase
+        .from('user_cats')
+        .select('cat_id, is_unlocked')
+        .eq('user_id', viewerUserId)
+        .eq('is_unlocked', true)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  if (profileError || viewerError) {
+    console.warn('Supabase public collection load failed', profileError || viewerError);
+    return [];
+  }
+
+  const viewerUnlockedIds = new Set((viewerCats || []).map((item) => item.cat_id));
+  return (profileCats || []).map((cat) => mapSupabaseCat(cat, viewerUserId, viewerUnlockedIds.has(cat.id)));
+}
+
+export async function findNearbyCats(latitude, longitude, radiusMeters = duplicateLocationRadiusMeters) {
+  if (!isSupabaseConfigured) return [];
+  const cats = await fetchCatsForMap((await getSupabaseUser())?.id || '');
+  return (cats || []).filter((cat) =>
+    getDistanceMeters(
+      {
+        latitude,
+        longitude,
+      },
+      {
+        latitude: cat.canonical_latitude ?? cat.latitude,
+        longitude: cat.canonical_longitude ?? cat.longitude,
+      },
+    ) <= radiusMeters,
+  );
 }
 
 export async function createNewCatInSupabase({ capture, form, uiUserId }) {
@@ -282,13 +335,18 @@ export async function createNewCatInSupabase({ capture, form, uiUserId }) {
 }
 
 export async function addExistingCatToSupabase({ catId, capture }) {
+  return addExistingCatToCollection({ catId, capture });
+}
+
+export async function addExistingCatToCollection({ userId: explicitUserId, catId, capture }) {
   if (!isSupabaseConfigured) return false;
 
   const user = await getSupabaseUser();
-  if (!user) return false;
+  const userId = explicitUserId || user?.id;
+  if (!userId) return false;
 
   const userCatResult = await createSupabaseUserCat({
-    userId: user.id,
+    userId,
     catId,
     capture,
   });
@@ -296,12 +354,24 @@ export async function addExistingCatToSupabase({ catId, capture }) {
   if (!userCatResult) return false;
 
   await createSupabaseSighting({
-    userId: user.id,
+    userId,
     catId,
     capture,
   });
 
   return true;
+}
+
+export async function removeCatFromUserCollection(userId, catId) {
+  if (!isSupabaseConfigured || !userId || !catId) return { error: null };
+
+  const { error } = await supabase
+    .from('user_cats')
+    .delete()
+    .eq('user_id', userId)
+    .eq('cat_id', catId);
+
+  return { error };
 }
 
 function createUserCatRecord({ userId, catId, capture, isUnlocked, userGivenName = '', userNotes = '' }) {
@@ -382,17 +452,19 @@ async function createSupabaseSighting({ userId, catId, capture, photoUrl = null,
 }
 
 function mapSupabaseCat(cat, uiUserId, caught) {
+  const limitedInfo = !caught;
   return {
     id: cat.id,
     name: cat.name || 'Unnamed Cat',
     image_url: cat.cropped_image_url,
     cropped_image_url: cat.cropped_image_url,
-    color: cat.colour || '',
-    colour: cat.colour || '',
-    breed: cat.breed || '',
-    fun_info: cat.fun_facts || 'A neighborhood cat waiting to be discovered.',
-    fun_facts: cat.fun_facts || '',
-    remarks: '',
+    color: limitedInfo ? '' : cat.colour || '',
+    colour: limitedInfo ? '' : cat.colour || '',
+    breed: limitedInfo ? '' : cat.breed || '',
+    weight: limitedInfo ? '' : cat.weight || '',
+    fun_info: limitedInfo ? '' : cat.fun_facts || '',
+    fun_facts: limitedInfo ? '' : cat.fun_facts || '',
+    remarks: limitedInfo ? '' : cat.remarks || '',
     tags: ['nearby'],
     discovered_by: '',
     created_by: '',
