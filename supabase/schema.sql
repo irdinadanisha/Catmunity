@@ -133,6 +133,9 @@ create table if not exists public.notifications (
   read_at timestamptz
 );
 
+drop view if exists public.public_user_cat_map;
+drop view if exists public.cat_public_map;
+
 create or replace view public.cat_public_map as
 select
   cats.id,
