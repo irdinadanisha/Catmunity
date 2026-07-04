@@ -1500,18 +1500,97 @@ button:disabled {
   gap: 12px;
 }
 
-.collection-cat-item {
-  display: grid;
-  gap: 8px;
-}
-
 .post-cat-button {
-  width: 100%;
+  min-height: 36px;
+  width: auto;
+  padding: 0 12px;
   justify-content: center;
+  border-radius: 14px;
+  font-size: 0.78rem;
 }
 
 .gallery-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
+}
+
+.discovered-cat-card {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: stretch;
+  gap: 12px;
+  padding: 9px;
+  border-radius: 22px;
+  border: 1px solid rgba(80, 55, 40, 0.06);
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 12px 30px rgba(83, 55, 38, 0.07);
+  text-align: left;
+}
+
+.discovered-cat-card > img {
+  width: 96px;
+  height: 112px;
+  max-width: 100%;
+  border-radius: 18px;
+  object-fit: cover;
+  align-self: stretch;
+}
+
+.discovered-cat-body {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+}
+
+.discovered-cat-card h3 {
+  margin: 0;
+  min-width: 0;
+  color: #2b211d;
+  font-size: 1.03rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.discovered-cat-card p,
+.discovered-location {
+  margin: 0;
+  min-width: 0;
+  color: #76665d;
+}
+
+.discovered-cat-card p {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-height: 1.35;
+}
+
+.discovered-location {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
+.discovered-location svg {
+  flex: 0 0 auto;
+}
+
+.discovered-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 4px;
+}
+
+.discovered-card-actions .post-cat-button {
+  flex: 1 1 112px;
 }
 
 .cat-card {

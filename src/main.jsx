@@ -737,6 +737,7 @@ function App() {
             cats={publicCats}
             currentUserId={currentUserId}
             onBack={() => navigate('collection')}
+            onPostCat={startCommunityPost}
             onSelectCat={(id) => {
               setSelectedCatId(id);
               navigate('detail');
@@ -1434,22 +1435,18 @@ function CollectionScreen({ caughtCats, stats, user, navigate, setSelectedCatId,
       </div>
       <div className="profile-cat-grid">
         {caughtCats.map((cat) => (
-          <div className="collection-cat-item" key={cat.id}>
-            <CatCard
-              cat={cat}
-              locked={false}
-              onOpen={() => {
-                setSelectedCatId(cat.id);
-                navigate('detail');
-              }}
-            />
-            <button className="text-button post-cat-button" type="button" onClick={() => onPostCat(cat.id)}>
-              <Plus size={15} /> Post to Community
-            </button>
-            <button className="text-button danger-text-button post-cat-button" type="button" onClick={() => onRemoveCat(cat.id)}>
-              <X size={15} /> Remove from collection
-            </button>
-          </div>
+          <DiscoveredCatCard
+            key={cat.id}
+            cat={cat}
+            viewerHasUnlocked
+            isOwnProfile
+            onOpen={() => {
+              setSelectedCatId(cat.id);
+              navigate('detail');
+            }}
+            onPostToCommunity={() => onPostCat(cat.id)}
+            onRemoveFromCollection={() => onRemoveCat(cat.id)}
+          />
         ))}
         {caughtCats.length === 0 && (
           <p className="empty-community-copy">No cats discovered yet. Catch your first cat to get started!</p>
@@ -1492,7 +1489,7 @@ function CatDetailScreen({ selectedCat, currentUserId, unlockExistingCat }) {
   );
 }
 
-function PublicProfileScreen({ user, cats, currentUserId, onBack, onSelectCat }) {
+function PublicProfileScreen({ user, cats, currentUserId, onBack, onSelectCat, onPostCat }) {
   return (
     <section className="screen">
       <BackButton onBack={onBack} />
@@ -1507,19 +1504,84 @@ function PublicProfileScreen({ user, cats, currentUserId, onBack, onSelectCat })
       </div>
       <MiniMap cats={cats} approximate />
       <div className="gallery-grid">
-        {cats.map((cat) => (
-          <CatCard
-            key={cat.id}
-            cat={cat}
-            locked={!cat.caught_by_users.includes(currentUserId)}
-            onOpen={() => onSelectCat(cat.id)}
-          />
-        ))}
+        {cats.map((cat) => {
+          const viewerHasUnlocked = cat.caught_by_users.includes(currentUserId);
+          return (
+            <DiscoveredCatCard
+              key={cat.id}
+              cat={cat}
+              viewerHasUnlocked={viewerHasUnlocked}
+              isOwnProfile={false}
+              onOpen={() => onSelectCat(cat.id)}
+              onPostToCommunity={viewerHasUnlocked ? () => onPostCat(cat.id) : null}
+            />
+          );
+        })}
         {cats.length === 0 && (
           <p className="empty-community-copy">No cats discovered yet.</p>
         )}
       </div>
     </section>
+  );
+}
+
+function DiscoveredCatCard({
+  cat,
+  isOwnProfile,
+  viewerHasUnlocked,
+  onOpen,
+  onPostToCommunity,
+  onRemoveFromCollection,
+}) {
+  const locked = !viewerHasUnlocked;
+
+  return (
+    <article className={locked ? 'discovered-cat-card locked-card' : 'discovered-cat-card'} onClick={onOpen}>
+      <img className={locked ? 'dimmed-cat' : ''} src={cat.cropped_image_url} alt={cat.name || 'Cat'} />
+      <div className="discovered-cat-body">
+        <div className="card-title-row">
+          <h3>{cat.name || 'Unknown Cat'}</h3>
+          {!locked && <CatStatusBadge locked={false} />}
+        </div>
+        {!locked && (
+          <>
+            <p>{cat.color} · {cat.fun_info}</p>
+            <span className="discovered-location">
+              <MapPin size={13} />
+              {cat.location_name}
+            </span>
+          </>
+        )}
+        {(onPostToCommunity || (isOwnProfile && onRemoveFromCollection)) && (
+          <div className="discovered-card-actions">
+            {onPostToCommunity && (
+              <button
+                className="text-button post-cat-button"
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onPostToCommunity();
+                }}
+              >
+                <Plus size={14} /> Post to Community
+              </button>
+            )}
+            {isOwnProfile && onRemoveFromCollection && (
+              <button
+                className="text-button danger-text-button post-cat-button"
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onRemoveFromCollection();
+                }}
+              >
+                <X size={14} /> Remove from collection
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </article>
   );
 }
 
