@@ -1130,8 +1130,6 @@ function ExploreScreen({ cats, currentUser, currentUserId, navigate, setSelected
   const [hideCaught, setHideCaught] = useState(false);
   const [sortMode, setSortMode] = useState('Recent');
   const [sheetFocusSignal, setSheetFocusSignal] = useState(0);
-  const activeCat = cats.find((cat) => cat.id === activeCatId) || cats[0];
-  const activeLocked = activeCat && !activeCat.caught_by_users.includes(currentUserId);
   const filters = ['All', 'Nearby', 'Unlocked', 'Locked', 'Friendly', 'Sleepy', 'Food Spots'];
   const nearbyCats = cats.filter((cat) => {
     const caught = cat.caught_by_users.includes(currentUserId);
@@ -1197,7 +1195,7 @@ function ExploreScreen({ cats, currentUser, currentUserId, navigate, setSelected
               ))}
             </div>
             <div className="sheet-meta-row">
-              <strong>{nearbyCats.length} cats nearby</strong>
+              <strong>{nearbyCats.length} {nearbyCats.length === 1 ? 'cat' : 'cats'} nearby</strong>
               <div className="sheet-toggles">
                 <button className={hideCaught ? 'mini-chip active' : 'mini-chip'} onClick={() => setHideCaught(!hideCaught)}>
                   <EyeOff size={14} /> Hide caught
@@ -1210,14 +1208,6 @@ function ExploreScreen({ cats, currentUser, currentUserId, navigate, setSelected
           </>
         )}
       >
-        {activeCat && (
-          <CatPreviewCard
-            cat={activeCat}
-            locked={activeLocked}
-            currentUserId={currentUserId}
-            onOpen={() => openCat(activeCat)}
-          />
-        )}
         <div className="sheet-expanded-tools">
           <span><MapPin size={14} /> Within 2 km</span>
           <span><Sparkles size={14} /> Updated now</span>
