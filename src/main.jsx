@@ -1023,7 +1023,7 @@ function UserHandle({ user }) {
 
 function AuthScreen({ onSubmit }) {
   const [mode, setMode] = useState('signup');
-  const [username, setUsername] = useState('urs');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [status, setStatus] = useState('');
