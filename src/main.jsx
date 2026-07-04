@@ -1328,6 +1328,7 @@ function ExploreScreen({ cats, currentUser, currentUserId, navigate, setSelected
 function CatchScreen({ onPhotoSelected, processing = false }) {
   return (
     <section className="screen catch-screen">
+      <div className="safety-strip catch-safety-strip"><ShieldCheck size={17} /> Keep paws, people, and private spaces respected.</div>
       <div className="catch-hero-copy">
         <span className="header-icon"><Camera size={22} /></span>
         <h1>Catch the cat!</h1>
@@ -1345,7 +1346,6 @@ function CatchScreen({ onPhotoSelected, processing = false }) {
         <strong>{processing ? 'Preparing square crop...' : 'Click here to catch!'}</strong>
         <span>{processing ? 'Standardizing the photo into a square cat image.' : 'Make sure they’re looking cute!'}</span>
       </label>
-      <div className="safety-strip"><ShieldCheck size={17} /> Keep paws, people, and private spaces respected.</div>
     </section>
   );
 }

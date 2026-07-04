@@ -1727,6 +1727,18 @@ button:disabled {
   box-shadow: 0 16px 34px rgba(83, 55, 38, 0.06);
 }
 
+.catch-screen {
+  gap: 14px;
+}
+
+.catch-screen .upload-panel {
+  min-height: clamp(260px, 42vh, 430px);
+}
+
+.catch-safety-strip {
+  align-items: center;
+}
+
 .upload-panel input {
   position: absolute;
   opacity: 0;
@@ -1753,7 +1765,7 @@ button:disabled {
 }
 
 .catch-hero-copy {
-  min-height: 28vh;
+  min-height: 20vh;
   display: grid;
   place-items: center;
   align-content: center;
