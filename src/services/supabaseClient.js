@@ -126,13 +126,25 @@ export async function resendSignupConfirmation(email) {
   return { data, error: getAuthError(error) };
 }
 
-export async function updateUserProfile({ name, avatarUrl, bio, publicProfile }) {
+export async function updateUserProfile({ username, name, avatarUrl, bio, publicProfile }, currentUserId = '') {
   if (!isSupabaseConfigured) {
     return { data: null, error: new Error('Supabase is not configured.') };
   }
 
+  const cleanUsername = normalizeUsername(username);
+  if (!cleanUsername) {
+    return { data: null, error: new Error('Username cannot be empty.') };
+  }
+
+  const { available, error: usernameError } = await checkUsernameAvailability(cleanUsername, currentUserId);
+  if (usernameError) return { data: null, error: usernameError };
+  if (!available) {
+    return { data: null, error: new Error('That username is already taken. Try another one.') };
+  }
+
   const { data, error } = await supabase.auth.updateUser({
     data: {
+      username: cleanUsername,
       full_name: name,
       name,
       avatar_url: avatarUrl,
@@ -238,6 +250,104 @@ export async function loadProfilesByIds(ids) {
     .in('id', ids);
 
   return { data: data || [], error };
+}
+
+export async function loadCommunityPosts(currentUserId) {
+  if (!isSupabaseConfigured) return { data: { posts: [], comments: [], likes: [], profiles: [] }, error: null };
+
+  const [{ data: posts, error: postsError }, { data: comments, error: commentsError }, { data: likes, error: likesError }] = await Promise.all([
+    supabase
+      .from('community_posts')
+      .select('id, user_id, cat_id, caption, image_url, location_name, mentions, created_at')
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('comments')
+      .select('id, post_id, user_id, body, mentions, created_at')
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('post_likes')
+      .select('post_id, user_id'),
+  ]);
+
+  const error = postsError || commentsError || likesError;
+  if (error) return { data: { posts: [], comments: [], likes: [], profiles: [] }, error };
+
+  const profileIds = [
+    ...new Set([
+      ...(posts || []).map((post) => post.user_id),
+      ...(comments || []).map((comment) => comment.user_id),
+    ].filter(Boolean)),
+  ];
+  const { data: profiles, error: profilesError } = await loadProfilesByIds(profileIds);
+
+  return {
+    data: {
+      posts: posts || [],
+      comments: comments || [],
+      likes: likes || [],
+      profiles: profiles || [],
+      currentUserId,
+    },
+    error: profilesError,
+  };
+}
+
+export async function createCommunityPost({ userId, catId, caption, imageUrl, locationName, mentions = [] }) {
+  if (!isSupabaseConfigured) return { data: null, error: new Error('Supabase is not configured.') };
+
+  const { data, error } = await supabase
+    .from('community_posts')
+    .insert({
+      user_id: userId,
+      cat_id: catId || null,
+      caption,
+      image_url: imageUrl || null,
+      location_name: locationName || null,
+      mentions,
+    })
+    .select()
+    .single();
+
+  return { data, error };
+}
+
+export async function likeCommunityPost(postId, userId) {
+  if (!isSupabaseConfigured) return { error: new Error('Supabase is not configured.') };
+
+  const { error } = await supabase
+    .from('post_likes')
+    .upsert({ post_id: postId, user_id: userId }, { onConflict: 'post_id,user_id' });
+
+  return { error };
+}
+
+export async function unlikeCommunityPost(postId, userId) {
+  if (!isSupabaseConfigured) return { error: new Error('Supabase is not configured.') };
+
+  const { error } = await supabase
+    .from('post_likes')
+    .delete()
+    .eq('post_id', postId)
+    .eq('user_id', userId);
+
+  return { error };
+}
+
+export async function createCommunityComment({ postId, userId, body, mentions = [] }) {
+  if (!isSupabaseConfigured) return { data: null, error: new Error('Supabase is not configured.') };
+
+  const { data, error } = await supabase
+    .from('comments')
+    .insert({
+      post_id: postId,
+      user_id: userId,
+      body,
+      mentions,
+    })
+    .select()
+    .single();
+
+  return { data, error };
 }
 
 export function normalizeUsername(value = '') {

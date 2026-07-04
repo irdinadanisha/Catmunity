@@ -80,6 +80,34 @@ create table if not exists public.cat_sightings (
   remarks text
 );
 
+create table if not exists public.community_posts (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  cat_id uuid references public.cats(id) on delete set null,
+  caption text not null default '',
+  image_url text,
+  location_name text,
+  mentions text[] not null default '{}',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.post_likes (
+  post_id uuid not null references public.community_posts(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (post_id, user_id)
+);
+
+create table if not exists public.comments (
+  id uuid primary key default gen_random_uuid(),
+  post_id uuid not null references public.community_posts(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  body text not null,
+  mentions text[] not null default '{}',
+  created_at timestamptz not null default now()
+);
+
 create or replace view public.cat_public_map as
 select
   cats.id,
@@ -110,6 +138,9 @@ alter table public.profiles enable row level security;
 alter table public.user_follows enable row level security;
 alter table public.user_cats enable row level security;
 alter table public.cat_sightings enable row level security;
+alter table public.community_posts enable row level security;
+alter table public.post_likes enable row level security;
+alter table public.comments enable row level security;
 
 drop policy if exists "Users can read public profiles" on public.profiles;
 create policy "Users can read public profiles"
@@ -187,6 +218,75 @@ create policy "Users can create approximate sightings"
 on public.cat_sightings for insert
 with check (auth.uid() = user_id);
 
+drop policy if exists "Anyone can read community posts" on public.community_posts;
+create policy "Anyone can read community posts"
+on public.community_posts for select
+using (true);
+
+drop policy if exists "Users can create own community posts" on public.community_posts;
+create policy "Users can create own community posts"
+on public.community_posts for insert
+with check (
+  auth.uid() = user_id
+  and (
+    cat_id is null
+    or exists (
+      select 1
+      from public.user_cats
+      where user_cats.cat_id = community_posts.cat_id
+        and user_cats.user_id = auth.uid()
+        and user_cats.is_unlocked = true
+    )
+  )
+);
+
+drop policy if exists "Users can update own community posts" on public.community_posts;
+create policy "Users can update own community posts"
+on public.community_posts for update
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "Users can delete own community posts" on public.community_posts;
+create policy "Users can delete own community posts"
+on public.community_posts for delete
+using (auth.uid() = user_id);
+
+drop policy if exists "Anyone can read post likes" on public.post_likes;
+create policy "Anyone can read post likes"
+on public.post_likes for select
+using (true);
+
+drop policy if exists "Users can like posts" on public.post_likes;
+create policy "Users can like posts"
+on public.post_likes for insert
+with check (auth.uid() = user_id);
+
+drop policy if exists "Users can unlike posts" on public.post_likes;
+create policy "Users can unlike posts"
+on public.post_likes for delete
+using (auth.uid() = user_id);
+
+drop policy if exists "Anyone can read comments" on public.comments;
+create policy "Anyone can read comments"
+on public.comments for select
+using (true);
+
+drop policy if exists "Users can create comments" on public.comments;
+create policy "Users can create comments"
+on public.comments for insert
+with check (auth.uid() = user_id);
+
+drop policy if exists "Users can update own comments" on public.comments;
+create policy "Users can update own comments"
+on public.comments for update
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "Users can delete own comments" on public.comments;
+create policy "Users can delete own comments"
+on public.comments for delete
+using (auth.uid() = user_id);
+
 create index if not exists cats_approximate_location_idx
   on public.cats (approximate_latitude, approximate_longitude);
 
@@ -208,6 +308,18 @@ create index if not exists user_cats_user_id_idx
 
 create index if not exists cat_sightings_cat_id_idx
   on public.cat_sightings (cat_id);
+
+create index if not exists community_posts_user_id_idx
+  on public.community_posts (user_id);
+
+create index if not exists community_posts_cat_id_idx
+  on public.community_posts (cat_id);
+
+create index if not exists post_likes_post_id_idx
+  on public.post_likes (post_id);
+
+create index if not exists comments_post_id_idx
+  on public.comments (post_id);
 
 drop policy if exists "Public can read profile photos" on storage.objects;
 create policy "Public can read profile photos"

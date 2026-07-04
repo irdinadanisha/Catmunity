@@ -12,7 +12,6 @@ import {
   EyeOff,
   Heart,
   Home,
-  ImagePlus,
   Lock,
   LogOut,
   Map as MapIcon,
@@ -30,7 +29,6 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { mockCats, mockComments, mockPosts, mockUsers } from './data/mockData';
 import {
   addExistingCatToUserCollection,
   addExistingCatToSupabase,
@@ -47,9 +45,13 @@ import {
   loadCatsFromSupabase,
 } from './services/catServices';
 import {
+  createCommunityComment,
+  createCommunityPost,
   followUserById,
   getCurrentSession,
   isSupabaseConfigured,
+  likeCommunityPost,
+  loadCommunityPosts,
   loadFollowerIds,
   loadFollowingIds,
   loadProfilesByIds,
@@ -61,6 +63,7 @@ import {
   signUpWithEmail,
   subscribeToAuthChanges,
   unfollowUserById,
+  unlikeCommunityPost,
   updateUserProfile,
   upsertCommunityProfile,
   uploadProfilePhoto,
@@ -75,16 +78,17 @@ const tabs = [
   { id: 'settings', label: 'Profile', icon: User },
 ];
 
-const fallbackUserId = 'user-mira';
+const fallbackUserId = 'local-user';
 
 function App() {
   const [screen, setScreen] = useState('explore');
-  const [cats, setCats] = useState(mockCats);
-  const [posts, setPosts] = useState(mockPosts);
+  const [cats, setCats] = useState([]);
+  const [posts, setPosts] = useState([]);
   const [capture, setCapture] = useState(null);
   const [draftCat, setDraftCat] = useState(null);
-  const [selectedCatId, setSelectedCatId] = useState('cat-saffron');
-  const [selectedUserId, setSelectedUserId] = useState('user-jules');
+  const [selectedCatId, setSelectedCatId] = useState('');
+  const [selectedUserId, setSelectedUserId] = useState('');
+  const [postCatId, setPostCatId] = useState('');
   const [isProcessingCatPhoto, setIsProcessingCatPhoto] = useState(false);
   const [authUser, setAuthUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(isSupabaseConfigured);
@@ -177,10 +181,10 @@ function App() {
 
     async function loadLiveCats() {
       const liveCats = await loadCatsFromSupabase(currentUserId);
-      if (cancelled || !liveCats?.length) return;
+      if (cancelled) return;
 
-      setCats(liveCats);
-      setSelectedCatId(liveCats[0].id);
+      setCats(liveCats || []);
+      setSelectedCatId((current) => current || liveCats?.[0]?.id || '');
     }
 
     loadLiveCats();
@@ -190,10 +194,34 @@ function App() {
     };
   }, [authUser, currentUserId]);
 
+  useEffect(() => {
+    if (isSupabaseConfigured && !authUser) return undefined;
+
+    let cancelled = false;
+
+    async function loadPosts() {
+      const { data, error } = await loadCommunityPosts(currentUserId);
+      if (cancelled) return;
+      if (error) {
+        showToast(error.message || 'Community posts could not load.');
+        return;
+      }
+      const mapped = mapCommunityData(data, currentUserId);
+      setPosts(mapped.posts);
+      setSocialUsers((users) => mergeUsers([...users, ...mapped.users]));
+    }
+
+    loadPosts();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser, currentUserId]);
+
   const caughtCats = cats.filter((cat) => cat.caught_by_users.includes(currentUserId));
-  const selectedCat = cats.find((cat) => cat.id === selectedCatId) || cats[0];
+  const selectedCat = cats.find((cat) => cat.id === selectedCatId) || cats[0] || null;
   const communityUsers = useMemo(
-    () => mergeUsers([me, ...mockUsers, ...socialUsers]),
+    () => mergeUsers([me, ...socialUsers]),
     [me, socialUsers],
   );
   const selectedUser = communityUsers.find((user) => user.id === selectedUserId) || me;
@@ -238,13 +266,14 @@ function App() {
   async function handleSignOut() {
     await signOutUser();
     setAuthUser(null);
-    setCats(mockCats);
-    setSelectedCatId('cat-saffron');
+    setCats([]);
+    setPosts([]);
+    setSelectedCatId('');
     showToast('Signed out.');
   }
 
   async function handleProfileSave(profile) {
-    const { data, error } = await updateUserProfile(profile);
+    const { data, error } = await updateUserProfile(profile, currentUserId);
     if (error) {
       showToast(error.message || 'Profile update failed.');
       return;
@@ -266,11 +295,7 @@ function App() {
 
   async function handleSearchFriends(query) {
     if (!isSupabaseConfigured) {
-      const results = mockUsers
-        .filter((user) => user.id !== currentUserId)
-        .filter((user) => (user.username || user.name).toLowerCase().includes(normalizeUsername(query)));
-      setSocialUsers((users) => mergeUsers([...users, ...results]));
-      return results;
+      return [];
     }
 
     const { data, error } = await searchCommunityProfilesByUsername(query, currentUserId);
@@ -308,8 +333,9 @@ function App() {
   }
 
   async function handlePhotoSelected(file) {
+    if (!file) return;
     setIsProcessingCatPhoto(true);
-    const previewUrl = file ? URL.createObjectURL(file) : createSampleCatImage();
+    const previewUrl = URL.createObjectURL(file);
     try {
       const crop = await autoDetectCatCrop(previewUrl);
       const position = await getCurrentAccurateLocation();
@@ -384,22 +410,74 @@ function App() {
     navigate('detail');
   }
 
-  function handleCreatePost(post) {
-    setPosts((items) => [
-      {
-        id: `post-${Date.now()}`,
-        user_id: currentUserId,
-        image_url: post.imageUrl || caughtCats[0]?.cropped_image_url,
-        body: post.body,
-        location_name: post.locationName || 'Neighborhood stroll',
-        created_at: 'Just now',
-        reactions: { heart: 0, sparkle: 0 },
-        comment_ids: [],
-      },
-      ...items,
-    ]);
+  function startCommunityPost(catId) {
+    setPostCatId(catId);
+    navigate('createPost');
+  }
+
+  async function refreshCommunityPosts() {
+    const { data, error } = await loadCommunityPosts(currentUserId);
+    if (error) {
+      showToast(error.message || 'Community posts could not refresh.');
+      return;
+    }
+    const mapped = mapCommunityData(data, currentUserId);
+    setPosts(mapped.posts);
+    setSocialUsers((users) => mergeUsers([...users, ...mapped.users]));
+  }
+
+  async function handleCreatePost(post) {
+    const cat = cats.find((item) => item.id === post.catId);
+    if (!cat || !cat.caught_by_users.includes(currentUserId)) {
+      showToast('Only unlocked cats can be posted.');
+      return;
+    }
+
+    const { error } = await createCommunityPost({
+      userId: currentUserId,
+      catId: cat.id,
+      caption: post.body,
+      imageUrl: cat.cropped_image_url,
+      locationName: cat.area_name || cat.location_name,
+      mentions: extractMentions(post.body),
+    });
+
+    if (error) {
+      showToast(error.message || 'Post could not be shared.');
+      return;
+    }
+
+    await refreshCommunityPosts();
     showToast('Sighting posted.');
     navigate('community');
+  }
+
+  async function handleTogglePostLike(post) {
+    const { error } = post.likedByMe
+      ? await unlikeCommunityPost(post.id, currentUserId)
+      : await likeCommunityPost(post.id, currentUserId);
+    if (error) {
+      showToast(error.message || 'Could not update like.');
+      return;
+    }
+    await refreshCommunityPosts();
+  }
+
+  async function handleCreateComment(postId, body) {
+    const text = body.trim();
+    if (!text) return;
+
+    const { error } = await createCommunityComment({
+      postId,
+      userId: currentUserId,
+      body: text,
+      mentions: extractMentions(text),
+    });
+    if (error) {
+      showToast(error.message || 'Comment could not be posted.');
+      return;
+    }
+    await refreshCommunityPosts();
   }
 
   const commonProps = {
@@ -414,7 +492,7 @@ function App() {
   };
 
   const notifications = useMemo(
-    () => createNotifications({ followerProfiles, posts, comments: mockComments, cats, currentUserId }),
+    () => createNotifications({ followerProfiles, posts, cats, currentUserId }),
     [followerProfiles, posts, cats, currentUserId],
   );
 
@@ -487,7 +565,7 @@ function App() {
         {screen === 'detailsForm' && (
           <CatDetailsForm cat={draftCat} onSave={handleSaveDetails} onBack={() => navigate('confirm')} />
         )}
-        {screen === 'collection' && <CollectionScreen {...commonProps} stats={stats} user={me} />}
+        {screen === 'collection' && <CollectionScreen {...commonProps} stats={stats} user={me} onPostCat={startCommunityPost} />}
         {screen === 'detail' && <CatDetailScreen {...commonProps} />}
         {screen === 'publicProfile' && (
           <PublicProfileScreen
@@ -506,7 +584,6 @@ function App() {
             posts={posts}
             cats={cats}
             users={communityUsers}
-            comments={mockComments}
             currentUser={me}
             currentUserId={currentUserId}
             followingIds={followingIds}
@@ -514,7 +591,15 @@ function App() {
             followerProfiles={followerProfiles}
             onSearchFriends={handleSearchFriends}
             onToggleFollow={handleToggleFollow}
-            onCreate={() => navigate('createPost')}
+            onCreate={() => {
+              if (!caughtCats.length) {
+                showToast('Catch your first cat to get started!');
+                return;
+              }
+              startCommunityPost(caughtCats[0].id);
+            }}
+            onToggleLike={handleTogglePostLike}
+            onComment={handleCreateComment}
             onOpenUser={(id) => {
               setSelectedUserId(id);
               navigate('publicProfile');
@@ -522,7 +607,11 @@ function App() {
           />
         )}
         {screen === 'createPost' && (
-          <CreatePostScreen onBack={() => navigate('community')} onCreate={handleCreatePost} />
+          <CreatePostScreen
+            cat={caughtCats.find((item) => item.id === postCatId)}
+            onBack={() => navigate('collection')}
+            onCreate={handleCreatePost}
+          />
         )}
         {screen === 'settings' && (
           <SettingsScreen
@@ -554,8 +643,17 @@ function App() {
 }
 
 function createAppUser(authUser) {
-  const fallback = mockUsers.find((user) => user.id === fallbackUserId);
-  if (!authUser) return fallback;
+  if (!authUser) {
+    return {
+      id: fallbackUserId,
+      username: 'guest',
+      name: 'Catmunity Friend',
+      avatar_url: '',
+      bio: 'Saving neighborhood cat memories with Catmunity.',
+      public_profile: true,
+      email: '',
+    };
+  }
 
   const displayName =
     authUser.user_metadata?.full_name ||
@@ -593,7 +691,73 @@ function mergeUsers(users) {
   return [...byId.values()];
 }
 
-function createNotifications({ followerProfiles, posts, comments, cats, currentUserId }) {
+function mapCommunityData(data, currentUserId) {
+  const users = (data.profiles || []).map(mapCommunityProfile);
+  const commentsByPost = new Map();
+  const likesByPost = new Map();
+
+  (data.likes || []).forEach((like) => {
+    const likes = likesByPost.get(like.post_id) || [];
+    likes.push(like.user_id);
+    likesByPost.set(like.post_id, likes);
+  });
+
+  (data.comments || []).forEach((comment) => {
+    const comments = commentsByPost.get(comment.post_id) || [];
+    const author = users.find((user) => user.id === comment.user_id);
+    comments.push({
+      id: comment.id,
+      post_id: comment.post_id,
+      user_id: comment.user_id,
+      body: comment.body,
+      mentions: comment.mentions || [],
+      created_at: formatPostTime(comment.created_at),
+      user: author,
+    });
+    commentsByPost.set(comment.post_id, comments);
+  });
+
+  const posts = (data.posts || []).map((post) => {
+    const likeUsers = likesByPost.get(post.id) || [];
+    return {
+      id: post.id,
+      user_id: post.user_id,
+      cat_id: post.cat_id,
+      image_url: post.image_url,
+      body: post.caption,
+      location_name: post.location_name || 'Catmunity',
+      mentions: post.mentions || [],
+      created_at: formatPostTime(post.created_at),
+      likeCount: likeUsers.length,
+      likedByMe: likeUsers.includes(currentUserId),
+      comments: commentsByPost.get(post.id) || [],
+    };
+  });
+
+  return { posts, users };
+}
+
+function extractMentions(text = '') {
+  return [...new Set((text.match(/@([a-z0-9_]+)/giu) || []).map((mention) => normalizeUsername(mention)))];
+}
+
+function formatPostTime(value) {
+  if (!value) return 'Just now';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Just now';
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function renderMentionText(text = '') {
+  const pieces = text.split(/(@[a-z0-9_]+)/giu);
+  return pieces.map((piece, index) => (
+    /^@[a-z0-9_]+$/iu.test(piece)
+      ? <strong className="mention" key={`${piece}-${index}`}>{piece}</strong>
+      : <React.Fragment key={`${piece}-${index}`}>{piece}</React.Fragment>
+  ));
+}
+
+function createNotifications({ followerProfiles, posts, cats, currentUserId }) {
   const followerNotifications = followerProfiles.map((user) => ({
     id: `follow-${user.id}`,
     type: 'follow',
@@ -608,20 +772,18 @@ function createNotifications({ followerProfiles, posts, comments, cats, currentU
       const cat = cats.find((item) => item.id === post.cat_id);
       const items = [];
 
-      if ((post.reactions?.heart || 0) > 0 || (post.reactions?.sparkle || 0) > 0) {
+      if ((post.likeCount || 0) > 0) {
         items.push({
           id: `reaction-${post.id}`,
           type: 'reaction',
           title: 'People reacted to your post',
-          text: `${post.reactions.heart} hearts and ${post.reactions.sparkle} sparkles${cat ? ` on ${cat.name}` : ''}.`,
+          text: `${post.likeCount} likes${cat ? ` on ${cat.name}` : ''}.`,
         });
       }
 
-      post.comment_ids.forEach((commentId) => {
-        const comment = comments.find((item) => item.id === commentId);
-        if (!comment) return;
+      post.comments.forEach((comment) => {
         items.push({
-          id: `comment-${commentId}`,
+          id: `comment-${comment.id}`,
           type: 'comment',
           title: 'New comment on your post',
           text: comment.body,
@@ -904,7 +1066,7 @@ function ExploreScreen({ cats, currentUser, currentUserId, navigate, setSelected
               ))}
             </div>
             <div className="sheet-meta-row">
-              <strong>{nearbyCats.length || 18} cats nearby</strong>
+              <strong>{nearbyCats.length} cats nearby</strong>
               <div className="sheet-toggles">
                 <button className={hideCaught ? 'mini-chip active' : 'mini-chip'} onClick={() => setHideCaught(!hideCaught)}>
                   <EyeOff size={14} /> Hide caught
@@ -943,6 +1105,9 @@ function ExploreScreen({ cats, currentUser, currentUserId, navigate, setSelected
               action={!cat.caught_by_users.includes(currentUserId) ? () => unlockExistingCat(cat.id) : () => openCat(cat)}
             />
           ))}
+          {nearbyCats.length === 0 && (
+            <p className="empty-community-copy">No cats discovered yet. Catch your first cat to get started!</p>
+          )}
         </div>
       </DraggableBottomSheet>
       <CatchButton onClick={() => navigate('catch')} />
@@ -953,7 +1118,11 @@ function ExploreScreen({ cats, currentUser, currentUserId, navigate, setSelected
 function CatchScreen({ onPhotoSelected, processing = false }) {
   return (
     <section className="screen catch-screen">
-      <ScreenHeader title="Catch a cat" subtitle="Use a square photo, then confirm the cat memory." icon={Camera} />
+      <div className="catch-hero-copy">
+        <span className="header-icon"><Camera size={22} /></span>
+        <h1>Catch the cat!</h1>
+        <p>Ask the cat to pose for the gram!</p>
+      </div>
       <label className={processing ? 'upload-panel processing' : 'upload-panel'}>
         <input
           type="file"
@@ -963,12 +1132,9 @@ function CatchScreen({ onPhotoSelected, processing = false }) {
           onChange={(event) => onPhotoSelected(event.target.files?.[0])}
         />
         <Camera size={38} />
-        <strong>{processing ? 'Preparing square crop...' : 'Take or upload a cat photo'}</strong>
-        <span>{processing ? 'Standardizing the photo into a square cat image.' : 'Frame the photo as a square and keep the cat centered as much as possible.'}</span>
+        <strong>{processing ? 'Preparing square crop...' : 'Click here to catch!'}</strong>
+        <span>{processing ? 'Standardizing the photo into a square cat image.' : 'Make sure they’re looking cute!'}</span>
       </label>
-      <button className="secondary-button" disabled={processing} onClick={() => onPhotoSelected(null)}>
-        <ImagePlus size={18} /> Use sample cat photo
-      </button>
       <div className="safety-strip"><ShieldCheck size={17} /> Keep paws, people, and private spaces respected.</div>
     </section>
   );
@@ -1092,7 +1258,7 @@ function CatDetailsForm({ cat, onSave, onBack }) {
   );
 }
 
-function CollectionScreen({ caughtCats, stats, user, navigate, setSelectedCatId }) {
+function CollectionScreen({ caughtCats, stats, user, navigate, setSelectedCatId, onPostCat }) {
   return (
     <section className="screen collection-screen">
       <div className="profile-hero">
@@ -1123,22 +1289,37 @@ function CollectionScreen({ caughtCats, stats, user, navigate, setSelectedCatId 
       </div>
       <div className="profile-cat-grid">
         {caughtCats.map((cat) => (
-          <CatCard
-            key={cat.id}
-            cat={cat}
-            locked={false}
-            onOpen={() => {
-              setSelectedCatId(cat.id);
-              navigate('detail');
-            }}
-          />
+          <div className="collection-cat-item" key={cat.id}>
+            <CatCard
+              cat={cat}
+              locked={false}
+              onOpen={() => {
+                setSelectedCatId(cat.id);
+                navigate('detail');
+              }}
+            />
+            <button className="text-button post-cat-button" type="button" onClick={() => onPostCat(cat.id)}>
+              <Plus size={15} /> Post to Community
+            </button>
+          </div>
         ))}
+        {caughtCats.length === 0 && (
+          <p className="empty-community-copy">No cats discovered yet. Catch your first cat to get started!</p>
+        )}
       </div>
     </section>
   );
 }
 
 function CatDetailScreen({ selectedCat, currentUserId, unlockExistingCat }) {
+  if (!selectedCat) {
+    return (
+      <section className="screen">
+        <ScreenHeader title="No cat selected" subtitle="Catch your first cat to get started!" icon={Cat} />
+      </section>
+    );
+  }
+
   const locked = !selectedCat.caught_by_users.includes(currentUserId);
   return (
     <section className="screen">
@@ -1184,6 +1365,9 @@ function PublicProfileScreen({ user, cats, currentUserId, onBack, onSelectCat })
             onOpen={() => onSelectCat(cat.id)}
           />
         ))}
+        {cats.length === 0 && (
+          <p className="empty-community-copy">No cats discovered yet.</p>
+        )}
       </div>
     </section>
   );
@@ -1193,7 +1377,6 @@ function CommunityScreen({
   posts,
   cats,
   users,
-  comments,
   currentUser,
   currentUserId,
   followingIds,
@@ -1202,6 +1385,8 @@ function CommunityScreen({
   onSearchFriends,
   onToggleFollow,
   onCreate,
+  onToggleLike,
+  onComment,
   onOpenUser,
 }) {
   const [currentArea, setCurrentArea] = useState('Finding your area...');
@@ -1329,58 +1514,105 @@ function CommunityScreen({
         const cat = cats.find((item) => item.id === post.cat_id);
         const isFriendPost = followingIds.includes(post.user_id) || post.user_id === currentUserId;
         return (
-          <article className="post-card" key={post.id}>
-            <button className="post-user" onClick={() => onOpenUser(user.id)}>
-              <UserAvatar user={user} className="post-user-avatar" />
-              <span>
-                <strong>{user.name}</strong>
-                <small>{isFriendPost ? 'Friend post' : 'Nearby'} · {post.created_at} · {post.location_name}</small>
-              </span>
-            </button>
-            <img className="post-image" src={post.image_url || cat?.cropped_image_url} alt="Community cat sighting" />
-            <p>{post.body}</p>
-            <div className="post-actions">
-              <span><Heart size={16} /> {post.reactions.heart}</span>
-              <span><Sparkles size={16} /> {post.reactions.sparkle}</span>
-              <span><MessageCircle size={16} /> {post.comment_ids.length}</span>
-            </div>
-            {post.comment_ids.slice(0, 1).map((id) => {
-              const comment = comments.find((item) => item.id === id);
-              return <p className="comment" key={id}>{comment.body}</p>;
-            })}
-          </article>
+          <CommunityPostCard
+            key={post.id}
+            post={post}
+            user={user}
+            cat={cat}
+            isFriendPost={isFriendPost}
+            onOpenUser={onOpenUser}
+            onToggleLike={() => onToggleLike(post)}
+            onComment={(body) => onComment(post.id, body)}
+          />
         );
       })}
       {timelinePosts.length === 0 && (
-        <p className="empty-community-copy">No cat posts in {currentArea} yet. Follow friends or create the first sighting here.</p>
+        <p className="empty-community-copy">No community posts yet. Catch your first cat to get started!</p>
       )}
     </section>
   );
 }
 
-function CreatePostScreen({ onBack, onCreate }) {
+function CommunityPostCard({ post, user, cat, isFriendPost, onOpenUser, onToggleLike, onComment }) {
+  const [commentText, setCommentText] = useState('');
+
+  function submitComment(event) {
+    event.preventDefault();
+    onComment(commentText);
+    setCommentText('');
+  }
+
+  return (
+    <article className="post-card">
+      <button className="post-user" onClick={() => onOpenUser(user.id)}>
+        <UserAvatar user={user} className="post-user-avatar" />
+        <span>
+          <strong>{user.name}</strong>
+          <UserHandle user={user} />
+          <small>{isFriendPost ? 'Friend post' : 'Nearby'} · {post.created_at} · {post.location_name}</small>
+        </span>
+      </button>
+      {(post.image_url || cat?.cropped_image_url) && (
+        <img className="post-image" src={post.image_url || cat?.cropped_image_url} alt="Community cat sighting" />
+      )}
+      <p>{renderMentionText(post.body)}</p>
+      <div className="post-actions">
+        <button className={post.likedByMe ? 'post-action-button active' : 'post-action-button'} type="button" onClick={onToggleLike}>
+          <Heart size={16} /> {post.likedByMe ? 'Liked' : 'Like'}
+        </button>
+        <span>{post.likeCount} {post.likeCount === 1 ? 'like' : 'likes'}</span>
+        <span><MessageCircle size={16} /> {post.comments.length}</span>
+      </div>
+      <div className="comment-list">
+        {post.comments.map((comment) => (
+          <p className="comment" key={comment.id}>
+            <strong>@{comment.user?.username || 'catmunity'}</strong> {renderMentionText(comment.body)}
+            <small>{comment.created_at}</small>
+          </p>
+        ))}
+      </div>
+      <form className="comment-form" onSubmit={submitComment}>
+        <input
+          value={commentText}
+          placeholder="Add a comment with @username"
+          onChange={(event) => setCommentText(event.target.value)}
+        />
+        <button type="submit">Post</button>
+      </form>
+    </article>
+  );
+}
+
+function CreatePostScreen({ cat, onBack, onCreate }) {
   const [body, setBody] = useState('');
-  const [locationName, setLocationName] = useState('');
   return (
     <section className="screen">
       <BackButton onBack={onBack} />
-      <ScreenHeader title="Create post" subtitle="Share a gentle sighting with the community." icon={Plus} />
+      <ScreenHeader title="Create post" subtitle="Share this discovered cat with the community." icon={Plus} />
+      {cat ? (
+        <div className="post-preview-card">
+          <img src={cat.cropped_image_url} alt={cat.name || 'Discovered cat'} />
+          <span>
+            <strong>{cat.name || 'Unnamed Cat'}</strong>
+            <small>{cat.location_name}</small>
+          </span>
+        </div>
+      ) : (
+        <p className="empty-community-copy">Choose an unlocked cat from your collection before posting.</p>
+      )}
       <form
         className="details-form"
         onSubmit={(event) => {
           event.preventDefault();
-          onCreate({ body: body || 'Spotted a very cute cat today.', locationName });
+          if (!cat) return;
+          onCreate({ catId: cat.id, body: body || 'Spotted a very cute cat today.' });
         }}
       >
         <label>
-          <span>Post text</span>
-          <textarea value={body} placeholder="A calm cafe cat was sunbathing..." onChange={(event) => setBody(event.target.value)} />
+          <span>Caption</span>
+          <textarea value={body} placeholder="A calm cafe cat was sunbathing... @friend" onChange={(event) => setBody(event.target.value)} />
         </label>
-        <label>
-          <span>General area</span>
-          <input value={locationName} placeholder="Old Town cafes" onChange={(event) => setLocationName(event.target.value)} />
-        </label>
-        <button className="primary-button" type="submit"><Sparkles size={18} /> Share sighting</button>
+        <button className="primary-button" type="submit" disabled={!cat}><Sparkles size={18} /> Share sighting</button>
       </form>
     </section>
   );
@@ -1388,6 +1620,7 @@ function CreatePostScreen({ onBack, onCreate }) {
 
 function SettingsScreen({ user, userId, signedIn, onProfileSave, onSignOut }) {
   const [form, setForm] = useState({
+    username: user.username || '',
     name: user.name || '',
     avatarUrl: user.avatar_url || '',
     bio: user.bio || '',
@@ -1401,6 +1634,7 @@ function SettingsScreen({ user, userId, signedIn, onProfileSave, onSignOut }) {
 
   useEffect(() => {
     setForm({
+      username: user.username || '',
       name: user.name || '',
       avatarUrl: user.avatar_url || '',
       bio: user.bio || '',
@@ -1470,10 +1704,16 @@ function SettingsScreen({ user, userId, signedIn, onProfileSave, onSignOut }) {
           />
           <span>
             <strong>{form.name || 'Catmunity Friend'}</strong>
-            <UserHandle user={user} />
+            <UserHandle user={{ ...user, username: form.username }} />
             <small>{form.publicProfile ? 'Public collection' : 'Private collection'}</small>
           </span>
         </div>
+        <Field
+          label="Username"
+          value={form.username}
+          placeholder="irdina"
+          onChange={(value) => update('username', normalizeUsername(value))}
+        />
         <Field label="Display name" value={form.name} placeholder="Irdina" onChange={(value) => update('name', value)} />
         <label className="profile-photo-upload">
           <span>Profile picture</span>
@@ -2208,10 +2448,6 @@ function loadImageElement(source) {
 function getCroppedFilename(filename) {
   const baseName = filename.replace(/\.[^.]+$/u, '') || 'profile-photo';
   return `${baseName}-cropped.jpg`;
-}
-
-function createSampleCatImage() {
-  return 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&w=900&q=80';
 }
 
 createRoot(document.getElementById('root')).render(<App />);

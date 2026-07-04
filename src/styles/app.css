@@ -1495,6 +1495,16 @@ button:disabled {
   gap: 12px;
 }
 
+.collection-cat-item {
+  display: grid;
+  gap: 8px;
+}
+
+.post-cat-button {
+  width: 100%;
+  justify-content: center;
+}
+
 .gallery-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -1650,6 +1660,28 @@ button:disabled {
   border-style: solid;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 246, 238, 0.86));
+}
+
+.catch-hero-copy {
+  min-height: 28vh;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.catch-hero-copy h1 {
+  margin: 0;
+  color: #2b211d;
+  font-size: 2.25rem;
+  letter-spacing: 0;
+}
+
+.catch-hero-copy p {
+  margin: 0;
+  color: #74655d;
+  font-weight: 850;
 }
 
 .confirm-frame,
@@ -2454,10 +2486,33 @@ button:disabled {
   font-weight: 850;
 }
 
+.post-action-button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 12px;
+  color: #725547;
+  background: #fff0dc;
+  font-weight: 950;
+}
+
+.post-action-button.active {
+  color: #ffffff;
+  background: #e85f4b;
+}
+
 .post-actions span {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+}
+
+.comment-list {
+  display: grid;
+  gap: 7px;
 }
 
 .comment {
@@ -2465,6 +2520,66 @@ button:disabled {
   border-radius: 14px;
   background: #fff6e7;
   color: #5e4d44;
+}
+
+.comment small {
+  display: block;
+  margin-top: 4px;
+  color: #8b7568;
+  font-size: 0.72rem;
+}
+
+.comment-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.comment-form input {
+  min-width: 0;
+  border: 1px solid rgba(92, 62, 44, 0.08);
+  border-radius: 999px;
+  padding: 0 12px;
+  color: #2b211d;
+  background: rgba(255, 247, 236, 0.86);
+}
+
+.comment-form button {
+  min-height: 36px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 13px;
+  color: #ffffff;
+  background: #e85f4b;
+  font-weight: 950;
+}
+
+.mention {
+  color: #b34d3e;
+}
+
+.post-preview-card {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(80, 55, 40, 0.06);
+  box-shadow: 0 12px 30px rgba(83, 55, 38, 0.07);
+}
+
+.post-preview-card img {
+  width: 92px;
+  aspect-ratio: 1;
+  border-radius: 18px;
+  object-fit: cover;
+}
+
+.post-preview-card span {
+  display: grid;
+  gap: 4px;
 }
 
 .toggle-row {
