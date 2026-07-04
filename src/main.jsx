@@ -1023,7 +1023,7 @@ function UserHandle({ user }) {
 
 function AuthScreen({ onSubmit }) {
   const [mode, setMode] = useState('signup');
-  const [username, setUsername] = useState('irdina');
+  const [username, setUsername] = useState('urs');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [status, setStatus] = useState('');
@@ -1092,7 +1092,7 @@ function AuthScreen({ onSubmit }) {
             <span>Username</span>
             <input
               value={username}
-              placeholder="irdina"
+              placeholder="urs"
               autoComplete="username"
               required
               onChange={(event) => setUsername(normalizeUsername(event.target.value))}
@@ -2073,7 +2073,7 @@ function SettingsScreen({ user, userId, signedIn, onProfileSave, onSignOut }) {
         <Field
           label="Username"
           value={form.username}
-          placeholder="irdina"
+          placeholder="urs"
           onChange={(value) => update('username', normalizeUsername(value))}
         />
         <Field label="Display name" value={form.name} placeholder="Irdina" onChange={(value) => update('name', value)} />
