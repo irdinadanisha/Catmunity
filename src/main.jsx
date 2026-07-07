@@ -1873,14 +1873,32 @@ function SquareCropEditor({ imageUrl, disabled = false, onUsePhoto }) {
   const imageRef = useRef(null);
   const pointerRef = useRef(null);
   const pinchRef = useRef(null);
+  const [frameSize, setFrameSize] = useState(320);
   const [imageMeta, setImageMeta] = useState(null);
   const [crop, setCrop] = useState({ x: 0, y: 0, scale: 1 });
+  const imageFitScale = imageMeta
+    ? Math.min(frameSize / imageMeta.width, frameSize / imageMeta.height)
+    : 1;
+  const fittedWidth = imageMeta ? imageMeta.width * imageFitScale : frameSize;
+  const fittedHeight = imageMeta ? imageMeta.height * imageFitScale : frameSize;
+
+  useEffect(() => {
+    if (!frameRef.current) return undefined;
+
+    function updateFrameSize() {
+      setFrameSize(frameRef.current?.clientWidth || 320);
+    }
+
+    updateFrameSize();
+    const observer = new ResizeObserver(updateFrameSize);
+    observer.observe(frameRef.current);
+    return () => observer.disconnect();
+  }, []);
 
   function clampCrop(nextCrop) {
-    const frameSize = frameRef.current?.clientWidth || 320;
     const imageWidth = imageMeta?.width || 1;
     const imageHeight = imageMeta?.height || 1;
-    const baseScale = Math.max(frameSize / imageWidth, frameSize / imageHeight);
+    const baseScale = Math.min(frameSize / imageWidth, frameSize / imageHeight);
     const scale = Math.min(Math.max(nextCrop.scale, 1), 4);
     const drawnWidth = imageWidth * baseScale * scale;
     const drawnHeight = imageHeight * baseScale * scale;
@@ -2014,7 +2032,7 @@ function SquareCropEditor({ imageUrl, disabled = false, onUsePhoto }) {
       className="catch-crop"
       onSubmit={(event) => {
         event.preventDefault();
-        if (!disabled) onUsePhoto({ ...crop, frameSize: frameRef.current?.clientWidth || 320 });
+        if (!disabled) onUsePhoto({ ...crop, frameSize, fitScale: imageFitScale });
       }}
     >
       <div
@@ -2036,6 +2054,8 @@ function SquareCropEditor({ imageUrl, disabled = false, onUsePhoto }) {
           draggable="false"
           onLoad={handleImageLoad}
           style={{
+            width: `${fittedWidth}px`,
+            height: `${fittedHeight}px`,
             transform: `translate(calc(-50% + ${crop.x}px), calc(-50% + ${crop.y}px)) scale(${crop.scale})`,
           }}
         />
@@ -3494,11 +3514,11 @@ async function createSquareCatchCrop(imageUrl, filename, settings) {
   const context = canvas.getContext('2d');
   const imageWidth = image.naturalWidth || image.width;
   const imageHeight = image.naturalHeight || image.height;
-  const baseScale = Math.max(outputSize / imageWidth, outputSize / imageHeight);
+  const outputRatio = outputSize / (settings.frameSize || outputSize);
+  const baseScale = (settings.fitScale || Math.min((settings.frameSize || outputSize) / imageWidth, (settings.frameSize || outputSize) / imageHeight)) * outputRatio;
   const scale = baseScale * settings.scale;
   const drawnWidth = imageWidth * scale;
   const drawnHeight = imageHeight * scale;
-  const outputRatio = outputSize / (settings.frameSize || outputSize);
   const offsetX = (outputSize - drawnWidth) / 2 + (settings.x || 0) * outputRatio;
   const offsetY = (outputSize - drawnHeight) / 2 + (settings.y || 0) * outputRatio;
 

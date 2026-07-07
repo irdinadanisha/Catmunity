@@ -2152,9 +2152,7 @@ button:disabled {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   transform-origin: center;
   will-change: transform;
   -webkit-user-drag: none;
