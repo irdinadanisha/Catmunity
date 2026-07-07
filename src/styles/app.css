@@ -1734,14 +1734,10 @@ button:disabled {
   background: #000000;
 }
 
-.snap-camera-video {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  background: #000000;
-  transform-origin: center;
+.snap-camera-screen--native {
+  background:
+    radial-gradient(circle at 50% 42%, rgba(232, 95, 75, 0.18), transparent 32%),
+    linear-gradient(180deg, #070707 0%, #000000 100%);
 }
 
 .snap-camera-shade {
@@ -1751,6 +1747,37 @@ button:disabled {
   background:
     linear-gradient(180deg, rgba(0, 0, 0, 0.5), transparent 22%, transparent 64%, rgba(0, 0, 0, 0.76)),
     radial-gradient(circle at 50% 62%, transparent 0, rgba(0, 0, 0, 0.1) 58%, rgba(0, 0, 0, 0.4) 100%);
+}
+
+.snap-native-copy {
+  position: absolute;
+  z-index: 4;
+  left: 28px;
+  right: 28px;
+  top: 31%;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.snap-native-copy svg {
+  color: #e85f4b;
+}
+
+.snap-native-copy strong {
+  color: #ffffff;
+  font-size: 1.28rem;
+  font-weight: 950;
+}
+
+.snap-native-copy span {
+  max-width: 300px;
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 0.92rem;
+  font-weight: 800;
+  line-height: 1.36;
 }
 
 .snap-camera-topbar {
@@ -1893,8 +1920,7 @@ button:disabled {
   background: rgba(232, 95, 75, 0.64);
 }
 
-.snap-file-input,
-.snap-native-capture input {
+.snap-file-input {
   position: absolute;
   opacity: 0;
   pointer-events: none;
@@ -1904,54 +1930,20 @@ button:disabled {
   position: absolute;
   z-index: 4;
   left: 50%;
-  bottom: calc(204px + env(safe-area-inset-bottom));
+  bottom: calc(154px + env(safe-area-inset-bottom));
   transform: translateX(-50%);
   min-height: 38px;
   display: inline-flex;
   align-items: center;
   gap: 7px;
   padding: 0 13px;
+  border: 0;
   border-radius: 999px;
   color: rgba(255, 255, 255, 0.9);
   background: rgba(16, 16, 16, 0.42);
   backdrop-filter: blur(16px);
   font-size: 0.78rem;
   font-weight: 900;
-}
-
-.snap-zoom-control {
-  position: absolute;
-  z-index: 4;
-  left: 50%;
-  bottom: calc(158px + env(safe-area-inset-bottom));
-  transform: translateX(-50%);
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px;
-  border-radius: 999px;
-  background: rgba(18, 18, 18, 0.58);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(18px);
-}
-
-.snap-zoom-control button {
-  min-width: 42px;
-  height: 36px;
-  border: 0;
-  border-radius: 999px;
-  color: #ffffff;
-  background: transparent;
-  font-weight: 950;
-}
-
-.snap-zoom-control button.active {
-  color: #f4eb23;
-  background: rgba(255, 255, 255, 0.14);
-}
-
-.snap-zoom-control button:disabled {
-  opacity: 0.35;
 }
 
 .snap-camera-permission {

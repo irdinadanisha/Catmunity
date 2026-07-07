@@ -21,7 +21,6 @@ import {
   PawPrint,
   Pencil,
   Plus,
-  RotateCcw,
   Search,
   Settings,
   ShieldCheck,
@@ -1336,185 +1335,28 @@ function ExploreScreen({ cats, currentUser, currentUserId, navigate, setSelected
 }
 
 function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
-  const videoRef = useRef(null);
-  const fileInputRef = useRef(null);
-  const streamRef = useRef(null);
-  const [cameraStatus, setCameraStatus] = useState('requesting');
-  const [facingMode, setFacingMode] = useState('environment');
-  const [zoomLevel, setZoomLevel] = useState(1);
-  const [cameraZoomRange, setCameraZoomRange] = useState({ min: 1, max: 3, step: 0.1, supported: false });
+  const galleryInputRef = useRef(null);
+  const nativeCameraInputRef = useRef(null);
 
   useEffect(() => {
-    let cancelled = false;
+    const timer = window.setTimeout(() => nativeCameraInputRef.current?.click(), 350);
+    return () => window.clearTimeout(timer);
+  }, []);
 
-    async function openCamera() {
-      await startCamera(() => cancelled);
-    }
-
-    openCamera();
-
-    return () => {
-      cancelled = true;
-      stopCameraStream();
-    };
-  }, [facingMode]);
-
-  function stopCameraStream() {
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-  }
-
-  async function startCamera(isCancelled = () => false) {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setCameraStatus('unsupported');
-      return;
-    }
-
-    setCameraStatus('requesting');
-    stopCameraStream();
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: {
-          facingMode: { ideal: facingMode },
-          width: { ideal: 1080 },
-          height: { ideal: 1920 },
-          aspectRatio: { ideal: 9 / 16 },
-          resizeMode: { ideal: 'crop-and-scale' },
-        },
-      });
-      if (isCancelled()) {
-        stream.getTracks().forEach((track) => track.stop());
-        return;
-      }
-      streamRef.current = stream;
-      const [videoTrack] = stream.getVideoTracks();
-      const capabilities = videoTrack?.getCapabilities?.();
-      if (capabilities?.zoom) {
-        const min = capabilities.zoom.min || 1;
-        const max = capabilities.zoom.max || 3;
-        const step = capabilities.zoom.step || 0.1;
-        setCameraZoomRange({ min, max, step, supported: true });
-        const initialZoom = Math.min(Math.max(1, min), max);
-        try {
-          await videoTrack.applyConstraints({ advanced: [{ zoom: initialZoom }] });
-        } catch (error) {
-          setCameraZoomRange({ min: 0.5, max: 3, step: 0.1, supported: false });
-        }
-        setZoomLevel(initialZoom);
-      } else {
-        setCameraZoomRange({ min: 0.5, max: 3, step: 0.1, supported: false });
-        setZoomLevel(1);
-      }
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-      setCameraStatus('ready');
-    } catch (error) {
-      setCameraStatus(error?.name === 'NotAllowedError' ? 'denied' : 'error');
-    }
-  }
-
-  async function applyZoom(nextZoom) {
-    const range = cameraZoomRange;
-    const min = range.supported ? range.min : 0.5;
-    const max = range.supported ? range.max : 3;
-    const clampedZoom = Math.min(Math.max(nextZoom, min), max);
-    const track = streamRef.current?.getVideoTracks?.()[0];
-
-    if (range.supported && track?.applyConstraints) {
-      try {
-        await track.applyConstraints({ advanced: [{ zoom: clampedZoom }] });
-      } catch (error) {
-        setCameraZoomRange((current) => ({ ...current, supported: false, min: 0.5, max: 3, step: 0.1 }));
-      }
-    }
-
-    setZoomLevel(clampedZoom);
-  }
-
-  function capturePhoto() {
-    const video = videoRef.current;
-    if (!video || cameraStatus !== 'ready' || processing) return;
-
-    const width = video.videoWidth || 1080;
-    const height = video.videoHeight || 1440;
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const context = canvas.getContext('2d');
-    if (!cameraZoomRange.supported && zoomLevel > 1) {
-      const sourceWidth = width / zoomLevel;
-      const sourceHeight = height / zoomLevel;
-      context.drawImage(
-        video,
-        (width - sourceWidth) / 2,
-        (height - sourceHeight) / 2,
-        sourceWidth,
-        sourceHeight,
-        0,
-        0,
-        width,
-        height,
-      );
-    } else {
-      context.drawImage(video, 0, 0, width, height);
-    }
-    canvas.toBlob((blob) => {
-      if (!blob) return;
-      const file = new File([blob], `catmunity-catch-${Date.now()}.jpg`, { type: 'image/jpeg' });
-      onPhotoSelected(file);
-    }, 'image/jpeg', 0.92);
-  }
-
-  function chooseFromGallery(event) {
+  function choosePhoto(event) {
     const file = event.target.files?.[0];
     if (!file) return;
     onPhotoSelected(file);
     event.target.value = '';
   }
 
+  function openDeviceCamera() {
+    nativeCameraInputRef.current?.click();
+  }
+
   return (
-    <section className="snap-camera-screen">
-      <video
-        ref={videoRef}
-        className="snap-camera-video"
-        style={
-          !cameraZoomRange.supported
-            ? {
-                objectFit: zoomLevel < 1 ? 'contain' : 'cover',
-                transform: `scale(${Math.max(1, zoomLevel)})`,
-              }
-            : undefined
-        }
-        playsInline
-        muted
-        autoPlay
-      />
+    <section className="snap-camera-screen snap-camera-screen--native">
       <div className="snap-camera-shade" />
-      {cameraStatus !== 'ready' && (
-        <div className="snap-camera-permission">
-          <PawPrint size={30} />
-          <strong>
-            {cameraStatus === 'requesting' && 'Opening camera...'}
-            {cameraStatus === 'denied' && 'Camera access needed'}
-            {cameraStatus === 'unsupported' && 'Camera unavailable'}
-            {cameraStatus === 'error' && 'Camera could not open'}
-          </strong>
-          <span>
-            {cameraStatus === 'denied'
-              ? 'Allow camera access to catch cats. If your browser blocked it, enable camera permission in site settings and try again.'
-              : 'You can still choose a photo from your gallery.'}
-          </span>
-          {cameraStatus !== 'requesting' && (
-            <button className="snap-permission-button" type="button" onClick={() => startCamera()}>
-              Try camera again
-            </button>
-          )}
-        </div>
-      )}
       <div className="snap-camera-topbar">
         <button className="snap-paw-button" type="button" aria-label="Catmunity camera">
           <PawPrint size={25} />
@@ -1527,20 +1369,16 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
           <X size={24} />
         </button>
       </div>
+      <div className="snap-native-copy">
+        <Camera size={34} />
+        <strong>Use your phone camera</strong>
+        <span>Lens zoom, aspect ratio, focus, and exposure will use your device camera controls.</span>
+      </div>
       <div className="snap-side-tools" aria-label="Camera tools">
         <button
           className="snap-tool-button"
           type="button"
-          onClick={() => setFacingMode((mode) => (mode === 'environment' ? 'user' : 'environment'))}
-          aria-label="Flip camera"
-        >
-          <RotateCcw size={25} />
-          <span>Flip</span>
-        </button>
-        <button
-          className="snap-tool-button"
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => galleryInputRef.current?.click()}
           aria-label="Choose from gallery"
         >
           <ImageIcon size={25} />
@@ -1548,15 +1386,15 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
         </button>
       </div>
       <div className="snap-capture-dock">
-        <button className="snap-gallery-button" type="button" onClick={() => fileInputRef.current?.click()} aria-label="Choose photo">
+        <button className="snap-gallery-button" type="button" onClick={() => galleryInputRef.current?.click()} aria-label="Choose photo">
           <ImageIcon size={27} />
         </button>
         <button
           className={processing ? 'snap-shutter-button processing' : 'snap-shutter-button'}
           type="button"
-          disabled={processing || cameraStatus !== 'ready'}
-          onClick={capturePhoto}
-          aria-label="Take photo"
+          disabled={processing}
+          onClick={openDeviceCamera}
+          aria-label="Open device camera"
         >
           <span />
         </button>
@@ -1564,39 +1402,26 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
           <PawPrint size={28} />
         </button>
       </div>
-      <div className="snap-zoom-control" aria-label="Camera zoom">
-        {[0.5, 1, 3].map((value) => {
-          const disabled = cameraZoomRange.supported && (value < cameraZoomRange.min || value > cameraZoomRange.max);
-          return (
-            <button
-              key={value}
-              className={Math.abs(zoomLevel - value) < 0.05 ? 'active' : ''}
-              type="button"
-              disabled={disabled}
-              onClick={() => applyZoom(value)}
-            >
-              {value === 0.5 ? '.5' : value}x
-            </button>
-          );
-        })}
-      </div>
       <input
-        ref={fileInputRef}
+        ref={galleryInputRef}
         className="snap-file-input"
         type="file"
         accept="image/*"
-        onChange={chooseFromGallery}
+        onChange={choosePhoto}
       />
-      <label className="snap-native-capture">
-        <input
-          type="file"
-          accept="image/*"
-          capture="environment"
-          disabled={processing}
-          onChange={chooseFromGallery}
-        />
-        <Camera size={16} /> Use device camera
-      </label>
+      <input
+        id="native-cat-camera"
+        ref={nativeCameraInputRef}
+        className="snap-file-input"
+        type="file"
+        accept="image/*"
+        capture="environment"
+        disabled={processing}
+        onChange={choosePhoto}
+      />
+      <button className="snap-native-capture" type="button" disabled={processing} onClick={openDeviceCamera}>
+        <Camera size={16} /> Open device camera
+      </button>
     </section>
   );
 }
