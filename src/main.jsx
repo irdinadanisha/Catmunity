@@ -1336,6 +1336,7 @@ function ExploreScreen({ cats, currentUser, currentUserId, navigate, setSelected
 }
 
 function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
+  const previewRef = useRef(null);
   const videoRef = useRef(null);
   const backgroundVideoRef = useRef(null);
   const galleryInputRef = useRef(null);
@@ -1349,6 +1350,7 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
   const [zoomMode, setZoomMode] = useState('1x');
   const [cameraZoomRange, setCameraZoomRange] = useState({ min: 1, max: 1, supported: false });
   const [cameraModeAvailability, setCameraModeAvailability] = useState({ pointFive: false, three: false });
+  const [streamOrientation, setStreamOrientation] = useState('portrait');
 
   useEffect(() => {
     let cancelled = false;
@@ -1454,6 +1456,9 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
       backgroundVideoRef.current.srcObject = stream;
       await backgroundVideoRef.current.play();
     }
+    const width = videoRef.current?.videoWidth || 0;
+    const height = videoRef.current?.videoHeight || 0;
+    setStreamOrientation(width > height ? 'landscape' : 'portrait');
   }
 
   async function inspectCameraAfterPreview(mode, startedAt, selectedCameraDevice = null) {
@@ -1498,9 +1503,10 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
       settingsAfterZoom,
       videoWidth: videoRef.current?.videoWidth,
       videoHeight: videoRef.current?.videoHeight,
-      previewWidth: videoRef.current?.clientWidth,
-      previewHeight: videoRef.current?.clientHeight,
-      previewOrientation: (videoRef.current?.clientHeight || 0) >= (videoRef.current?.clientWidth || 0) ? 'portrait' : 'landscape',
+      isLandscapeStream: (videoRef.current?.videoWidth || 0) > (videoRef.current?.videoHeight || 0),
+      previewWidth: previewRef.current?.clientWidth,
+      previewHeight: previewRef.current?.clientHeight,
+      previewOrientation: (previewRef.current?.clientHeight || 0) >= (previewRef.current?.clientWidth || 0) ? 'portrait' : 'landscape',
       objectFit: window.getComputedStyle(videoRef.current).objectFit,
       selectedZoom: settingsAfterZoom.zoom ?? 1,
     });
@@ -1638,21 +1644,23 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
 
   return (
     <section className="snap-camera-screen">
-      <video
-        ref={backgroundVideoRef}
-        className="snap-camera-video-bg"
-        playsInline
-        muted
-        autoPlay
-        aria-hidden="true"
-      />
-      <video
-        ref={videoRef}
-        className="snap-camera-video"
-        playsInline
-        muted
-        autoPlay
-      />
+      <div ref={previewRef} className="snap-camera-preview">
+        <video
+          ref={backgroundVideoRef}
+          className="snap-camera-video-bg"
+          playsInline
+          muted
+          autoPlay
+          aria-hidden="true"
+        />
+        <video
+          ref={videoRef}
+          className={streamOrientation === 'landscape' ? 'snap-camera-video is-landscape-stream' : 'snap-camera-video'}
+          playsInline
+          muted
+          autoPlay
+        />
+      </div>
       <div className="snap-camera-shade" />
       {cameraStatus !== 'ready' && (cameraStatus !== 'requesting' || showSlowLoading) && (
         <div className="snap-camera-permission">

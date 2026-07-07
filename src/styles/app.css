@@ -1734,6 +1734,19 @@ button:disabled {
   background: #000000;
 }
 
+.snap-camera-preview {
+  position: absolute;
+  z-index: 1;
+  top: calc(88px + env(safe-area-inset-top));
+  left: 12px;
+  right: 12px;
+  bottom: calc(142px + env(safe-area-inset-bottom));
+  overflow: hidden;
+  border-radius: 32px;
+  background: #000000;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.34);
+}
+
 .snap-camera-video-bg,
 .snap-camera-video {
   position: absolute;
@@ -1754,9 +1767,14 @@ button:disabled {
   object-fit: contain;
 }
 
+.snap-camera-video.is-landscape-stream {
+  object-fit: cover;
+}
+
 .snap-camera-shade {
   position: absolute;
   inset: 0;
+  z-index: 2;
   pointer-events: none;
   background:
     linear-gradient(180deg, rgba(0, 0, 0, 0.5), transparent 22%, transparent 64%, rgba(0, 0, 0, 0.76)),
@@ -1796,7 +1814,7 @@ button:disabled {
 
 .snap-camera-topbar {
   position: absolute;
-  z-index: 4;
+  z-index: 5;
   top: calc(14px + env(safe-area-inset-top));
   left: 16px;
   right: 16px;
@@ -1861,7 +1879,7 @@ button:disabled {
 
 .snap-side-tools {
   position: absolute;
-  z-index: 4;
+  z-index: 5;
   top: calc(92px + env(safe-area-inset-top));
   right: 14px;
   display: grid;
@@ -1883,7 +1901,7 @@ button:disabled {
 
 .snap-capture-dock {
   position: absolute;
-  z-index: 4;
+  z-index: 5;
   left: 0;
   right: 0;
   bottom: calc(28px + env(safe-area-inset-bottom));
@@ -1942,7 +1960,7 @@ button:disabled {
 
 .snap-native-capture {
   position: absolute;
-  z-index: 4;
+  z-index: 5;
   left: 50%;
   bottom: calc(204px + env(safe-area-inset-bottom));
   transform: translateX(-50%);
@@ -1962,7 +1980,7 @@ button:disabled {
 
 .snap-zoom-control {
   position: absolute;
-  z-index: 4;
+  z-index: 5;
   left: 50%;
   bottom: calc(158px + env(safe-area-inset-bottom));
   transform: translateX(-50%);
