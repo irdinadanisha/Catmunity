@@ -1338,7 +1338,6 @@ function ExploreScreen({ cats, currentUser, currentUserId, navigate, setSelected
 function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
   const previewRef = useRef(null);
   const videoRef = useRef(null);
-  const backgroundVideoRef = useRef(null);
   const galleryInputRef = useRef(null);
   const nativeCameraInputRef = useRef(null);
   const streamRef = useRef(null);
@@ -1518,10 +1517,6 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
     if (videoRef.current) {
       videoRef.current.srcObject = stream;
       await videoRef.current.play();
-    }
-    if (backgroundVideoRef.current) {
-      backgroundVideoRef.current.srcObject = stream;
-      await backgroundVideoRef.current.play();
     }
     const width = videoRef.current?.videoWidth || 0;
     const height = videoRef.current?.videoHeight || 0;
@@ -1719,23 +1714,14 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
     <section className="snap-camera-screen">
       <div ref={previewRef} className="snap-camera-preview" style={{ '--camera-preview-aspect-ratio': previewRatio }}>
         <video
-          ref={backgroundVideoRef}
-          className="snap-camera-video-bg"
-          playsInline
-          muted
-          autoPlay
-          aria-hidden="true"
-        />
-        <video
           ref={videoRef}
           className={streamOrientation === 'landscape' ? 'snap-camera-video is-landscape-stream' : 'snap-camera-video'}
           playsInline
           muted
           autoPlay
         />
+        <div className="snap-camera-shade" aria-hidden="true" />
       </div>
-      <div className="snap-camera-corner-mask" aria-hidden="true" />
-      <div className="snap-camera-shade" />
       {cameraStatus !== 'ready' && (cameraStatus !== 'requesting' || showSlowLoading) && (
         <div className="snap-camera-permission">
           <PawPrint size={30} />

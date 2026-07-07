@@ -1728,23 +1728,23 @@ button:disabled {
 
 .snap-camera-screen {
   position: relative;
-  min-height: 100svh;
+  min-height: 100dvh;
   overflow: hidden;
   color: #ffffff;
   background: #000000;
 }
 
 .snap-camera-preview {
-  --camera-preview-radius: 34px;
+  --camera-radius: 34px;
   position: absolute;
   z-index: 1;
   top: calc(88px + env(safe-area-inset-top));
   left: 12px;
   right: 12px;
-  bottom: calc(142px + env(safe-area-inset-bottom));
+  height: clamp(360px, calc(100dvh - 306px - env(safe-area-inset-top) - env(safe-area-inset-bottom)), 620px);
   aspect-ratio: var(--camera-preview-aspect-ratio, 16 / 9);
   overflow: hidden;
-  border-radius: var(--camera-preview-radius);
+  border-radius: var(--camera-radius);
   background: #000000;
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.34);
   isolation: isolate;
@@ -1752,7 +1752,6 @@ button:disabled {
   -webkit-mask-image: -webkit-radial-gradient(white, black);
 }
 
-.snap-camera-video-bg,
 .snap-camera-video {
   position: absolute;
   inset: 0;
@@ -1761,17 +1760,8 @@ button:disabled {
   object-position: center;
   object-fit: cover;
   background: #000000;
-  border-radius: var(--camera-preview-radius);
+  border-radius: var(--camera-radius);
   transform: translateZ(0);
-}
-
-.snap-camera-video-bg {
-  filter: blur(22px) brightness(0.55);
-  transform: scale(1.08) translateZ(0);
-}
-
-.snap-camera-video {
-  object-fit: cover;
 }
 
 .snap-camera-shade {
@@ -1779,25 +1769,10 @@ button:disabled {
   inset: 0;
   z-index: 2;
   pointer-events: none;
+  border-radius: var(--camera-radius);
   background:
     linear-gradient(180deg, rgba(0, 0, 0, 0.5), transparent 22%, transparent 64%, rgba(0, 0, 0, 0.76)),
     radial-gradient(circle at 50% 62%, transparent 0, rgba(0, 0, 0, 0.1) 58%, rgba(0, 0, 0, 0.4) 100%);
-}
-
-.snap-camera-corner-mask {
-  --camera-preview-radius: 34px;
-  position: absolute;
-  z-index: 4;
-  top: calc(88px + env(safe-area-inset-top));
-  left: 12px;
-  right: 12px;
-  bottom: calc(142px + env(safe-area-inset-bottom));
-  pointer-events: none;
-  background:
-    radial-gradient(circle at var(--camera-preview-radius) var(--camera-preview-radius), transparent 0 33px, #000000 34px) top left / 46px 46px no-repeat,
-    radial-gradient(circle at calc(46px - var(--camera-preview-radius)) var(--camera-preview-radius), transparent 0 33px, #000000 34px) top right / 46px 46px no-repeat,
-    radial-gradient(circle at var(--camera-preview-radius) calc(46px - var(--camera-preview-radius)), transparent 0 33px, #000000 34px) bottom left / 46px 46px no-repeat,
-    radial-gradient(circle at calc(46px - var(--camera-preview-radius)) calc(46px - var(--camera-preview-radius)), transparent 0 33px, #000000 34px) bottom right / 46px 46px no-repeat;
 }
 
 .snap-native-copy {
