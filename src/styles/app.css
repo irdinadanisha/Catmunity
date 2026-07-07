@@ -1880,7 +1880,7 @@ button:disabled {
 .snap-side-tools {
   position: absolute;
   z-index: 5;
-  top: calc(92px + env(safe-area-inset-top));
+  top: calc(118px + env(safe-area-inset-top));
   right: 14px;
   display: grid;
   gap: 13px;
@@ -1962,19 +1962,19 @@ button:disabled {
   position: absolute;
   z-index: 5;
   left: 50%;
-  bottom: calc(204px + env(safe-area-inset-bottom));
+  bottom: calc(132px + env(safe-area-inset-bottom));
   transform: translateX(-50%);
-  min-height: 38px;
+  min-height: 30px;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 0 13px;
+  gap: 6px;
+  padding: 0 10px;
   border: 0;
   border-radius: 999px;
   color: rgba(255, 255, 255, 0.9);
   background: rgba(16, 16, 16, 0.42);
   backdrop-filter: blur(16px);
-  font-size: 0.78rem;
+  font-size: 0.68rem;
   font-weight: 900;
 }
 
@@ -1982,7 +1982,7 @@ button:disabled {
   position: absolute;
   z-index: 5;
   left: 50%;
-  bottom: calc(158px + env(safe-area-inset-bottom));
+  bottom: calc(172px + env(safe-area-inset-bottom));
   transform: translateX(-50%);
   display: inline-flex;
   align-items: center;

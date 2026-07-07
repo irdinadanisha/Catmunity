@@ -1343,7 +1343,7 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
   const nativeCameraInputRef = useRef(null);
   const streamRef = useRef(null);
   const availableDevicesRef = useRef([]);
-  const zoomDeviceMapRef = useRef({ pointFive: null, one: null, three: null });
+  const zoomDeviceMapRef = useRef({ pointFive: null, one: null });
   const oneXCorrectionAttemptedRef = useRef(false);
   const [cameraStatus, setCameraStatus] = useState('requesting');
   const [showSlowLoading, setShowSlowLoading] = useState(false);
@@ -1351,7 +1351,7 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
   const [zoomLevel, setZoomLevel] = useState(1);
   const [zoomMode, setZoomMode] = useState('1x');
   const [cameraZoomRange, setCameraZoomRange] = useState({ min: 1, max: 1, supported: false });
-  const [cameraModeAvailability, setCameraModeAvailability] = useState({ pointFive: false, three: false });
+  const [cameraModeAvailability, setCameraModeAvailability] = useState({ pointFive: false });
   const [streamOrientation, setStreamOrientation] = useState('portrait');
 
   useEffect(() => {
@@ -1430,12 +1430,12 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
     return /ultra[\s-]?wide|0\.5x?|0,5x?/.test(device.label.toLowerCase());
   }
 
-  function isTelephotoCamera(device) {
-    return /tele|telephoto|2x|3x/.test(device.label.toLowerCase());
+  function isNonStandardZoomCamera(device) {
+    return /tele|telephoto|zoom|2x/.test(device.label.toLowerCase());
   }
 
   function selectMainRearCameraFor1x(devices) {
-    const normalRearDevices = devices.filter((device) => isRearCamera(device) && !isUltraWideCamera(device) && !isTelephotoCamera(device));
+    const normalRearDevices = devices.filter((device) => isRearCamera(device) && !isUltraWideCamera(device) && !isNonStandardZoomCamera(device));
 
     return normalRearDevices
       .map((device, index) => {
@@ -1454,22 +1454,16 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
     return devices.find((device) => isRearCamera(device) && isUltraWideCamera(device)) || null;
   }
 
-  function selectTelephotoOrZoomFor3x(devices) {
-    return devices.find((device) => isRearCamera(device) && isTelephotoCamera(device)) || null;
-  }
-
   function cacheZoomDevices(devices) {
     zoomDeviceMapRef.current = {
       pointFive: selectUltraWideCameraForPoint5x(devices),
       one: selectMainRearCameraFor1x(devices),
-      three: selectTelephotoOrZoomFor3x(devices),
     };
     return zoomDeviceMapRef.current;
   }
 
   function getDeviceForMode(mode) {
     if (mode === '.5x') return zoomDeviceMapRef.current.pointFive;
-    if (mode === '3x') return zoomDeviceMapRef.current.three;
     return zoomDeviceMapRef.current.one;
   }
 
@@ -1477,7 +1471,6 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
     const deviceMap = cacheZoomDevices(devices);
     setCameraModeAvailability({
       pointFive: Boolean(deviceMap.pointFive || (capabilities.zoom && (capabilities.zoom.min ?? 1) <= 0.5)),
-      three: Boolean(deviceMap.three || (capabilities.zoom && (capabilities.zoom.max ?? 1) >= 3)),
     });
   }
 
@@ -1623,7 +1616,7 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
         !selectedCameraDevice?.deviceId ||
         (currentDeviceId && selectedCameraDevice.deviceId === currentDeviceId);
 
-      let requestedZoom = mode === '3x' ? 3 : 1;
+      let requestedZoom = 1;
       if (mode === '.5x') requestedZoom = 0.5;
 
       if (canUseCurrentTrack && currentCapabilities.zoom && currentTrack?.applyConstraints) {
@@ -1678,7 +1671,7 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
 
   async function handleZoomMode(nextMode) {
     if (nextMode === zoomMode || processing) return;
-    if (nextMode === '1x' || nextMode === '.5x' || nextMode === '3x') {
+    if (nextMode === '1x' || nextMode === '.5x') {
       await startCameraForZoomMode(nextMode);
     }
   }
@@ -1775,15 +1768,6 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
           <RotateCcw size={25} />
           <span>Flip</span>
         </button>
-        <button
-          className="snap-tool-button"
-          type="button"
-          onClick={() => galleryInputRef.current?.click()}
-          aria-label="Choose from gallery"
-        >
-          <ImageIcon size={25} />
-          <span>Gallery</span>
-        </button>
       </div>
       <div className="snap-capture-dock">
         <button className="snap-gallery-button" type="button" onClick={() => galleryInputRef.current?.click()} aria-label="Choose photo">
@@ -1806,7 +1790,6 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
         {[
           { mode: '.5x', label: '.5x', enabled: cameraModeAvailability.pointFive },
           { mode: '1x', label: '1x', enabled: true },
-          { mode: '3x', label: '3x', enabled: cameraModeAvailability.three },
         ].map(({ mode, label, enabled }) => {
           return (
             <button
@@ -1840,7 +1823,7 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
         onChange={choosePhoto}
       />
       <button className="snap-native-capture" type="button" disabled={processing} onClick={openDeviceCamera}>
-        <Camera size={16} /> Open device camera
+        <Camera size={14} /> Device camera
       </button>
     </section>
   );
