@@ -550,7 +550,7 @@ function App() {
       userId: currentUserId,
       catId: cat.id,
       caption: post.body,
-      imageUrl: cat.original_image_url || cat.image_url || cat.cropped_image_url,
+      imageUrl: getPostImageUrl(cat),
       locationName: cat.area_name || cat.location_name,
       mentions: extractMentions(post.body),
     });
@@ -1005,6 +1005,14 @@ function formatDiscoveryDate(value) {
     day: 'numeric',
     year: 'numeric',
   }).format(date);
+}
+
+function isPersistentImageUrl(value = '') {
+  return /^https?:/i.test(value) || /^data:image\//i.test(value);
+}
+
+function getPostImageUrl(cat) {
+  return [cat?.original_image_url, cat?.image_url, cat?.cropped_image_url].find(isPersistentImageUrl) || cat?.cropped_image_url || '';
 }
 
 function renderMentionText(text = '') {
@@ -1892,6 +1900,8 @@ function CommunityScreen({
 
 function CommunityPostCard({ post, user, cat, isFriendPost, onOpenUser, onToggleLike, onComment, onDelete }) {
   const [commentText, setCommentText] = useState('');
+  const [imageFailed, setImageFailed] = useState(false);
+  const postImageUrl = !imageFailed && isPersistentImageUrl(post.image_url) ? post.image_url : cat?.cropped_image_url;
 
   function submitComment(event) {
     event.preventDefault();
@@ -1909,8 +1919,13 @@ function CommunityPostCard({ post, user, cat, isFriendPost, onOpenUser, onToggle
           <small>{isFriendPost ? 'Friend post' : 'Nearby'} · {post.created_at} · {post.location_name}</small>
         </span>
       </button>
-      {(post.image_url || cat?.cropped_image_url) && (
-        <img className="post-image" src={post.image_url || cat?.cropped_image_url} alt="Community cat sighting" />
+      {postImageUrl && (
+        <img
+          className="post-image"
+          src={postImageUrl}
+          alt="Community cat sighting"
+          onError={() => setImageFailed(true)}
+        />
       )}
       <p>{renderMentionText(post.body)}</p>
       <div className="post-actions">

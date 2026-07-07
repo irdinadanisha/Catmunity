@@ -499,11 +499,12 @@ async function createSupabaseSighting({ userId, catId, capture, photoUrl = null,
 
 function mapSupabaseCat(cat, uiUserId, caught, userCat = null) {
   const limitedInfo = !caught;
+  const originalImageUrl = isPersistentImageUrl(cat.original_image_url) ? cat.original_image_url : '';
   return {
     id: cat.id,
     name: cat.name || 'Unnamed Cat',
-    image_url: cat.original_image_url || cat.cropped_image_url,
-    original_image_url: cat.original_image_url || cat.cropped_image_url,
+    image_url: originalImageUrl || cat.cropped_image_url,
+    original_image_url: originalImageUrl,
     cropped_image_url: cat.cropped_image_url,
     color: limitedInfo ? '' : cat.colour || '',
     colour: limitedInfo ? '' : cat.colour || '',
@@ -534,6 +535,10 @@ function mapSupabaseCat(cat, uiUserId, caught, userCat = null) {
     updated_at: cat.updated_at,
     map: { x: 52, y: 48 },
   };
+}
+
+function isPersistentImageUrl(value = '') {
+  return /^https?:/i.test(value) || /^data:image\//i.test(value);
 }
 
 function getAreaName(latitude, longitude) {
