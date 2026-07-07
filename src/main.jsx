@@ -36,7 +36,6 @@ import {
   addExistingCatToUserCollection,
   addExistingCatToSupabase,
   approximateLocation,
-  autoDetectCatCrop,
   createNewCatInSupabase,
   createNewCatWithCanonicalLocation,
   duplicateLocationRadiusMeters,
@@ -408,17 +407,18 @@ function App() {
     showToast(isFollowing ? 'Friend unfollowed.' : 'Friend followed.');
   }
 
-  async function handlePhotoSelected(file) {
+  async function handlePhotoSelected(file, source = 'camera') {
     if (!file) return;
     setIsProcessingCatPhoto(true);
     const previewUrl = URL.createObjectURL(file);
     try {
-      const crop = await autoDetectCatCrop(previewUrl);
       const position = await getCurrentAccurateLocation();
       setCapture({
         originalImage: previewUrl,
-        croppedImage: crop.croppedImageUrl,
-        cropMode: crop.mode,
+        originalFileName: file.name,
+        croppedImage: '',
+        cropMode: 'manual-square',
+        source,
         latitude: position.latitude,
         longitude: position.longitude,
         locationName: approximateLocation(position.latitude, position.longitude),
@@ -429,7 +429,14 @@ function App() {
     }
   }
 
-  function handleConfirmCatch() {
+  function handleConfirmCatch(croppedImage) {
+    if (croppedImage) {
+      setCapture((current) => ({
+        ...current,
+        croppedImage,
+        cropMode: 'square-crop',
+      }));
+    }
     navigate('registrationChoice');
   }
 
@@ -765,7 +772,11 @@ function App() {
         {screen === 'explore' && <ExploreScreen {...commonProps} />}
         {screen === 'catch' && <CatchScreen onPhotoSelected={handlePhotoSelected} onClose={() => navigate('explore')} processing={isProcessingCatPhoto} />}
         {screen === 'confirm' && (
-          <ConfirmScreen capture={capture} onBack={() => navigate('catch')} onConfirm={handleConfirmCatch} />
+          <ConfirmScreen
+            capture={capture}
+            onBack={() => navigate('catch')}
+            onConfirm={handleConfirmCatch}
+          />
         )}
         {screen === 'registrationChoice' && (
           <RegistrationChoiceScreen
@@ -1690,14 +1701,14 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
     canvas.toBlob((blob) => {
       if (!blob) return;
       const file = new File([blob], `catmunity-catch-${Date.now()}.jpg`, { type: 'image/jpeg' });
-      onPhotoSelected(file);
+      onPhotoSelected(file, 'camera');
     }, 'image/jpeg', 0.92);
   }
 
   function choosePhoto(event) {
     const file = event.target.files?.[0];
     if (!file) return;
-    onPhotoSelected(file);
+    onPhotoSelected(file, 'gallery');
     event.target.value = '';
   }
 
@@ -1822,20 +1833,216 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
 }
 
 function ConfirmScreen({ capture, onBack, onConfirm }) {
+  const [isCropping, setIsCropping] = useState(false);
+
   if (!capture) return null;
+
+  async function handleUsePhoto(cropSettings) {
+    setIsCropping(true);
+    try {
+      const croppedImage = await createSquareCatchCrop(capture.originalImage, capture.originalFileName, cropSettings);
+      onConfirm(croppedImage);
+    } finally {
+      setIsCropping(false);
+    }
+  }
+
   return (
     <section className="screen">
       <BackButton onBack={onBack} />
       <ScreenHeader title="Catch this cat?" subtitle={`Location saved as ${capture.locationName}.`} icon={Sparkles} />
-      <div className="confirm-frame">
-        <img src={capture.croppedImage} alt="Cropped cat preview" />
-        <span className="pill">{capture.cropMode === 'square-crop' ? 'Square crop ready' : 'Photo ready'}</span>
-      </div>
+      <SquareCropEditor
+        imageUrl={capture.originalImage}
+        disabled={isCropping}
+        onUsePhoto={handleUsePhoto}
+      />
       <div className="confirm-actions">
-        <button className="secondary-button" onClick={onBack}><X size={18} /> Retake</button>
-        <button className="primary-button" onClick={onConfirm}><Check size={18} /> Cat caught!</button>
+        <button className="secondary-button" onClick={onBack} disabled={isCropping}>
+          <X size={18} /> {capture.source === 'gallery' ? 'Choose another' : 'Retake'}
+        </button>
+        <button className="primary-button" disabled={isCropping} form="catch-crop-form">
+          <Check size={18} /> {isCropping ? 'Cropping...' : 'Use Photo'}
+        </button>
       </div>
     </section>
+  );
+}
+
+function SquareCropEditor({ imageUrl, disabled = false, onUsePhoto }) {
+  const frameRef = useRef(null);
+  const imageRef = useRef(null);
+  const pointerRef = useRef(null);
+  const pinchRef = useRef(null);
+  const [imageMeta, setImageMeta] = useState(null);
+  const [crop, setCrop] = useState({ x: 0, y: 0, scale: 1 });
+
+  function clampCrop(nextCrop) {
+    const frameSize = frameRef.current?.clientWidth || 320;
+    const imageWidth = imageMeta?.width || 1;
+    const imageHeight = imageMeta?.height || 1;
+    const baseScale = Math.max(frameSize / imageWidth, frameSize / imageHeight);
+    const scale = Math.min(Math.max(nextCrop.scale, 1), 4);
+    const drawnWidth = imageWidth * baseScale * scale;
+    const drawnHeight = imageHeight * baseScale * scale;
+    const maxX = Math.max(0, (drawnWidth - frameSize) / 2);
+    const maxY = Math.max(0, (drawnHeight - frameSize) / 2);
+
+    return {
+      x: Math.min(Math.max(nextCrop.x, -maxX), maxX),
+      y: Math.min(Math.max(nextCrop.y, -maxY), maxY),
+      scale,
+    };
+  }
+
+  function updateCrop(nextCrop) {
+    setCrop((current) => clampCrop(typeof nextCrop === 'function' ? nextCrop(current) : nextCrop));
+  }
+
+  function handleImageLoad(event) {
+    setImageMeta({
+      width: event.currentTarget.naturalWidth || event.currentTarget.width,
+      height: event.currentTarget.naturalHeight || event.currentTarget.height,
+    });
+    setCrop({ x: 0, y: 0, scale: 1 });
+  }
+
+  function getLocalPoint(event) {
+    return { x: event.clientX, y: event.clientY };
+  }
+
+  function handlePointerDown(event) {
+    if (disabled || event.pointerType === 'touch') return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    pointerRef.current = {
+      pointerId: event.pointerId,
+      start: getLocalPoint(event),
+      crop,
+    };
+  }
+
+  function handlePointerMove(event) {
+    if (!pointerRef.current || pointerRef.current.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    const point = getLocalPoint(event);
+    updateCrop({
+      ...pointerRef.current.crop,
+      x: pointerRef.current.crop.x + point.x - pointerRef.current.start.x,
+      y: pointerRef.current.crop.y + point.y - pointerRef.current.start.y,
+    });
+  }
+
+  function handlePointerUp(event) {
+    if (pointerRef.current?.pointerId === event.pointerId) {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+      pointerRef.current = null;
+    }
+  }
+
+  function getTouchMidpoint(touches) {
+    return {
+      x: (touches[0].clientX + touches[1].clientX) / 2,
+      y: (touches[0].clientY + touches[1].clientY) / 2,
+    };
+  }
+
+  function getTouchDistance(touches) {
+    return Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
+  }
+
+  function handleTouchStart(event) {
+    if (disabled) return;
+    if (event.touches.length === 1) {
+      const touch = event.touches[0];
+      pinchRef.current = {
+        mode: 'drag',
+        start: { x: touch.clientX, y: touch.clientY },
+        crop,
+      };
+    }
+    if (event.touches.length === 2) {
+      pinchRef.current = {
+        mode: 'pinch',
+        startDistance: getTouchDistance(event.touches),
+        startMidpoint: getTouchMidpoint(event.touches),
+        crop,
+      };
+    }
+  }
+
+  function handleTouchMove(event) {
+    if (!pinchRef.current) return;
+    event.preventDefault();
+
+    if (pinchRef.current.mode === 'drag' && event.touches.length === 1) {
+      const touch = event.touches[0];
+      updateCrop({
+        ...pinchRef.current.crop,
+        x: pinchRef.current.crop.x + touch.clientX - pinchRef.current.start.x,
+        y: pinchRef.current.crop.y + touch.clientY - pinchRef.current.start.y,
+      });
+    }
+
+    if (pinchRef.current.mode === 'pinch' && event.touches.length === 2) {
+      const distance = getTouchDistance(event.touches);
+      const midpoint = getTouchMidpoint(event.touches);
+      const ratio = distance / Math.max(pinchRef.current.startDistance, 1);
+      updateCrop({
+        x: pinchRef.current.crop.x + midpoint.x - pinchRef.current.startMidpoint.x,
+        y: pinchRef.current.crop.y + midpoint.y - pinchRef.current.startMidpoint.y,
+        scale: pinchRef.current.crop.scale * ratio,
+      });
+    }
+  }
+
+  function handleTouchEnd(event) {
+    if (event.touches.length === 0) {
+      pinchRef.current = null;
+    } else if (event.touches.length === 1) {
+      const touch = event.touches[0];
+      pinchRef.current = {
+        mode: 'drag',
+        start: { x: touch.clientX, y: touch.clientY },
+        crop,
+      };
+    }
+  }
+
+  return (
+    <form
+      id="catch-crop-form"
+      className="catch-crop"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!disabled) onUsePhoto({ ...crop, frameSize: frameRef.current?.clientWidth || 320 });
+      }}
+    >
+      <div
+        ref={frameRef}
+        className="catch-crop-frame"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
+      >
+        <img
+          ref={imageRef}
+          src={imageUrl}
+          alt="Move and pinch to fit the cat inside the square"
+          draggable="false"
+          onLoad={handleImageLoad}
+          style={{
+            transform: `translate(calc(-50% + ${crop.x}px), calc(-50% + ${crop.y}px)) scale(${crop.scale})`,
+          }}
+        />
+        <div className="catch-crop-grid" aria-hidden="true" />
+      </div>
+      <p className="catch-crop-hint">Drag or pinch to fit the cat inside the square.</p>
+    </form>
   );
 }
 
@@ -3276,6 +3483,35 @@ async function createCroppedProfilePhoto(imageUrl, filename, settings) {
     throw new Error('Could not crop profile photo.');
   }
   return new File([blob], getCroppedFilename(filename), { type: 'image/jpeg' });
+}
+
+async function createSquareCatchCrop(imageUrl, filename, settings) {
+  const image = await loadImageElement(imageUrl);
+  const outputSize = 1200;
+  const canvas = document.createElement('canvas');
+  canvas.width = outputSize;
+  canvas.height = outputSize;
+  const context = canvas.getContext('2d');
+  const imageWidth = image.naturalWidth || image.width;
+  const imageHeight = image.naturalHeight || image.height;
+  const baseScale = Math.max(outputSize / imageWidth, outputSize / imageHeight);
+  const scale = baseScale * settings.scale;
+  const drawnWidth = imageWidth * scale;
+  const drawnHeight = imageHeight * scale;
+  const outputRatio = outputSize / (settings.frameSize || outputSize);
+  const offsetX = (outputSize - drawnWidth) / 2 + (settings.x || 0) * outputRatio;
+  const offsetY = (outputSize - drawnHeight) / 2 + (settings.y || 0) * outputRatio;
+
+  context.fillStyle = '#fff0c8';
+  context.fillRect(0, 0, outputSize, outputSize);
+  context.drawImage(image, offsetX, offsetY, drawnWidth, drawnHeight);
+
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+  if (!blob) {
+    throw new Error('Could not crop catch photo.');
+  }
+
+  return URL.createObjectURL(new File([blob], getCroppedFilename(filename || 'catmunity-catch.jpg'), { type: 'image/jpeg' }));
 }
 
 function loadImageElement(source) {
