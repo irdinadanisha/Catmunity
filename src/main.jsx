@@ -1340,6 +1340,7 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
   const galleryInputRef = useRef(null);
   const nativeCameraInputRef = useRef(null);
   const streamRef = useRef(null);
+  const selectedCameraIdRef = useRef(null);
   const [cameraStatus, setCameraStatus] = useState('requesting');
   const [facingMode, setFacingMode] = useState('environment');
   const [zoomLevel, setZoomLevel] = useState(1);
@@ -1365,6 +1366,38 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
     streamRef.current = null;
   }
 
+  function getCameraConstraints(deviceId = null) {
+    return {
+      audio: false,
+      video: {
+        ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: facingMode } }),
+        width: { ideal: 1080 },
+        height: { ideal: 1920 },
+        aspectRatio: { ideal: 9 / 16 },
+        resizeMode: { ideal: 'none' },
+      },
+    };
+  }
+
+  function chooseWidestRearCamera(devices) {
+    const videoInputs = devices.filter((device) => device.kind === 'videoinput');
+    const scored = videoInputs
+      .map((device, index) => {
+        const label = device.label.toLowerCase();
+        let score = 0;
+        if (/back|rear|environment/.test(label)) score += 40;
+        if (/ultra[\s-]?wide|0\.5|0,5/.test(label)) score += 80;
+        else if (/wide/.test(label)) score += 45;
+        if (/dual|triple/.test(label)) score += 18;
+        if (/front|user|face/.test(label)) score -= 120;
+        if (/tele|telephoto|2x|3x/.test(label)) score -= 90;
+        return { device, score, index };
+      })
+      .sort((a, b) => b.score - a.score || a.index - b.index);
+
+    return scored[0]?.score > 0 ? scored[0].device : null;
+  }
+
   async function startCamera(isCancelled = () => false) {
     if (!navigator.mediaDevices?.getUserMedia) {
       setCameraStatus('unsupported');
@@ -1375,19 +1408,30 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
     stopCameraStream();
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: {
-          facingMode: { ideal: facingMode },
-          width: { ideal: 1080 },
-          height: { ideal: 1920 },
-          aspectRatio: { ideal: 9 / 16 },
-          resizeMode: { ideal: 'none' },
-        },
-      });
+      let stream = await navigator.mediaDevices.getUserMedia(getCameraConstraints(
+        facingMode === 'environment' ? selectedCameraIdRef.current : null,
+      ));
       if (isCancelled()) {
         stream.getTracks().forEach((track) => track.stop());
         return;
+      }
+
+      let availableVideoDevices = [];
+      let selectedCameraDevice = null;
+      if (facingMode === 'environment' && navigator.mediaDevices?.enumerateDevices) {
+        availableVideoDevices = (await navigator.mediaDevices.enumerateDevices()).filter((device) => device.kind === 'videoinput');
+        selectedCameraDevice = chooseWidestRearCamera(availableVideoDevices);
+        const currentDeviceId = stream.getVideoTracks()[0]?.getSettings?.().deviceId;
+
+        if (selectedCameraDevice?.deviceId && selectedCameraDevice.deviceId !== currentDeviceId) {
+          stream.getTracks().forEach((track) => track.stop());
+          selectedCameraIdRef.current = selectedCameraDevice.deviceId;
+          stream = await navigator.mediaDevices.getUserMedia(getCameraConstraints(selectedCameraDevice.deviceId));
+          if (isCancelled()) {
+            stream.getTracks().forEach((track) => track.stop());
+            return;
+          }
+        }
       }
 
       streamRef.current = stream;
@@ -1421,11 +1465,16 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
 
       const settingsAfterZoom = videoTrack?.getSettings?.() || {};
       console.info('[Catmunity camera]', {
+        availableVideoDevices,
+        selectedCameraDevice,
         capabilities,
         settingsBeforeZoom,
         settingsAfterZoom,
         videoWidth: videoRef.current?.videoWidth,
         videoHeight: videoRef.current?.videoHeight,
+        previewWidth: videoRef.current?.clientWidth,
+        previewHeight: videoRef.current?.clientHeight,
+        objectFit: window.getComputedStyle(videoRef.current).objectFit,
         zoomSupported: Boolean(capabilities.zoom),
         selectedZoom: settingsAfterZoom.zoom ?? 1,
       });
