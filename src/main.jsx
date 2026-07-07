@@ -1340,17 +1340,18 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
   const galleryInputRef = useRef(null);
   const nativeCameraInputRef = useRef(null);
   const streamRef = useRef(null);
-  const selectedCameraIdRef = useRef(null);
   const [cameraStatus, setCameraStatus] = useState('requesting');
   const [facingMode, setFacingMode] = useState('environment');
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [zoomMode, setZoomMode] = useState('1x');
   const [cameraZoomRange, setCameraZoomRange] = useState({ min: 1, max: 1, supported: false });
+  const [cameraModeAvailability, setCameraModeAvailability] = useState({ pointFive: false, three: false });
 
   useEffect(() => {
     let cancelled = false;
 
     async function openCamera() {
-      await startCamera(() => cancelled);
+      await startCameraForZoomMode('1x', () => cancelled);
     }
 
     openCamera();
@@ -1366,39 +1367,73 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
     streamRef.current = null;
   }
 
-  function getCameraConstraints(deviceId = null) {
+  function getCameraConstraints(deviceId = null, fallbackFacingMode = facingMode) {
     return {
       audio: false,
       video: {
-        ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: facingMode } }),
+        ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: fallbackFacingMode } }),
         width: { ideal: 1080 },
         height: { ideal: 1920 },
         aspectRatio: { ideal: 9 / 16 },
-        resizeMode: { ideal: 'none' },
       },
     };
   }
 
-  function chooseWidestRearCamera(devices) {
-    const videoInputs = devices.filter((device) => device.kind === 'videoinput');
-    const scored = videoInputs
+  async function getAvailableVideoDevices() {
+    if (!navigator.mediaDevices?.enumerateDevices) return [];
+    return (await navigator.mediaDevices.enumerateDevices()).filter((device) => device.kind === 'videoinput');
+  }
+
+  function isFrontCamera(device) {
+    return /front|user|face/.test(device.label.toLowerCase());
+  }
+
+  function isRearCamera(device) {
+    const label = device.label.toLowerCase();
+    return !isFrontCamera(device) && /back|rear|environment|camera/.test(label);
+  }
+
+  function isUltraWideCamera(device) {
+    return /ultra[\s-]?wide|0\.5x?|0,5x?/.test(device.label.toLowerCase());
+  }
+
+  function isTelephotoCamera(device) {
+    return /tele|telephoto|2x|3x/.test(device.label.toLowerCase());
+  }
+
+  function selectMainRearCameraFor1x(devices) {
+    const rearDevices = devices.filter((device) => isRearCamera(device) && !isFrontCamera(device));
+    const normalRearDevices = rearDevices.filter((device) => !isUltraWideCamera(device) && !isTelephotoCamera(device));
+
+    return normalRearDevices
       .map((device, index) => {
         const label = device.label.toLowerCase();
         let score = 0;
         if (/back|rear|environment/.test(label)) score += 40;
-        if (/ultra[\s-]?wide|0\.5|0,5/.test(label)) score += 80;
-        else if (/wide/.test(label)) score += 45;
-        if (/dual|triple/.test(label)) score += 18;
-        if (/front|user|face/.test(label)) score -= 120;
-        if (/tele|telephoto|2x|3x/.test(label)) score -= 90;
+        if (/\bwide\b/.test(label)) score += 18;
+        if (/main|normal|standard/.test(label)) score += 28;
+        if (/dual|triple/.test(label)) score -= 8;
         return { device, score, index };
       })
-      .sort((a, b) => b.score - a.score || a.index - b.index);
-
-    return scored[0]?.score > 0 ? scored[0].device : null;
+      .sort((a, b) => b.score - a.score || a.index - b.index)[0]?.device || normalRearDevices[0] || null;
   }
 
-  async function startCamera(isCancelled = () => false) {
+  function selectUltraWideCameraForPoint5x(devices) {
+    return devices.find((device) => isRearCamera(device) && isUltraWideCamera(device)) || null;
+  }
+
+  function selectTelephotoOrZoomFor3x(devices) {
+    return devices.find((device) => isRearCamera(device) && isTelephotoCamera(device)) || null;
+  }
+
+  function updateModeAvailability(devices, capabilities = {}) {
+    setCameraModeAvailability({
+      pointFive: Boolean(selectUltraWideCameraForPoint5x(devices) || (capabilities.zoom && (capabilities.zoom.min ?? 1) <= 0.5)),
+      three: Boolean(selectTelephotoOrZoomFor3x(devices) || (capabilities.zoom && (capabilities.zoom.max ?? 1) >= 3)),
+    });
+  }
+
+  async function startCameraForZoomMode(mode = '1x', isCancelled = () => false) {
     if (!navigator.mediaDevices?.getUserMedia) {
       setCameraStatus('unsupported');
       return;
@@ -1408,24 +1443,27 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
     stopCameraStream();
 
     try {
-      let stream = await navigator.mediaDevices.getUserMedia(getCameraConstraints(
-        facingMode === 'environment' ? selectedCameraIdRef.current : null,
-      ));
+      let stream = await navigator.mediaDevices.getUserMedia(getCameraConstraints(null));
       if (isCancelled()) {
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
 
-      let availableVideoDevices = [];
+      let availableVideoDevices = await getAvailableVideoDevices();
       let selectedCameraDevice = null;
-      if (facingMode === 'environment' && navigator.mediaDevices?.enumerateDevices) {
-        availableVideoDevices = (await navigator.mediaDevices.enumerateDevices()).filter((device) => device.kind === 'videoinput');
-        selectedCameraDevice = chooseWidestRearCamera(availableVideoDevices);
+      if (facingMode === 'environment') {
+        if (mode === '.5x') {
+          selectedCameraDevice = selectUltraWideCameraForPoint5x(availableVideoDevices);
+        } else if (mode === '3x') {
+          selectedCameraDevice = selectTelephotoOrZoomFor3x(availableVideoDevices);
+        } else {
+          selectedCameraDevice = selectMainRearCameraFor1x(availableVideoDevices);
+        }
+
         const currentDeviceId = stream.getVideoTracks()[0]?.getSettings?.().deviceId;
 
         if (selectedCameraDevice?.deviceId && selectedCameraDevice.deviceId !== currentDeviceId) {
           stream.getTracks().forEach((track) => track.stop());
-          selectedCameraIdRef.current = selectedCameraDevice.deviceId;
           stream = await navigator.mediaDevices.getUserMedia(getCameraConstraints(selectedCameraDevice.deviceId));
           if (isCancelled()) {
             stream.getTracks().forEach((track) => track.stop());
@@ -1439,12 +1477,21 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
       const capabilities = videoTrack?.getCapabilities?.() || {};
       const settingsBeforeZoom = videoTrack?.getSettings?.() || {};
 
-      // Start at the real camera default: use true 1x if the device exposes zoom,
-      // otherwise use the closest supported minimum. Never fake 1x with CSS scale.
+      updateModeAvailability(availableVideoDevices, capabilities);
+
+      let requestedZoom = 1;
+      if (mode === '.5x' && !selectedCameraDevice && capabilities.zoom) {
+        requestedZoom = Math.max(capabilities.zoom.min ?? 1, 0.5);
+      } else if (mode === '3x' && !selectedCameraDevice && capabilities.zoom) {
+        requestedZoom = Math.min(Math.max(3, capabilities.zoom.min ?? 1), capabilities.zoom.max ?? 3);
+      }
+
+      // For default 1x, use the normal main rear camera and apply real 1x zoom.
+      // Ultra-wide is only selected when the user explicitly taps .5x.
       if (capabilities.zoom && videoTrack?.applyConstraints) {
         const min = capabilities.zoom.min ?? 1;
         const max = capabilities.zoom.max ?? 1;
-        const normalZoom = Math.min(Math.max(1, min), max);
+        const normalZoom = Math.min(Math.max(requestedZoom, min), max);
         setCameraZoomRange({ min, max, supported: true });
         try {
           await videoTrack.applyConstraints({ advanced: [{ zoom: normalZoom }] });
@@ -1457,6 +1504,7 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
         setCameraZoomRange({ min: 1, max: 1, supported: false });
         setZoomLevel(1);
       }
+      setZoomMode(mode);
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -1465,8 +1513,10 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
 
       const settingsAfterZoom = videoTrack?.getSettings?.() || {};
       console.info('[Catmunity camera]', {
+        selectedZoomMode: mode,
         availableVideoDevices,
-        selectedCameraDevice,
+        selectedCameraLabel: selectedCameraDevice?.label || videoTrack?.label,
+        selectedCameraDeviceId: settingsAfterZoom.deviceId || selectedCameraDevice?.deviceId,
         capabilities,
         settingsBeforeZoom,
         settingsAfterZoom,
@@ -1474,6 +1524,7 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
         videoHeight: videoRef.current?.videoHeight,
         previewWidth: videoRef.current?.clientWidth,
         previewHeight: videoRef.current?.clientHeight,
+        previewOrientation: (videoRef.current?.clientHeight || 0) >= (videoRef.current?.clientWidth || 0) ? 'portrait' : 'landscape',
         objectFit: window.getComputedStyle(videoRef.current).objectFit,
         zoomSupported: Boolean(capabilities.zoom),
         selectedZoom: settingsAfterZoom.zoom ?? 1,
@@ -1482,6 +1533,13 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
       setCameraStatus('ready');
     } catch (error) {
       setCameraStatus(error?.name === 'NotAllowedError' ? 'denied' : 'error');
+    }
+  }
+
+  async function handleZoomMode(nextMode) {
+    if (nextMode === zoomMode || processing) return;
+    if (nextMode === '1x' || nextMode === '.5x' || nextMode === '3x') {
+      await startCameraForZoomMode(nextMode);
     }
   }
 
@@ -1554,7 +1612,7 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
               : 'You can still choose a photo from your gallery or use the device camera.'}
           </span>
           {cameraStatus !== 'requesting' && (
-            <button className="snap-permission-button" type="button" onClick={() => startCamera()}>
+            <button className="snap-permission-button" type="button" onClick={() => startCameraForZoomMode(zoomMode)}>
               Try camera again
             </button>
           )}
@@ -1610,20 +1668,21 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
         </button>
       </div>
       <div className="snap-zoom-control" aria-label="Camera zoom">
-        {[0.5, 1, 3].map((value) => {
-          const available = cameraZoomRange.supported && value >= cameraZoomRange.min && value <= cameraZoomRange.max;
-          const isNormalFallback = !cameraZoomRange.supported && value === 1;
-          const disabled = !(available || isNormalFallback);
+        {[
+          { mode: '.5x', label: '.5x', enabled: cameraModeAvailability.pointFive },
+          { mode: '1x', label: '1x', enabled: true },
+          { mode: '3x', label: '3x', enabled: cameraModeAvailability.three },
+        ].map(({ mode, label, enabled }) => {
           return (
             <button
-              key={value}
-              className={Math.abs(zoomLevel - value) < 0.05 ? 'active' : ''}
+              key={mode}
+              className={zoomMode === mode ? 'active' : ''}
               type="button"
-              disabled={disabled}
-              onClick={() => applyZoom(value)}
-              title={disabled ? 'Not supported by this browser/device camera' : undefined}
+              disabled={!enabled || cameraStatus !== 'ready'}
+              onClick={() => handleZoomMode(mode)}
+              title={!enabled ? 'Not supported by this browser/device camera' : undefined}
             >
-              {value === 0.5 ? '.5' : value}x
+              {label}
             </button>
           );
         })}
