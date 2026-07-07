@@ -53,6 +53,9 @@ import {
   createCommunityPost,
   createNotification,
   deleteCommunityPost,
+  fetchFollowCounts,
+  fetchFollowersList,
+  fetchFollowingList,
   fetchNotifications,
   fetchUnreadNotificationCount,
   followUserById,
@@ -133,6 +136,8 @@ function App() {
   const [followingIds, setFollowingIds] = useState([]);
   const [followingProfiles, setFollowingProfiles] = useState([]);
   const [followerProfiles, setFollowerProfiles] = useState([]);
+  const [followCountsByUserId, setFollowCountsByUserId] = useState({});
+  const [followListModal, setFollowListModal] = useState(null);
   const [socialUsers, setSocialUsers] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
@@ -185,6 +190,8 @@ function App() {
       setFollowingIds([]);
       setFollowingProfiles([]);
       setFollowerProfiles([]);
+      setFollowCountsByUserId({});
+      setFollowListModal(null);
       setSocialUsers([]);
       return undefined;
     }
@@ -205,6 +212,13 @@ function App() {
       setFollowingProfiles(mappedProfiles.filter((profile) => following.includes(profile.id)));
       setFollowerProfiles(mappedProfiles.filter((profile) => followers.includes(profile.id)));
       setSocialUsers(mappedProfiles);
+      setFollowCountsByUserId((counts) => ({
+        ...counts,
+        [currentUserId]: {
+          following: following.length,
+          followers: followers.length,
+        },
+      }));
     }
 
     loadSocialGraph();
@@ -413,6 +427,21 @@ function App() {
     setFollowingIds((ids) =>
       isFollowing ? ids.filter((id) => id !== userId) : [...new Set([...ids, userId])],
     );
+    setFollowCountsByUserId((counts) => ({
+      ...counts,
+      [currentUserId]: {
+        following: Math.max(0, (counts[currentUserId]?.following || followingIds.length) + (isFollowing ? -1 : 1)),
+        followers: counts[currentUserId]?.followers ?? followerProfiles.length,
+      },
+      ...(counts[userId]
+        ? {
+          [userId]: {
+            following: counts[userId].following,
+            followers: Math.max(0, counts[userId].followers + (isFollowing ? -1 : 1)),
+          },
+        }
+        : {}),
+    }));
     const user = communityUsers.find((item) => item.id === userId);
     if (user) {
       setFollowingProfiles((profiles) =>
@@ -429,6 +458,54 @@ function App() {
       });
     }
     showToast(isFollowing ? 'Friend unfollowed.' : 'Friend followed.');
+    return true;
+  }
+
+  async function loadFollowCountsForUser(profileUserId) {
+    if (!profileUserId || !isSupabaseConfigured) return;
+    const { data, error } = await fetchFollowCounts(profileUserId);
+    if (error) {
+      showToast(error.message || 'Follow counts could not load.');
+      return;
+    }
+    setFollowCountsByUserId((counts) => ({
+      ...counts,
+      [profileUserId]: data,
+    }));
+  }
+
+  async function openFollowList(profileUser, type) {
+    if (!profileUser?.id) return;
+    setFollowListModal({
+      profileUser,
+      type,
+      profiles: [],
+      loading: true,
+    });
+
+    const loader = type === 'followers' ? fetchFollowersList : fetchFollowingList;
+    const { data = [], error } = await loader(profileUser.id);
+    if (error) {
+      showToast(error.message || 'Follow list could not load.');
+      setFollowListModal(null);
+      return;
+    }
+
+    const profiles = data.map(mapCommunityProfile);
+    setSocialUsers((users) => mergeUsers([...users, ...profiles]));
+    setFollowListModal({
+      profileUser,
+      type,
+      profiles,
+      loading: false,
+    });
+    setFollowCountsByUserId((counts) => ({
+      ...counts,
+      [profileUser.id]: {
+        following: type === 'following' ? profiles.length : (counts[profileUser.id]?.following || 0),
+        followers: type === 'followers' ? profiles.length : (counts[profileUser.id]?.followers || 0),
+      },
+    }));
   }
 
   async function handlePhotoSelected(file, source = 'camera') {
@@ -700,6 +777,7 @@ function App() {
 
   async function openPublicProfile(userId) {
     setSelectedUserId(userId);
+    await loadFollowCountsForUser(userId);
     const collection = await fetchPublicUserCollection(userId, currentUserId);
     setPublicProfileCats(collection);
     navigate('publicProfile');
@@ -784,6 +862,19 @@ function App() {
           onConfirm={confirmRemoveCatFromCollection}
         />
       )}
+      {followListModal && (
+        <FollowListModal
+          modal={followListModal}
+          currentUserId={currentUserId}
+          followingIds={followingIds}
+          onClose={() => setFollowListModal(null)}
+          onOpenUser={(id) => {
+            setFollowListModal(null);
+            openPublicProfile(id);
+          }}
+          onToggleFollow={handleToggleFollow}
+        />
+      )}
 
       <motion.main
         key={screen}
@@ -829,6 +920,8 @@ function App() {
             {...commonProps}
             stats={stats}
             user={me}
+            followCounts={followCountsByUserId[currentUserId] || { following: followingProfiles.length, followers: followerProfiles.length }}
+            onOpenFollowList={openFollowList}
             onPostCat={startCommunityPost}
             onEditCat={startEditCat}
             onRemoveCat={requestRemoveCatFromCollection}
@@ -840,6 +933,8 @@ function App() {
             user={selectedUser}
             cats={publicCats}
             currentUserId={currentUserId}
+            followCounts={followCountsByUserId[selectedUser.id] || { following: 0, followers: 0 }}
+            onOpenFollowList={openFollowList}
             onBack={() => navigate('collection')}
             onPostCat={startCommunityPost}
             onSelectCat={(id) => {
@@ -858,8 +953,10 @@ function App() {
             followingIds={followingIds}
             followingProfiles={followingProfiles}
             followerProfiles={followerProfiles}
+            followCounts={followCountsByUserId[currentUserId] || { following: followingProfiles.length, followers: followerProfiles.length }}
             onSearchFriends={handleSearchFriends}
             onToggleFollow={handleToggleFollow}
+            onOpenFollowList={openFollowList}
             onCreate={() => {
               if (!caughtCats.length) {
                 showToast('Catch your first cat to get started!');
@@ -2277,7 +2374,18 @@ function CatDetailsForm({ cat, mode = 'create', onSave, onBack }) {
   );
 }
 
-function CollectionScreen({ caughtCats, stats, user, navigate, setSelectedCatId, onPostCat, onEditCat, onRemoveCat }) {
+function CollectionScreen({
+  caughtCats,
+  stats,
+  user,
+  followCounts,
+  navigate,
+  setSelectedCatId,
+  onOpenFollowList,
+  onPostCat,
+  onEditCat,
+  onRemoveCat,
+}) {
   return (
     <section className="screen collection-screen">
       <div className="profile-hero">
@@ -2287,6 +2395,7 @@ function CollectionScreen({ caughtCats, stats, user, navigate, setSelectedCatId,
           <h1>{user.name}</h1>
           <UserHandle user={user} />
           <p>{user.bio}</p>
+          <FollowCounts user={user} counts={followCounts} onOpen={onOpenFollowList} />
         </div>
         <span className="profile-status"><ShieldCheck size={14} /> {user.public_profile ? 'Public' : 'Private'}</span>
       </div>
@@ -2391,7 +2500,7 @@ function getEstimatedMapCat(cat) {
   };
 }
 
-function PublicProfileScreen({ user, cats, currentUserId, onBack, onSelectCat, onPostCat }) {
+function PublicProfileScreen({ user, cats, currentUserId, followCounts, onOpenFollowList, onBack, onSelectCat, onPostCat }) {
   return (
     <section className="screen">
       <BackButton onBack={onBack} />
@@ -2402,6 +2511,7 @@ function PublicProfileScreen({ user, cats, currentUserId, onBack, onSelectCat, o
           <h1>{user.name}</h1>
           <UserHandle user={user} />
           <p>{user.bio}</p>
+          <FollowCounts user={user} counts={followCounts} onOpen={onOpenFollowList} />
         </div>
       </div>
       <MiniMap cats={cats} approximate />
@@ -2528,8 +2638,10 @@ function CommunityScreen({
   followingIds,
   followingProfiles,
   followerProfiles,
+  followCounts,
   onSearchFriends,
   onToggleFollow,
+  onOpenFollowList,
   onCreate,
   onToggleLike,
   onComment,
@@ -2540,7 +2652,6 @@ function CommunityScreen({
   const [friendQuery, setFriendQuery] = useState('');
   const [friendResults, setFriendResults] = useState([]);
   const [searchingFriends, setSearchingFriends] = useState(false);
-  const [friendTab, setFriendTab] = useState('following');
 
   useEffect(() => {
     let cancelled = false;
@@ -2572,19 +2683,17 @@ function CommunityScreen({
     return [...byId.values()];
   }, [users, friendResults]);
 
-  const activeFriendList = friendTab === 'followers' ? followerProfiles : followingProfiles;
-
   const localPosts = posts.filter((post) => post.location_name === currentArea);
   const friendPosts = posts.filter((post) => followingIds.includes(post.user_id) || post.user_id === currentUserId);
   const timelinePosts = [...friendPosts, ...localPosts.filter((post) => !friendPosts.some((item) => item.id === post.id))];
 
   return (
     <section className="screen">
-      <ScreenHeader title="Community" subtitle="Follow friends and see cats near your current place." icon={Users} />
+      <ScreenHeader title="Commeownity" subtitle="Follow friends and see cats near your current place." icon={Users} />
       <section className="friend-finder">
         <div className="section-title-row">
-          <h2>Find friends</h2>
-          <span className="quiet-label">{followingProfiles.length} following · {followerProfiles.length} followers</span>
+          <h2>Find meow lovers</h2>
+          <FollowCounts user={currentUser} counts={followCounts} onOpen={onOpenFollowList} compact />
         </div>
         <form className="friend-search-row" onSubmit={handleFriendSearch}>
           <Search size={18} />
@@ -2595,53 +2704,18 @@ function CommunityScreen({
           />
           <button type="submit">{searchingFriends ? '...' : 'Search'}</button>
         </form>
-        <div className="social-tabs" aria-label="Friend lists">
-          <button type="button" className={friendTab === 'following' ? 'active' : ''} onClick={() => setFriendTab('following')}>
-            Following
-          </button>
-          <button type="button" className={friendTab === 'followers' ? 'active' : ''} onClick={() => setFriendTab('followers')}>
-            Followers
-          </button>
-        </div>
-        <div className="friend-result-list">
-          {activeFriendList.map((user) => (
-            <article className="friend-result" key={user.id}>
-              <button className="friend-profile-link" type="button" onClick={() => onOpenUser(user.id)}>
-                <UserAvatar user={user} className="post-user-avatar" />
-                <span>
-                  <strong>{user.name}</strong>
-                  <UserHandle user={user} />
-                  <small>{user.bio || 'Catmunity friend'}</small>
-                </span>
-              </button>
-              <button type="button" onClick={() => onToggleFollow(user.id)}>
-                {followingIds.includes(user.id) ? 'Following' : 'Follow'}
-              </button>
-            </article>
-          ))}
-          {activeFriendList.length === 0 && (
-            <p className="empty-community-copy">
-              {friendTab === 'following' ? 'You are not following anyone yet.' : 'No followers yet.'}
-            </p>
-          )}
-        </div>
         <div className="friend-result-list">
           {friendResults.map((user) => {
             const following = followingIds.includes(user.id);
             return (
-              <article className="friend-result" key={user.id}>
-                <button className="friend-profile-link" type="button" onClick={() => onOpenUser(user.id)}>
-                  <UserAvatar user={user} className="post-user-avatar" />
-                  <span>
-                    <strong>{user.name}</strong>
-                    <UserHandle user={user} />
-                    <small>{user.bio || 'Catmunity friend'}</small>
-                  </span>
-                </button>
-                <button type="button" onClick={() => onToggleFollow(user.id)}>
-                  {following ? 'Following' : 'Follow'}
-                </button>
-              </article>
+              <FriendResult
+                key={user.id}
+                user={user}
+                currentUserId={currentUserId}
+                following={following}
+                onOpenUser={onOpenUser}
+                onToggleFollow={onToggleFollow}
+              />
             );
           })}
           {friendQuery && !searchingFriends && friendResults.length === 0 && (
@@ -3125,6 +3199,76 @@ function UserAvatar({ user, className = '' }) {
     <span className={`user-avatar-placeholder ${className}`} aria-label={user?.name || 'User'}>
       <User size={20} />
     </span>
+  );
+}
+
+function FollowCounts({ user, counts = { following: 0, followers: 0 }, onOpen, compact = false }) {
+  return (
+    <div className={compact ? 'follow-counts follow-counts--compact' : 'follow-counts'}>
+      <button type="button" onClick={() => onOpen(user, 'following')}>
+        <strong>{counts.following || 0}</strong> following
+      </button>
+      <span aria-hidden="true">·</span>
+      <button type="button" onClick={() => onOpen(user, 'followers')}>
+        <strong>{counts.followers || 0}</strong> followers
+      </button>
+    </div>
+  );
+}
+
+function FollowListModal({ modal, currentUserId, followingIds, onClose, onOpenUser, onToggleFollow }) {
+  const title = modal.type === 'followers' ? 'Followers' : 'Following';
+  return (
+    <div className="notification-overlay" role="dialog" aria-modal="true" aria-label={`${modal.profileUser.name} ${title}`}>
+      <section className="follow-list-panel">
+        <div className="section-title-row">
+          <div>
+            <h2>{title}</h2>
+            <span className="quiet-label">@{modal.profileUser.username || modal.profileUser.name}</span>
+          </div>
+          <button className="icon-button" type="button" onClick={onClose} aria-label="Close follow list"><X size={18} /></button>
+        </div>
+        <div className="friend-result-list">
+          {modal.loading && <p className="empty-community-copy">Loading {modal.type}...</p>}
+          {!modal.loading && modal.profiles.map((user) => (
+            <FriendResult
+              key={user.id}
+              user={user}
+              currentUserId={currentUserId}
+              following={followingIds.includes(user.id)}
+              onOpenUser={onOpenUser}
+              onToggleFollow={onToggleFollow}
+            />
+          ))}
+          {!modal.loading && modal.profiles.length === 0 && (
+            <p className="empty-community-copy">
+              {modal.type === 'followers' ? 'No followers yet.' : 'Not following anyone yet.'}
+            </p>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function FriendResult({ user, currentUserId, following, onOpenUser, onToggleFollow }) {
+  const isSelf = user.id === currentUserId;
+  return (
+    <article className="friend-result">
+      <button className="friend-profile-link" type="button" onClick={() => onOpenUser(user.id)}>
+        <UserAvatar user={user} className="post-user-avatar" />
+        <span>
+          <strong>{user.name}</strong>
+          <UserHandle user={user} />
+          <small>{user.bio || 'Catmunity friend'}</small>
+        </span>
+      </button>
+      {!isSelf && (
+        <button type="button" onClick={() => onToggleFollow(user.id)}>
+          {following ? 'Following' : 'Follow'}
+        </button>
+      )}
+    </article>
   );
 }
 

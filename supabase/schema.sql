@@ -232,9 +232,10 @@ using (auth.uid() = id)
 with check (auth.uid() = id);
 
 drop policy if exists "Users can read own follows" on public.user_follows;
-create policy "Users can read own follows"
+drop policy if exists "Public can read follows" on public.user_follows;
+create policy "Public can read follows"
 on public.user_follows for select
-using (auth.uid() = follower_id or auth.uid() = following_id);
+using (true);
 
 drop policy if exists "Users can follow profiles" on public.user_follows;
 create policy "Users can follow profiles"
@@ -421,6 +422,9 @@ create index if not exists profiles_username_idx
 
 create index if not exists user_follows_follower_id_idx
   on public.user_follows (follower_id);
+
+create index if not exists user_follows_following_id_idx
+  on public.user_follows (following_id);
 
 create index if not exists user_cats_user_id_idx
   on public.user_cats (user_id);

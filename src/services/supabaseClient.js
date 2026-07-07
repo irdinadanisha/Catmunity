@@ -241,6 +241,43 @@ export async function loadFollowerIds(userId) {
   return { data: (data || []).map((item) => item.follower_id), error };
 }
 
+export async function fetchFollowCounts(profileUserId) {
+  if (!isSupabaseConfigured || !profileUserId) {
+    return { data: { following: 0, followers: 0 }, error: null };
+  }
+
+  const [{ count: following = 0, error: followingError }, { count: followers = 0, error: followersError }] = await Promise.all([
+    supabase
+      .from('user_follows')
+      .select('following_id', { count: 'exact', head: true })
+      .eq('follower_id', profileUserId),
+    supabase
+      .from('user_follows')
+      .select('follower_id', { count: 'exact', head: true })
+      .eq('following_id', profileUserId),
+  ]);
+
+  return {
+    data: {
+      following: following || 0,
+      followers: followers || 0,
+    },
+    error: followingError || followersError,
+  };
+}
+
+export async function fetchFollowingList(profileUserId) {
+  const { data: ids, error } = await loadFollowingIds(profileUserId);
+  if (error) return { data: [], error };
+  return loadProfilesByIds(ids);
+}
+
+export async function fetchFollowersList(profileUserId) {
+  const { data: ids, error } = await loadFollowerIds(profileUserId);
+  if (error) return { data: [], error };
+  return loadProfilesByIds(ids);
+}
+
 export async function loadProfilesByIds(ids) {
   if (!isSupabaseConfigured || !ids.length) return { data: [], error: null };
 

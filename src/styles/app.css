@@ -414,7 +414,8 @@ button:disabled {
   backdrop-filter: blur(10px);
 }
 
-.notification-panel {
+.notification-panel,
+.follow-list-panel {
   width: min(440px, 100%);
   max-height: min(66vh, 620px);
   display: grid;
@@ -425,6 +426,10 @@ button:disabled {
   background: rgba(255, 252, 247, 0.94);
   border: 1px solid rgba(80, 55, 40, 0.08);
   box-shadow: 0 26px 70px rgba(83, 55, 38, 0.2);
+}
+
+.follow-list-panel {
+  max-height: min(72vh, 660px);
 }
 
 .notification-list {
@@ -2354,6 +2359,38 @@ button:disabled {
   margin: 4px 0 0;
   color: #74655d;
   line-height: 1.35;
+}
+
+.follow-counts {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  color: #8a766c;
+  font-size: 0.8rem;
+  font-weight: 900;
+}
+
+.follow-counts--compact {
+  justify-content: flex-end;
+  margin-top: 0;
+}
+
+.follow-counts button {
+  border: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+}
+
+.follow-counts button:hover {
+  color: #b34d3e;
+}
+
+.follow-counts strong {
+  color: #3e2d26;
 }
 
 .profile-status {
