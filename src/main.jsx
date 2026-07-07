@@ -1349,7 +1349,7 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
   const [showSlowLoading, setShowSlowLoading] = useState(false);
   const [facingMode, setFacingMode] = useState('environment');
   const [zoomLevel, setZoomLevel] = useState(1);
-  const [zoomMode, setZoomMode] = useState('1x');
+  const [zoomMode, setZoomMode] = useState('.5x');
   const [cameraZoomRange, setCameraZoomRange] = useState({ min: 1, max: 1, supported: false });
   const [cameraModeAvailability, setCameraModeAvailability] = useState({ pointFive: false });
   const [streamOrientation, setStreamOrientation] = useState('portrait');
@@ -1576,7 +1576,7 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
         return;
       }
 
-      setZoomMode('1x');
+      setZoomMode('.5x');
       setZoomLevel(1);
       oneXCorrectionAttemptedRef.current = false;
       await attachStreamToPreview(stream);
@@ -1765,7 +1765,7 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
           onClick={() => setFacingMode((mode) => (mode === 'environment' ? 'user' : 'environment'))}
           aria-label="Flip camera"
         >
-          <RotateCcw size={25} />
+          <RotateCcw size={21} />
           <span>Flip</span>
         </button>
       </div>
@@ -1788,8 +1788,7 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
       </div>
       <div className="snap-zoom-control" aria-label="Camera zoom">
         {[
-          { mode: '.5x', label: '.5x', enabled: cameraModeAvailability.pointFive },
-          { mode: '1x', label: '1x', enabled: true },
+          { mode: '.5x', label: '1x', enabled: true },
         ].map(({ mode, label, enabled }) => {
           return (
             <button

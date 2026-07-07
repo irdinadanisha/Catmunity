@@ -1887,15 +1887,15 @@ button:disabled {
 }
 
 .snap-tool-button {
-  min-width: 54px;
-  min-height: 54px;
-  border-radius: 19px;
+  min-width: 48px;
+  min-height: 48px;
+  border-radius: 17px;
   gap: 3px;
-  padding: 8px 6px;
+  padding: 7px 6px;
 }
 
 .snap-tool-button span {
-  font-size: 0.62rem;
+  font-size: 0.58rem;
   font-weight: 900;
 }
 
@@ -1962,7 +1962,7 @@ button:disabled {
   position: absolute;
   z-index: 5;
   left: 50%;
-  bottom: calc(132px + env(safe-area-inset-bottom));
+  bottom: calc(144px + env(safe-area-inset-bottom));
   transform: translateX(-50%);
   min-height: 30px;
   display: inline-flex;
