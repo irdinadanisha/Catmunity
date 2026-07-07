@@ -4,7 +4,6 @@ import { GoogleMap, OverlayView, useJsApiLoader } from '@react-google-maps/api';
 import { animate, motion, useMotionValue } from 'framer-motion';
 import {
   Bell,
-  Camera,
   Cat,
   Check,
   ChevronLeft,
@@ -83,13 +82,38 @@ import './styles/app.css';
 
 const tabs = [
   { id: 'explore', label: 'Map', icon: MapIcon },
-  { id: 'collection', label: 'Collection', icon: Cat },
-  { id: 'catch', label: 'Catch', icon: Camera },
+  { id: 'collection', label: 'Collection', icon: MapPin },
+  { id: 'catch', label: 'Catch!', icon: Cat },
   { id: 'community', label: 'Community', icon: Users },
   { id: 'settings', label: 'Profile', icon: User },
 ];
 
 const fallbackUserId = 'local-user';
+const catKeywordSuggestions = [
+  'sleepy',
+  'friendly',
+  'shy',
+  'playful',
+  'fluffy',
+  'hungry',
+  'calm',
+  'curious',
+  'quiet',
+  'cute',
+  'stray',
+  'cafe cat',
+  'campus cat',
+  'orange',
+  'black',
+  'white',
+  'gray',
+  'tabby',
+  'kitten',
+  'chonky',
+  'polite',
+  'scared',
+  'active',
+];
 
 function App() {
   const [screen, setScreen] = useState('explore');
@@ -883,7 +907,6 @@ function App() {
           })}
         </nav>
       )}
-      {screen !== 'welcome' && screen !== 'catch' && <CatchButton onClick={() => navigate('catch')} />}
     </div>
   );
 }
@@ -918,6 +941,36 @@ function createAppUser(authUser) {
     public_profile: authUser.user_metadata?.public_profile ?? true,
     email: authUser.email,
   };
+}
+
+function normalizeSearchText(value = '') {
+  return String(value).toLowerCase().replace(/[^a-z0-9]+/gu, ' ').trim();
+}
+
+function getCatSearchText(cat, unlocked) {
+  const publicFields = [
+    cat.name,
+    cat.location_name,
+    cat.area_name,
+    cat.city,
+    cat.country,
+    cat.color,
+    cat.colour,
+    cat.breed,
+    ...(cat.tags || []),
+  ];
+  const unlockedFields = unlocked
+    ? [
+      cat.weight,
+      cat.behavior,
+      cat.gender,
+      cat.fun_info,
+      cat.fun_facts,
+      cat.remarks,
+    ]
+    : [];
+
+  return normalizeSearchText([...publicFields, ...unlockedFields].filter(Boolean).join(' '));
 }
 
 function mapCommunityProfile(profile) {
@@ -1241,17 +1294,28 @@ function ExploreScreen({ cats, currentUser, currentUserId, navigate, setSelected
   const [sortMode, setSortMode] = useState('Recent');
   const [sheetFocusSignal, setSheetFocusSignal] = useState(0);
   const filters = ['All', 'Nearby', 'Unlocked', 'Locked', 'Friendly', 'Sleepy', 'Food Spots'];
+  const normalizedQuery = normalizeSearchText(query);
+  const detectedKeywords = catKeywordSuggestions.filter((keyword) => normalizedQuery.includes(normalizeSearchText(keyword)));
   const nearbyCats = cats.filter((cat) => {
     const caught = cat.caught_by_users.includes(currentUserId);
-    const matchesQuery = `${cat.name} ${cat.location_name} ${cat.tags.join(' ')}`.toLowerCase().includes(query.toLowerCase());
+    const searchableText = getCatSearchText(cat, caught);
+    const matchesTextQuery =
+      !normalizedQuery ||
+      normalizedQuery
+        .split(/\s+/u)
+        .filter(Boolean)
+        .every((word) => searchableText.includes(word));
+    const matchesKeywordQuery =
+      detectedKeywords.length === 0 ||
+      detectedKeywords.some((keyword) => searchableText.includes(normalizeSearchText(keyword)));
     const matchesCaught = !hideCaught || !caught;
     const matchesFilter =
       activeFilter === 'All' ||
       activeFilter === 'Nearby' ||
       (activeFilter === 'Unlocked' && caught) ||
       (activeFilter === 'Locked' && !caught) ||
-      cat.tags.some((tag) => tag.toLowerCase().includes(activeFilter.toLowerCase().replace(' spots', '')));
-    return matchesQuery && matchesCaught && matchesFilter;
+      searchableText.includes(normalizeSearchText(activeFilter.replace(' spots', '')));
+    return (detectedKeywords.length ? matchesKeywordQuery : matchesTextQuery) && matchesCaught && matchesFilter;
   });
 
   function openCat(cat) {
@@ -2147,6 +2211,23 @@ function CatDetailsForm({ cat, mode = 'create', onSave, onBack }) {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
+  function appendToField(field, suggestion) {
+    setForm((current) => {
+      const currentValue = current[field]?.trim();
+      if (!currentValue) return { ...current, [field]: suggestion };
+      if (normalizeSearchText(currentValue).includes(normalizeSearchText(suggestion))) return current;
+      return { ...current, [field]: `${currentValue}, ${suggestion}` };
+    });
+  }
+
+  function addTagSuggestion(suggestion) {
+    setForm((current) => {
+      const tags = current.tags.split(',').map((tag) => tag.trim()).filter(Boolean);
+      if (tags.some((tag) => normalizeSearchText(tag) === normalizeSearchText(suggestion))) return current;
+      return { ...current, tags: [...tags, suggestion].join(', ') };
+    });
+  }
+
   return (
     <section className="screen">
       <BackButton onBack={onBack} />
@@ -2172,10 +2253,22 @@ function CatDetailsForm({ cat, mode = 'create', onSave, onBack }) {
         <Field label="Breed" value={form.breed} placeholder="Domestic shorthair, Persian..." onChange={(value) => update('breed', value)} />
         <Field label="Weight" value={form.weight} placeholder="PHAT, chonky, 4.5 kg..." onChange={(value) => update('weight', value)} />
         <Field label="Behavior" value={form.behavior} placeholder="Friendly, shy, sleepy, food motivated..." onChange={(value) => update('behavior', value)} />
+        <SuggestionChips
+          label="Try: sleepy, friendly, shy, playful, calm"
+          suggestions={['sleepy', 'friendly', 'shy', 'playful', 'calm']}
+          onSelect={(suggestion) => appendToField('behavior', suggestion)}
+        />
         <Field label="Gender" value={form.gender} placeholder="Female, male, unknown..." onChange={(value) => update('gender', value)} />
         <Field label="Personality / fun info" value={form.fun_info} placeholder="Sleepy window watcher" onChange={(value) => update('fun_info', value)} />
+        <p className="field-helper">Example: always naps near the bakery, very polite, shy but cute.</p>
         <Field label="Your remarks" value={form.remarks} placeholder="Seen near the cafe steps" onChange={(value) => update('remarks', value)} />
+        <p className="field-helper">Example: hangs around the cafe steps, comes out after lunch, quiet but curious.</p>
         <Field label="Tags" value={form.tags} placeholder="sleepy, friendly, fluffy" onChange={(value) => update('tags', value)} />
+        <SuggestionChips
+          label="Try: sleepy, friendly, shy, playful, fluffy, cafe cat"
+          suggestions={catKeywordSuggestions.slice(0, 18)}
+          onSelect={addTagSuggestion}
+        />
         <Field label="Location found" value={form.location_name} onChange={(value) => update('location_name', value)} />
         <Field label="Date found" type="date" value={form.date_found} onChange={(value) => update('date_found', value)} />
         <button className="primary-button" type="submit"><Check size={18} /> {mode === 'edit' ? 'Save changes' : 'Save to collection'}</button>
@@ -3035,17 +3128,6 @@ function UserAvatar({ user, className = '' }) {
   );
 }
 
-function CatchButton({ onClick }) {
-  return (
-    <button className="floating-catch-button" onClick={onClick} aria-label="Catch a new cat">
-      <CatHeadShape className="cat-head-action" fill="action">
-        <Plus size={18} className="catch-plus" />
-        <Camera size={22} className="catch-camera" />
-      </CatHeadShape>
-    </button>
-  );
-}
-
 function CatStatusBadge({ locked }) {
   return (
     <span className={locked ? 'status-badge locked' : 'status-badge unlocked'}>
@@ -3442,6 +3524,21 @@ function ScreenHeader({ title, subtitle, icon: Icon }) {
 
 function BackButton({ onBack }) {
   return <button className="back-button" onClick={onBack}><ChevronLeft size={18} /> Back</button>;
+}
+
+function SuggestionChips({ label, suggestions, onSelect }) {
+  return (
+    <div className="field-suggestions" aria-label={label}>
+      <span>{label}</span>
+      <div>
+        {suggestions.map((suggestion) => (
+          <button key={suggestion} type="button" onClick={() => onSelect(suggestion)}>
+            {suggestion}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function Field({ label, value, onChange, placeholder, type = 'text' }) {
