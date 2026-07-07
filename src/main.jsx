@@ -1341,6 +1341,8 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
   const streamRef = useRef(null);
   const [cameraStatus, setCameraStatus] = useState('requesting');
   const [facingMode, setFacingMode] = useState('environment');
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [cameraZoomRange, setCameraZoomRange] = useState({ min: 1, max: 3, step: 0.1, supported: false });
 
   useEffect(() => {
     let cancelled = false;
@@ -1385,6 +1387,24 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
         return;
       }
       streamRef.current = stream;
+      const [videoTrack] = stream.getVideoTracks();
+      const capabilities = videoTrack?.getCapabilities?.();
+      if (capabilities?.zoom) {
+        const min = capabilities.zoom.min || 1;
+        const max = capabilities.zoom.max || 3;
+        const step = capabilities.zoom.step || 0.1;
+        setCameraZoomRange({ min, max, step, supported: true });
+        const initialZoom = Math.min(Math.max(1, min), max);
+        try {
+          await videoTrack.applyConstraints({ advanced: [{ zoom: initialZoom }] });
+        } catch (error) {
+          setCameraZoomRange({ min: 0.5, max: 3, step: 0.1, supported: false });
+        }
+        setZoomLevel(initialZoom);
+      } else {
+        setCameraZoomRange({ min: 0.5, max: 3, step: 0.1, supported: false });
+        setZoomLevel(1);
+      }
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
@@ -1393,6 +1413,24 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
     } catch (error) {
       setCameraStatus(error?.name === 'NotAllowedError' ? 'denied' : 'error');
     }
+  }
+
+  async function applyZoom(nextZoom, explicitTrack = null) {
+    const range = cameraZoomRange;
+    const min = range.supported ? range.min : 0.5;
+    const max = range.supported ? range.max : 3;
+    const clampedZoom = Math.min(Math.max(nextZoom, min), max);
+    const track = explicitTrack || streamRef.current?.getVideoTracks?.()[0];
+
+    if (range.supported && track?.applyConstraints) {
+      try {
+        await track.applyConstraints({ advanced: [{ zoom: clampedZoom }] });
+      } catch (error) {
+        setCameraZoomRange((current) => ({ ...current, supported: false, min: 0.5, max: 3, step: 0.1 }));
+      }
+    }
+
+    setZoomLevel(clampedZoom);
   }
 
   function capturePhoto() {
@@ -1405,7 +1443,23 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
     canvas.width = width;
     canvas.height = height;
     const context = canvas.getContext('2d');
-    context.drawImage(video, 0, 0, width, height);
+    if (!cameraZoomRange.supported && zoomLevel > 1) {
+      const sourceWidth = width / zoomLevel;
+      const sourceHeight = height / zoomLevel;
+      context.drawImage(
+        video,
+        (width - sourceWidth) / 2,
+        (height - sourceHeight) / 2,
+        sourceWidth,
+        sourceHeight,
+        0,
+        0,
+        width,
+        height,
+      );
+    } else {
+      context.drawImage(video, 0, 0, width, height);
+    }
     canvas.toBlob((blob) => {
       if (!blob) return;
       const file = new File([blob], `catmunity-catch-${Date.now()}.jpg`, { type: 'image/jpeg' });
@@ -1422,7 +1476,21 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
 
   return (
     <section className="snap-camera-screen">
-      <video ref={videoRef} className="snap-camera-video" playsInline muted autoPlay />
+      <video
+        ref={videoRef}
+        className="snap-camera-video"
+        style={
+          !cameraZoomRange.supported
+            ? {
+                objectFit: zoomLevel < 1 ? 'contain' : 'cover',
+                transform: `scale(${Math.max(1, zoomLevel)})`,
+              }
+            : undefined
+        }
+        playsInline
+        muted
+        autoPlay
+      />
       <div className="snap-camera-shade" />
       {cameraStatus !== 'ready' && (
         <div className="snap-camera-permission">
@@ -1494,6 +1562,33 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
           <PawPrint size={28} />
         </button>
       </div>
+      <div className="snap-zoom-control" aria-label="Camera zoom">
+        {[0.5, 1, 3].map((value) => {
+          const disabled = cameraZoomRange.supported && (value < cameraZoomRange.min || value > cameraZoomRange.max);
+          return (
+            <button
+              key={value}
+              className={Math.abs(zoomLevel - value) < 0.05 ? 'active' : ''}
+              type="button"
+              disabled={disabled}
+              onClick={() => applyZoom(value)}
+            >
+              {value === 0.5 ? '.5' : value}x
+            </button>
+          );
+        })}
+      </div>
+      <label className="snap-zoom-slider">
+        <span>{zoomLevel.toFixed(zoomLevel % 1 === 0 ? 0 : 1)}x</span>
+        <input
+          type="range"
+          min={cameraZoomRange.min}
+          max={cameraZoomRange.max}
+          step={cameraZoomRange.step}
+          value={zoomLevel}
+          onChange={(event) => applyZoom(Number(event.target.value))}
+        />
+      </label>
       <input
         ref={fileInputRef}
         className="snap-file-input"

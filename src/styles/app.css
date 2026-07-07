@@ -1741,6 +1741,7 @@ button:disabled {
   height: 100%;
   object-fit: cover;
   background: #000000;
+  transform-origin: center;
 }
 
 .snap-camera-shade {
@@ -1794,8 +1795,8 @@ button:disabled {
   display: grid;
   justify-items: center;
   gap: 2px;
-  padding: 8px 12px;
-  border-radius: 999px;
+  padding: 8px 12px 9px;
+  border-radius: 22px;
   text-align: center;
   background: rgba(15, 15, 15, 0.5);
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -1810,12 +1811,11 @@ button:disabled {
 
 .snap-camera-title span {
   max-width: 100%;
-  overflow: hidden;
   color: rgba(255, 255, 255, 0.74);
   font-size: 0.68rem;
   font-weight: 800;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.22;
+  white-space: normal;
 }
 
 .snap-side-tools {
@@ -1904,7 +1904,7 @@ button:disabled {
   position: absolute;
   z-index: 4;
   left: 50%;
-  bottom: calc(138px + env(safe-area-inset-bottom));
+  bottom: calc(252px + env(safe-area-inset-bottom));
   transform: translateX(-50%);
   min-height: 38px;
   display: inline-flex;
@@ -1917,6 +1917,71 @@ button:disabled {
   backdrop-filter: blur(16px);
   font-size: 0.78rem;
   font-weight: 900;
+}
+
+.snap-zoom-control {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  bottom: calc(158px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px;
+  border-radius: 999px;
+  background: rgba(18, 18, 18, 0.58);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(18px);
+}
+
+.snap-zoom-control button {
+  min-width: 42px;
+  height: 36px;
+  border: 0;
+  border-radius: 999px;
+  color: #ffffff;
+  background: transparent;
+  font-weight: 950;
+}
+
+.snap-zoom-control button.active {
+  color: #f4eb23;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.snap-zoom-control button:disabled {
+  opacity: 0.35;
+}
+
+.snap-zoom-slider {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  bottom: calc(204px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: min(250px, calc(100% - 92px));
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  color: #ffffff;
+  background: rgba(18, 18, 18, 0.42);
+  backdrop-filter: blur(18px);
+}
+
+.snap-zoom-slider span {
+  color: #f4eb23;
+  font-size: 0.78rem;
+  font-weight: 950;
+  text-align: center;
+}
+
+.snap-zoom-slider input {
+  width: 100%;
+  accent-color: #f4eb23;
 }
 
 .snap-camera-permission {
