@@ -1378,8 +1378,10 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
         audio: false,
         video: {
           facingMode: { ideal: facingMode },
-          width: { ideal: 1280 },
+          width: { ideal: 1080 },
           height: { ideal: 1920 },
+          aspectRatio: { ideal: 9 / 16 },
+          resizeMode: { ideal: 'crop-and-scale' },
         },
       });
       if (isCancelled()) {
@@ -1482,7 +1484,7 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
         style={
           !cameraZoomRange.supported
             ? {
-                objectFit: 'contain',
+                objectFit: zoomLevel < 1 ? 'contain' : 'cover',
                 transform: `scale(${Math.max(1, zoomLevel)})`,
               }
             : undefined
