@@ -1734,14 +1734,24 @@ button:disabled {
   background: #000000;
 }
 
+.snap-camera-video-bg,
 .snap-camera-video {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
   object-position: center;
   background: #000000;
+}
+
+.snap-camera-video-bg {
+  object-fit: cover;
+  filter: blur(22px) brightness(0.55);
+  transform: scale(1.08);
+}
+
+.snap-camera-video {
+  object-fit: contain;
 }
 
 .snap-camera-shade {
