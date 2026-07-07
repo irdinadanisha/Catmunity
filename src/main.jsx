@@ -1343,17 +1343,21 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
   const nativeCameraInputRef = useRef(null);
   const streamRef = useRef(null);
   const availableDevicesRef = useRef([]);
-  const pointFiveDeviceRef = useRef(null);
+  const zoomDeviceMapRef = useRef({ pointFive: null, one: null });
+  const oneXCorrectionAttemptedRef = useRef(false);
   const [cameraStatus, setCameraStatus] = useState('requesting');
   const [showSlowLoading, setShowSlowLoading] = useState(false);
   const [facingMode, setFacingMode] = useState('environment');
+  const [zoomMode, setZoomMode] = useState('1x');
+  const [cameraModeAvailability, setCameraModeAvailability] = useState({ pointFive: false, one: true });
   const [streamOrientation, setStreamOrientation] = useState('portrait');
+  const [previewRatio, setPreviewRatio] = useState('16 / 9');
 
   useEffect(() => {
     let cancelled = false;
 
     async function openCamera() {
-      await startFastCamera(() => cancelled);
+      await startCameraForZoomMode('1x', () => cancelled);
     }
 
     openCamera();
@@ -1390,7 +1394,10 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
     return {
       audio: false,
       video: {
-        facingMode: { ideal: facingMode },
+        facingMode: { exact: facingMode },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        frameRate: { ideal: 30, max: 30 },
       },
     };
   }
@@ -1400,9 +1407,21 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
       audio: false,
       video: {
         ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: fallbackFacingMode } }),
-        width: { ideal: 1080 },
-        height: { ideal: 1920 },
-        aspectRatio: { ideal: 9 / 16 },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        frameRate: { ideal: 30, max: 30 },
+      },
+    };
+  }
+
+  function getFallbackCameraConstraints() {
+    return {
+      audio: false,
+      video: {
+        facingMode: { ideal: facingMode },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        frameRate: { ideal: 30, max: 30 },
       },
     };
   }
@@ -1422,20 +1441,75 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
   }
 
   function isUltraWideCamera(device) {
-    return /ultra[\s-]?wide|0\.5x?|0,5x?/.test(device.label.toLowerCase());
+    return /ultra[\s-]?wide|0\.5x?|0,5x?|wide[\s-]?angle/.test(device.label.toLowerCase());
+  }
+
+  function isTelephotoCamera(device) {
+    return /tele|telephoto|2x|3x|zoom/.test(device.label.toLowerCase());
+  }
+
+  function selectMainRearCameraFor1x(devices) {
+    const normalRearDevices = devices.filter((device) => isRearCamera(device) && !isUltraWideCamera(device) && !isTelephotoCamera(device));
+    return normalRearDevices
+      .map((device, index) => {
+        const label = device.label.toLowerCase();
+        let score = 0;
+        if (/back|rear|environment/.test(label)) score += 40;
+        if (/main|standard|normal/.test(label)) score += 35;
+        if (/\bwide\b/.test(label)) score += 10;
+        if (/dual|triple/.test(label)) score -= 10;
+        return { device, score, index };
+      })
+      .sort((a, b) => b.score - a.score || a.index - b.index)[0]?.device || normalRearDevices[0] || null;
   }
 
   function selectUltraWideCameraForPoint5x(devices) {
     return devices.find((device) => isRearCamera(device) && isUltraWideCamera(device)) || null;
   }
 
-  function cachePointFiveDevice(devices) {
-    pointFiveDeviceRef.current = selectUltraWideCameraForPoint5x(devices);
-    return pointFiveDeviceRef.current;
+  function cacheZoomDevices(devices) {
+    zoomDeviceMapRef.current = {
+      pointFive: selectUltraWideCameraForPoint5x(devices),
+      one: selectMainRearCameraFor1x(devices),
+    };
+    return zoomDeviceMapRef.current;
+  }
+
+  function getDeviceForMode(mode) {
+    if (mode === '.5x') return zoomDeviceMapRef.current.pointFive;
+    return zoomDeviceMapRef.current.one;
   }
 
   function updateModeAvailability(devices) {
-    cachePointFiveDevice(devices);
+    const deviceMap = cacheZoomDevices(devices);
+    setCameraModeAvailability({
+      pointFive: Boolean(deviceMap.pointFive),
+      one: true,
+    });
+  }
+
+  async function applyPhotoCameraConstraints(videoTrack, mode = '1x') {
+    if (!videoTrack?.applyConstraints) return;
+    const capabilities = videoTrack.getCapabilities?.() || {};
+    const advanced = [];
+    if (capabilities.focusMode?.includes?.('continuous')) advanced.push({ focusMode: 'continuous' });
+    if (capabilities.exposureMode?.includes?.('continuous')) advanced.push({ exposureMode: 'continuous' });
+    if (capabilities.whiteBalanceMode?.includes?.('continuous')) advanced.push({ whiteBalanceMode: 'continuous' });
+    if (capabilities.zoom && mode === '.5x') {
+      const min = capabilities.zoom.min ?? 1;
+      const max = capabilities.zoom.max ?? 1;
+      advanced.push({ zoom: Math.min(Math.max(0.5, min), max) });
+    } else if (capabilities.zoom && mode === '1x') {
+      const min = capabilities.zoom.min ?? 1;
+      const max = capabilities.zoom.max ?? 1;
+      advanced.push({ zoom: Math.min(Math.max(1, min), max) });
+    }
+    if (!advanced.length) return;
+    try {
+      await videoTrack.applyConstraints({ advanced });
+    } catch (error) {
+      console.info('[Catmunity camera constraints]', { mode, error });
+    }
   }
 
   async function attachStreamToPreview(stream) {
@@ -1451,6 +1525,13 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
     }
     const width = videoRef.current?.videoWidth || 0;
     const height = videoRef.current?.videoHeight || 0;
+    const [videoTrack] = stream.getVideoTracks();
+    const settings = videoTrack?.getSettings?.() || {};
+    const frameWidth = settings.width || width;
+    const frameHeight = settings.height || height;
+    if (frameWidth && frameHeight) {
+      setPreviewRatio(`${frameWidth} / ${frameHeight}`);
+    }
     setStreamOrientation(width > height ? 'landscape' : 'portrait');
     if (oldStream && oldStream !== stream) {
       oldStream.getTracks().forEach((track) => track.stop());
@@ -1465,8 +1546,22 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
     const settingsBeforeZoom = videoTrack.getSettings?.() || {};
     const availableVideoDevices = await getAvailableVideoDevices();
     availableDevicesRef.current = availableVideoDevices;
-    updateModeAvailability(availableVideoDevices, capabilities);
-    selectedCameraDevice ||= pointFiveDeviceRef.current;
+    updateModeAvailability(availableVideoDevices);
+    selectedCameraDevice ||= getDeviceForMode(mode);
+
+    const currentDeviceId = settingsBeforeZoom.deviceId;
+    const shouldCorrectInitialOneX =
+      mode === '1x' &&
+      facingMode === 'environment' &&
+      !oneXCorrectionAttemptedRef.current &&
+      selectedCameraDevice?.deviceId &&
+      currentDeviceId &&
+      selectedCameraDevice.deviceId !== currentDeviceId;
+
+    if (shouldCorrectInitialOneX) {
+      oneXCorrectionAttemptedRef.current = true;
+      startCameraForZoomMode('1x', () => false, { silent: true });
+    }
 
     const settingsAfterZoom = videoTrack.getSettings?.() || {};
     console.info('[Catmunity camera]', {
@@ -1486,8 +1581,21 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
       previewOrientation: (previewRef.current?.clientHeight || 0) >= (previewRef.current?.clientWidth || 0) ? 'portrait' : 'landscape',
       objectFit: window.getComputedStyle(videoRef.current).objectFit,
       roundedPreviewRadius: window.getComputedStyle(previewRef.current).borderRadius,
+      previewAspectRatio: previewRatio,
       selectedZoom: settingsAfterZoom.zoom ?? 1,
     });
+  }
+
+  async function getRearCameraStream(mode, selectedCameraDevice) {
+    if (selectedCameraDevice?.deviceId) {
+      return navigator.mediaDevices.getUserMedia(getCameraConstraints(selectedCameraDevice.deviceId));
+    }
+    try {
+      return await navigator.mediaDevices.getUserMedia(getFastCameraConstraints());
+    } catch (error) {
+      if (error?.name !== 'OverconstrainedError' && error?.name !== 'NotFoundError') throw error;
+      return navigator.mediaDevices.getUserMedia(getFallbackCameraConstraints());
+    }
   }
 
   async function startFastCamera(isCancelled = () => false) {
@@ -1501,21 +1609,24 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
 
     try {
       const startedAt = performance.now();
-      const stream = await navigator.mediaDevices.getUserMedia(getFastCameraConstraints());
+      const stream = await getRearCameraStream('1x', null);
       if (isCancelled()) {
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
 
+      await applyPhotoCameraConstraints(stream.getVideoTracks()[0], '1x');
       await attachStreamToPreview(stream);
       setCameraStatus('ready');
-      inspectCameraAfterPreview('.5x', startedAt);
+      setZoomMode('1x');
+      oneXCorrectionAttemptedRef.current = false;
+      inspectCameraAfterPreview('1x', startedAt);
     } catch (error) {
       setCameraStatus(error?.name === 'NotAllowedError' ? 'denied' : 'error');
     }
   }
 
-  async function startCameraForZoomMode(mode = '.5x', isCancelled = () => false, options = {}) {
+  async function startCameraForZoomMode(mode = '1x', isCancelled = () => false, options = {}) {
     if (!navigator.mediaDevices?.getUserMedia) {
       setCameraStatus('unsupported');
       return;
@@ -1529,7 +1640,8 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
       const startedAt = performance.now();
       const devices = availableDevicesRef.current.length ? availableDevicesRef.current : await getAvailableVideoDevices();
       if (!availableDevicesRef.current.length) availableDevicesRef.current = devices;
-      const selectedCameraDevice = devices.length ? cachePointFiveDevice(devices) : pointFiveDeviceRef.current;
+      if (devices.length) cacheZoomDevices(devices);
+      const selectedCameraDevice = getDeviceForMode(mode);
 
       const currentTrack = streamRef.current?.getVideoTracks?.()[0];
       const currentCapabilities = currentTrack?.getCapabilities?.() || {};
@@ -1538,7 +1650,7 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
         !selectedCameraDevice?.deviceId ||
         (currentDeviceId && selectedCameraDevice.deviceId === currentDeviceId);
 
-      const requestedZoom = 0.5;
+      const requestedZoom = mode === '.5x' ? 0.5 : 1;
 
       if (canUseCurrentTrack && currentCapabilities.zoom && currentTrack?.applyConstraints) {
         const min = currentCapabilities.zoom.min ?? 1;
@@ -1546,34 +1658,23 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
         const nextZoom = Math.min(Math.max(requestedZoom, min), max);
         await currentTrack.applyConstraints({ advanced: [{ zoom: nextZoom }] });
         const actualZoom = currentTrack.getSettings?.().zoom ?? nextZoom;
+        setZoomMode(mode);
         setCameraStatus('ready');
         console.info('[Catmunity camera zoom]', { selectedZoomMode: mode, requestedZoom, actualZoom, settings: currentTrack.getSettings?.() });
         return;
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia(
-        selectedCameraDevice?.deviceId ? getCameraConstraints(selectedCameraDevice.deviceId) : getFastCameraConstraints(),
-      );
+      const stream = await getRearCameraStream(mode, selectedCameraDevice);
       if (isCancelled()) {
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
 
       const [videoTrack] = stream.getVideoTracks();
-      const capabilities = videoTrack?.getCapabilities?.() || {};
-
-      if (capabilities.zoom && videoTrack?.applyConstraints) {
-        const min = capabilities.zoom.min ?? 1;
-        const max = capabilities.zoom.max ?? 1;
-        const normalZoom = Math.min(Math.max(requestedZoom, min), max);
-        try {
-          await videoTrack.applyConstraints({ advanced: [{ zoom: normalZoom }] });
-        } catch (error) {
-          console.info('[Catmunity camera zoom]', { selectedZoomMode: mode, requestedZoom, error });
-        }
-      }
+      await applyPhotoCameraConstraints(videoTrack, mode);
       await attachStreamToPreview(stream);
       setCameraStatus('ready');
+      setZoomMode(mode);
       inspectCameraAfterPreview(mode, startedAt, selectedCameraDevice);
     } catch (error) {
       setCameraStatus(error?.name === 'NotAllowedError' ? 'denied' : 'error');
@@ -1609,9 +1710,14 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
     nativeCameraInputRef.current?.click();
   }
 
+  async function handleZoomMode(nextMode) {
+    if (nextMode === zoomMode || processing) return;
+    await startCameraForZoomMode(nextMode);
+  }
+
   return (
     <section className="snap-camera-screen">
-      <div ref={previewRef} className="snap-camera-preview">
+      <div ref={previewRef} className="snap-camera-preview" style={{ '--camera-preview-aspect-ratio': previewRatio }}>
         <video
           ref={backgroundVideoRef}
           className="snap-camera-video-bg"
@@ -1690,6 +1796,23 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
         <button className="snap-paw-placeholder" type="button" aria-label="Catmunity">
           <PawPrint size={28} />
         </button>
+      </div>
+      <div className="snap-zoom-control" aria-label="Camera zoom">
+        {[
+          { mode: '.5x', label: '.5x', enabled: cameraModeAvailability.pointFive },
+          { mode: '1x', label: '1x', enabled: cameraModeAvailability.one },
+        ].map(({ mode, label, enabled }) => (
+          <button
+            key={mode}
+            className={zoomMode === mode ? 'active' : ''}
+            type="button"
+            disabled={!enabled || cameraStatus !== 'ready' || processing}
+            onClick={() => handleZoomMode(mode)}
+            title={!enabled ? 'Not supported by this browser/device camera' : undefined}
+          >
+            {label}
+          </button>
+        ))}
       </div>
       <input
         ref={galleryInputRef}
