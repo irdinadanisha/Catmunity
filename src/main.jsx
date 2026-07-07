@@ -1343,15 +1343,11 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
   const nativeCameraInputRef = useRef(null);
   const streamRef = useRef(null);
   const availableDevicesRef = useRef([]);
-  const zoomDeviceMapRef = useRef({ pointFive: null, one: null });
-  const oneXCorrectionAttemptedRef = useRef(false);
+  const pointFiveDeviceRef = useRef(null);
   const [cameraStatus, setCameraStatus] = useState('requesting');
   const [showSlowLoading, setShowSlowLoading] = useState(false);
   const [facingMode, setFacingMode] = useState('environment');
-  const [zoomLevel, setZoomLevel] = useState(1);
   const [zoomMode, setZoomMode] = useState('.5x');
-  const [cameraZoomRange, setCameraZoomRange] = useState({ min: 1, max: 1, supported: false });
-  const [cameraModeAvailability, setCameraModeAvailability] = useState({ pointFive: false });
   const [streamOrientation, setStreamOrientation] = useState('portrait');
 
   useEffect(() => {
@@ -1430,48 +1426,17 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
     return /ultra[\s-]?wide|0\.5x?|0,5x?/.test(device.label.toLowerCase());
   }
 
-  function isNonStandardZoomCamera(device) {
-    return /tele|telephoto|zoom|2x/.test(device.label.toLowerCase());
-  }
-
-  function selectMainRearCameraFor1x(devices) {
-    const normalRearDevices = devices.filter((device) => isRearCamera(device) && !isUltraWideCamera(device) && !isNonStandardZoomCamera(device));
-
-    return normalRearDevices
-      .map((device, index) => {
-        const label = device.label.toLowerCase();
-        let score = 0;
-        if (/back|rear|environment/.test(label)) score += 40;
-        if (/main|normal|standard/.test(label)) score += 35;
-        if (/\bwide\b/.test(label)) score += 12;
-        if (/dual|triple/.test(label)) score -= 8;
-        return { device, score, index };
-      })
-      .sort((a, b) => b.score - a.score || a.index - b.index)[0]?.device || normalRearDevices[0] || null;
-  }
-
   function selectUltraWideCameraForPoint5x(devices) {
     return devices.find((device) => isRearCamera(device) && isUltraWideCamera(device)) || null;
   }
 
-  function cacheZoomDevices(devices) {
-    zoomDeviceMapRef.current = {
-      pointFive: selectUltraWideCameraForPoint5x(devices),
-      one: selectMainRearCameraFor1x(devices),
-    };
-    return zoomDeviceMapRef.current;
+  function cachePointFiveDevice(devices) {
+    pointFiveDeviceRef.current = selectUltraWideCameraForPoint5x(devices);
+    return pointFiveDeviceRef.current;
   }
 
-  function getDeviceForMode(mode) {
-    if (mode === '.5x') return zoomDeviceMapRef.current.pointFive;
-    return zoomDeviceMapRef.current.one;
-  }
-
-  function updateModeAvailability(devices, capabilities = {}) {
-    const deviceMap = cacheZoomDevices(devices);
-    setCameraModeAvailability({
-      pointFive: Boolean(deviceMap.pointFive || (capabilities.zoom && (capabilities.zoom.min ?? 1) <= 0.5)),
-    });
+  function updateModeAvailability(devices) {
+    cachePointFiveDevice(devices);
   }
 
   async function attachStreamToPreview(stream) {
@@ -1502,40 +1467,7 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
     const availableVideoDevices = await getAvailableVideoDevices();
     availableDevicesRef.current = availableVideoDevices;
     updateModeAvailability(availableVideoDevices, capabilities);
-    selectedCameraDevice ||= getDeviceForMode(mode);
-
-    // Do this after the preview is visible. It should not block camera startup.
-    if (capabilities.zoom && videoTrack.applyConstraints && mode === '1x') {
-      const min = capabilities.zoom.min ?? 1;
-      const max = capabilities.zoom.max ?? 1;
-      const normalZoom = Math.min(Math.max(1, min), max);
-      setCameraZoomRange({ min, max, supported: true });
-      try {
-        await videoTrack.applyConstraints({ advanced: [{ zoom: normalZoom }] });
-        setZoomLevel(normalZoom);
-      } catch (error) {
-        setCameraZoomRange({ min: 1, max: 1, supported: false });
-        setZoomLevel(1);
-      }
-    } else if (capabilities.zoom) {
-      setCameraZoomRange({ min: capabilities.zoom.min ?? 1, max: capabilities.zoom.max ?? 1, supported: true });
-    } else {
-      setCameraZoomRange({ min: 1, max: 1, supported: false });
-      setZoomLevel(1);
-    }
-
-    const currentDeviceId = settingsBeforeZoom.deviceId;
-    const shouldCorrectInitialOneX =
-      mode === '1x' &&
-      !oneXCorrectionAttemptedRef.current &&
-      selectedCameraDevice?.deviceId &&
-      currentDeviceId &&
-      selectedCameraDevice.deviceId !== currentDeviceId;
-
-    if (shouldCorrectInitialOneX) {
-      oneXCorrectionAttemptedRef.current = true;
-      startCameraForZoomMode('1x', () => false, { silent: true });
-    }
+    selectedCameraDevice ||= pointFiveDeviceRef.current;
 
     const settingsAfterZoom = videoTrack.getSettings?.() || {};
     console.info('[Catmunity camera]', {
@@ -1577,24 +1509,17 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
       }
 
       setZoomMode('.5x');
-      setZoomLevel(1);
-      oneXCorrectionAttemptedRef.current = false;
       await attachStreamToPreview(stream);
       setCameraStatus('ready');
-      inspectCameraAfterPreview('1x', startedAt);
+      inspectCameraAfterPreview('.5x', startedAt);
     } catch (error) {
       setCameraStatus(error?.name === 'NotAllowedError' ? 'denied' : 'error');
     }
   }
 
-  async function startCameraForZoomMode(mode = '1x', isCancelled = () => false, options = {}) {
+  async function startCameraForZoomMode(mode = '.5x', isCancelled = () => false, options = {}) {
     if (!navigator.mediaDevices?.getUserMedia) {
       setCameraStatus('unsupported');
-      return;
-    }
-
-    if (mode === '1x' && !getDeviceForMode('1x') && !options.silent) {
-      await startFastCamera(isCancelled);
       return;
     }
 
@@ -1606,8 +1531,7 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
       const startedAt = performance.now();
       const devices = availableDevicesRef.current.length ? availableDevicesRef.current : await getAvailableVideoDevices();
       if (!availableDevicesRef.current.length) availableDevicesRef.current = devices;
-      if (devices.length) cacheZoomDevices(devices);
-      const selectedCameraDevice = getDeviceForMode(mode);
+      const selectedCameraDevice = devices.length ? cachePointFiveDevice(devices) : pointFiveDeviceRef.current;
 
       const currentTrack = streamRef.current?.getVideoTracks?.()[0];
       const currentCapabilities = currentTrack?.getCapabilities?.() || {};
@@ -1616,8 +1540,7 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
         !selectedCameraDevice?.deviceId ||
         (currentDeviceId && selectedCameraDevice.deviceId === currentDeviceId);
 
-      let requestedZoom = 1;
-      if (mode === '.5x') requestedZoom = 0.5;
+      const requestedZoom = 0.5;
 
       if (canUseCurrentTrack && currentCapabilities.zoom && currentTrack?.applyConstraints) {
         const min = currentCapabilities.zoom.min ?? 1;
@@ -1625,7 +1548,6 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
         const nextZoom = Math.min(Math.max(requestedZoom, min), max);
         await currentTrack.applyConstraints({ advanced: [{ zoom: nextZoom }] });
         const actualZoom = currentTrack.getSettings?.().zoom ?? nextZoom;
-        setZoomLevel(actualZoom);
         setZoomMode(mode);
         setCameraStatus('ready');
         console.info('[Catmunity camera zoom]', { selectedZoomMode: mode, requestedZoom, actualZoom, settings: currentTrack.getSettings?.() });
@@ -1647,17 +1569,11 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
         const min = capabilities.zoom.min ?? 1;
         const max = capabilities.zoom.max ?? 1;
         const normalZoom = Math.min(Math.max(requestedZoom, min), max);
-        setCameraZoomRange({ min, max, supported: true });
         try {
           await videoTrack.applyConstraints({ advanced: [{ zoom: normalZoom }] });
-          setZoomLevel(normalZoom);
         } catch (error) {
-          setCameraZoomRange({ min: 1, max: 1, supported: false });
-          setZoomLevel(1);
+          console.info('[Catmunity camera zoom]', { selectedZoomMode: mode, requestedZoom, error });
         }
-      } else {
-        setCameraZoomRange({ min: 1, max: 1, supported: false });
-        setZoomLevel(1);
       }
       setZoomMode(mode);
 
@@ -1671,7 +1587,7 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
 
   async function handleZoomMode(nextMode) {
     if (nextMode === zoomMode || processing) return;
-    if (nextMode === '1x' || nextMode === '.5x') {
+    if (nextMode === '.5x') {
       await startCameraForZoomMode(nextMode);
     }
   }
