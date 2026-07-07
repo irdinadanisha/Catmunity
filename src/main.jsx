@@ -1712,7 +1712,7 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
 
   return (
     <section className="snap-camera-screen">
-      <div ref={previewRef} className="snap-camera-preview" style={{ '--camera-preview-aspect-ratio': previewRatio }}>
+      <div ref={previewRef} className="snap-camera-preview">
         <video
           ref={videoRef}
           className={streamOrientation === 'landscape' ? 'snap-camera-video is-landscape-stream' : 'snap-camera-video'}

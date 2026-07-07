@@ -1739,16 +1739,16 @@ button:disabled {
   position: absolute;
   z-index: 1;
   top: calc(88px + env(safe-area-inset-top));
-  left: 12px;
-  right: 12px;
+  left: 50%;
+  width: min(calc(100vw - 32px), 448px);
+  max-width: calc(100% - 32px);
   height: clamp(360px, calc(100dvh - 306px - env(safe-area-inset-top) - env(safe-area-inset-bottom)), 620px);
-  aspect-ratio: var(--camera-preview-aspect-ratio, 16 / 9);
   overflow: hidden;
   border-radius: var(--camera-radius);
   background: #000000;
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.34);
   isolation: isolate;
-  transform: translateZ(0);
+  transform: translateX(-50%) translateZ(0);
   -webkit-mask-image: -webkit-radial-gradient(white, black);
 }
 
