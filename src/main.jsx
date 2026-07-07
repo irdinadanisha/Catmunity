@@ -1762,7 +1762,7 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
           onClick={() => setFacingMode((mode) => (mode === 'environment' ? 'user' : 'environment'))}
           aria-label="Flip camera"
         >
-          <RotateCcw size={21} />
+          <RotateCcw size={18} />
           <span>Flip</span>
         </button>
       </div>
