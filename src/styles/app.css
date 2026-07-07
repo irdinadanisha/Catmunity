@@ -1739,7 +1739,7 @@ button:disabled {
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   background: #000000;
   transform-origin: center;
 }
@@ -1904,7 +1904,7 @@ button:disabled {
   position: absolute;
   z-index: 4;
   left: 50%;
-  bottom: calc(252px + env(safe-area-inset-bottom));
+  bottom: calc(204px + env(safe-area-inset-bottom));
   transform: translateX(-50%);
   min-height: 38px;
   display: inline-flex;
@@ -1952,36 +1952,6 @@ button:disabled {
 
 .snap-zoom-control button:disabled {
   opacity: 0.35;
-}
-
-.snap-zoom-slider {
-  position: absolute;
-  z-index: 4;
-  left: 50%;
-  bottom: calc(204px + env(safe-area-inset-bottom));
-  transform: translateX(-50%);
-  width: min(250px, calc(100% - 92px));
-  display: grid;
-  grid-template-columns: 42px 1fr;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
-  border-radius: 999px;
-  color: #ffffff;
-  background: rgba(18, 18, 18, 0.42);
-  backdrop-filter: blur(18px);
-}
-
-.snap-zoom-slider span {
-  color: #f4eb23;
-  font-size: 0.78rem;
-  font-weight: 950;
-  text-align: center;
-}
-
-.snap-zoom-slider input {
-  width: 100%;
-  accent-color: #f4eb23;
 }
 
 .snap-camera-permission {

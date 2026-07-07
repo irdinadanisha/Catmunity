@@ -1415,12 +1415,12 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
     }
   }
 
-  async function applyZoom(nextZoom, explicitTrack = null) {
+  async function applyZoom(nextZoom) {
     const range = cameraZoomRange;
     const min = range.supported ? range.min : 0.5;
     const max = range.supported ? range.max : 3;
     const clampedZoom = Math.min(Math.max(nextZoom, min), max);
-    const track = explicitTrack || streamRef.current?.getVideoTracks?.()[0];
+    const track = streamRef.current?.getVideoTracks?.()[0];
 
     if (range.supported && track?.applyConstraints) {
       try {
@@ -1482,7 +1482,7 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
         style={
           !cameraZoomRange.supported
             ? {
-                objectFit: zoomLevel < 1 ? 'contain' : 'cover',
+                objectFit: 'contain',
                 transform: `scale(${Math.max(1, zoomLevel)})`,
               }
             : undefined
@@ -1578,17 +1578,6 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
           );
         })}
       </div>
-      <label className="snap-zoom-slider">
-        <span>{zoomLevel.toFixed(zoomLevel % 1 === 0 ? 0 : 1)}x</span>
-        <input
-          type="range"
-          min={cameraZoomRange.min}
-          max={cameraZoomRange.max}
-          step={cameraZoomRange.step}
-          value={zoomLevel}
-          onChange={(event) => applyZoom(Number(event.target.value))}
-        />
-      </label>
       <input
         ref={fileInputRef}
         className="snap-file-input"
