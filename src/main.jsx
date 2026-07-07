@@ -1347,7 +1347,6 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
   const [cameraStatus, setCameraStatus] = useState('requesting');
   const [showSlowLoading, setShowSlowLoading] = useState(false);
   const [facingMode, setFacingMode] = useState('environment');
-  const [zoomMode, setZoomMode] = useState('.5x');
   const [streamOrientation, setStreamOrientation] = useState('portrait');
 
   useEffect(() => {
@@ -1508,7 +1507,6 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
         return;
       }
 
-      setZoomMode('.5x');
       await attachStreamToPreview(stream);
       setCameraStatus('ready');
       inspectCameraAfterPreview('.5x', startedAt);
@@ -1548,7 +1546,6 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
         const nextZoom = Math.min(Math.max(requestedZoom, min), max);
         await currentTrack.applyConstraints({ advanced: [{ zoom: nextZoom }] });
         const actualZoom = currentTrack.getSettings?.().zoom ?? nextZoom;
-        setZoomMode(mode);
         setCameraStatus('ready');
         console.info('[Catmunity camera zoom]', { selectedZoomMode: mode, requestedZoom, actualZoom, settings: currentTrack.getSettings?.() });
         return;
@@ -1575,20 +1572,11 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
           console.info('[Catmunity camera zoom]', { selectedZoomMode: mode, requestedZoom, error });
         }
       }
-      setZoomMode(mode);
-
       await attachStreamToPreview(stream);
       setCameraStatus('ready');
       inspectCameraAfterPreview(mode, startedAt, selectedCameraDevice);
     } catch (error) {
       setCameraStatus(error?.name === 'NotAllowedError' ? 'denied' : 'error');
-    }
-  }
-
-  async function handleZoomMode(nextMode) {
-    if (nextMode === zoomMode || processing) return;
-    if (nextMode === '.5x') {
-      await startCameraForZoomMode(nextMode);
     }
   }
 
@@ -1640,6 +1628,7 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
           autoPlay
         />
       </div>
+      <div className="snap-camera-corner-mask" aria-hidden="true" />
       <div className="snap-camera-shade" />
       {cameraStatus !== 'ready' && (cameraStatus !== 'requesting' || showSlowLoading) && (
         <div className="snap-camera-permission">
@@ -1656,7 +1645,7 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
               : 'You can still choose a photo from your gallery or use the device camera.'}
           </span>
           {cameraStatus !== 'requesting' && (
-            <button className="snap-permission-button" type="button" onClick={() => startCameraForZoomMode(zoomMode)}>
+            <button className="snap-permission-button" type="button" onClick={() => startCameraForZoomMode()}>
               Try camera again
             </button>
           )}
@@ -1701,24 +1690,6 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
         <button className="snap-paw-placeholder" type="button" aria-label="Catmunity">
           <PawPrint size={28} />
         </button>
-      </div>
-      <div className="snap-zoom-control" aria-label="Camera zoom">
-        {[
-          { mode: '.5x', label: '1x', enabled: true },
-        ].map(({ mode, label, enabled }) => {
-          return (
-            <button
-              key={mode}
-              className={zoomMode === mode ? 'active' : ''}
-              type="button"
-              disabled={!enabled || cameraStatus !== 'ready'}
-              onClick={() => handleZoomMode(mode)}
-              title={!enabled ? 'Not supported by this browser/device camera' : undefined}
-            >
-              {label}
-            </button>
-          );
-        })}
       </div>
       <input
         ref={galleryInputRef}
