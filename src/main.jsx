@@ -1817,9 +1817,6 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
         disabled={processing}
         onChange={choosePhoto}
       />
-      <button className="snap-native-capture" type="button" disabled={processing} onClick={openDeviceCamera}>
-        <Camera size={14} /> Device camera
-      </button>
     </section>
   );
 }

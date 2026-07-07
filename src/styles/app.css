@@ -1953,26 +1953,6 @@ button:disabled {
   pointer-events: none;
 }
 
-.snap-native-capture {
-  position: absolute;
-  z-index: 5;
-  left: 50%;
-  bottom: calc(144px + env(safe-area-inset-bottom));
-  transform: translateX(-50%);
-  min-height: 30px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 999px;
-  color: rgba(255, 255, 255, 0.9);
-  background: rgba(16, 16, 16, 0.42);
-  backdrop-filter: blur(16px);
-  font-size: 0.68rem;
-  font-weight: 900;
-}
-
 .snap-zoom-control {
   position: absolute;
   z-index: 5;
