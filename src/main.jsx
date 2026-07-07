@@ -12,6 +12,7 @@ import {
   EyeOff,
   Heart,
   Home,
+  Image as ImageIcon,
   Lock,
   LogOut,
   Map as MapIcon,
@@ -20,6 +21,7 @@ import {
   PawPrint,
   Pencil,
   Plus,
+  RotateCcw,
   Search,
   Settings,
   ShieldCheck,
@@ -727,7 +729,7 @@ function App() {
   return (
     <div className="app-shell">
       {toast && <div className="toast"><Sparkles size={16} />{toast}</div>}
-      {screen !== 'welcome' && screen !== 'explore' && (
+      {screen !== 'welcome' && screen !== 'explore' && screen !== 'catch' && (
         <TopBar
           user={me}
           stats={stats}
@@ -754,14 +756,14 @@ function App() {
 
       <motion.main
         key={screen}
-        className={screen === 'welcome' ? 'main main--welcome' : screen === 'explore' ? 'main main--map' : 'main'}
+        className={screen === 'welcome' ? 'main main--welcome' : screen === 'explore' ? 'main main--map' : screen === 'catch' ? 'main main--camera' : 'main'}
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
       >
         {screen === 'welcome' && <WelcomeScreen onStart={() => navigate('explore')} />}
         {screen === 'explore' && <ExploreScreen {...commonProps} />}
-        {screen === 'catch' && <CatchScreen onPhotoSelected={handlePhotoSelected} processing={isProcessingCatPhoto} />}
+        {screen === 'catch' && <CatchScreen onPhotoSelected={handlePhotoSelected} onClose={() => navigate('explore')} processing={isProcessingCatPhoto} />}
         {screen === 'confirm' && (
           <ConfirmScreen capture={capture} onBack={() => navigate('catch')} onConfirm={handleConfirmCatch} />
         )}
@@ -856,7 +858,7 @@ function App() {
         )}
       </motion.main>
 
-      {screen !== 'welcome' && (
+      {screen !== 'welcome' && screen !== 'catch' && (
         <nav className={screen === 'explore' ? 'bottom-nav bottom-nav--map' : 'bottom-nav'} aria-label="Main navigation">
           {tabs.map((tab) => {
             const Icon = tab.icon;
@@ -870,7 +872,7 @@ function App() {
           })}
         </nav>
       )}
-      {screen !== 'welcome' && <CatchButton onClick={() => navigate('catch')} />}
+      {screen !== 'welcome' && screen !== 'catch' && <CatchButton onClick={() => navigate('catch')} />}
     </div>
   );
 }
@@ -1333,26 +1335,181 @@ function ExploreScreen({ cats, currentUser, currentUserId, navigate, setSelected
   );
 }
 
-function CatchScreen({ onPhotoSelected, processing = false }) {
+function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
+  const videoRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const streamRef = useRef(null);
+  const [cameraStatus, setCameraStatus] = useState('requesting');
+  const [facingMode, setFacingMode] = useState('environment');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function openCamera() {
+      await startCamera(() => cancelled);
+    }
+
+    openCamera();
+
+    return () => {
+      cancelled = true;
+      stopCameraStream();
+    };
+  }, [facingMode]);
+
+  function stopCameraStream() {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+  }
+
+  async function startCamera(isCancelled = () => false) {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraStatus('unsupported');
+      return;
+    }
+
+    setCameraStatus('requesting');
+    stopCameraStream();
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          facingMode: { ideal: facingMode },
+          width: { ideal: 1280 },
+          height: { ideal: 1920 },
+        },
+      });
+      if (isCancelled()) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+      setCameraStatus('ready');
+    } catch (error) {
+      setCameraStatus(error?.name === 'NotAllowedError' ? 'denied' : 'error');
+    }
+  }
+
+  function capturePhoto() {
+    const video = videoRef.current;
+    if (!video || cameraStatus !== 'ready' || processing) return;
+
+    const width = video.videoWidth || 1080;
+    const height = video.videoHeight || 1440;
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    context.drawImage(video, 0, 0, width, height);
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const file = new File([blob], `catmunity-catch-${Date.now()}.jpg`, { type: 'image/jpeg' });
+      onPhotoSelected(file);
+    }, 'image/jpeg', 0.92);
+  }
+
+  function chooseFromGallery(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    onPhotoSelected(file);
+    event.target.value = '';
+  }
+
   return (
-    <section className="screen catch-screen">
-      <div className="safety-strip catch-safety-strip"><ShieldCheck size={17} /> Keep paws, people, and private spaces respected.</div>
-      <div className="catch-hero-copy">
-        <span className="header-icon"><Camera size={22} /></span>
-        <h1>Catch the cat!</h1>
-        <p>Ask the cat to pose for the gram!</p>
+    <section className="snap-camera-screen">
+      <video ref={videoRef} className="snap-camera-video" playsInline muted autoPlay />
+      <div className="snap-camera-shade" />
+      {cameraStatus !== 'ready' && (
+        <div className="snap-camera-permission">
+          <PawPrint size={30} />
+          <strong>
+            {cameraStatus === 'requesting' && 'Opening camera...'}
+            {cameraStatus === 'denied' && 'Camera access needed'}
+            {cameraStatus === 'unsupported' && 'Camera unavailable'}
+            {cameraStatus === 'error' && 'Camera could not open'}
+          </strong>
+          <span>
+            {cameraStatus === 'denied'
+              ? 'Allow camera access to catch cats. If your browser blocked it, enable camera permission in site settings and try again.'
+              : 'You can still choose a photo from your gallery.'}
+          </span>
+          {cameraStatus !== 'requesting' && (
+            <button className="snap-permission-button" type="button" onClick={() => startCamera()}>
+              Try camera again
+            </button>
+          )}
+        </div>
+      )}
+      <div className="snap-camera-topbar">
+        <button className="snap-paw-button" type="button" aria-label="Catmunity camera">
+          <PawPrint size={25} />
+        </button>
+        <div className="snap-camera-title">
+          <strong>Catmunity</strong>
+          <span>Keep paws, people, and private spaces respected.</span>
+        </div>
+        <button className="snap-icon-button" type="button" aria-label="Close camera" onClick={onClose}>
+          <X size={24} />
+        </button>
       </div>
-      <label className={processing ? 'upload-panel processing' : 'upload-panel'}>
+      <div className="snap-side-tools" aria-label="Camera tools">
+        <button
+          className="snap-tool-button"
+          type="button"
+          onClick={() => setFacingMode((mode) => (mode === 'environment' ? 'user' : 'environment'))}
+          aria-label="Flip camera"
+        >
+          <RotateCcw size={25} />
+          <span>Flip</span>
+        </button>
+        <button
+          className="snap-tool-button"
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          aria-label="Choose from gallery"
+        >
+          <ImageIcon size={25} />
+          <span>Gallery</span>
+        </button>
+      </div>
+      <div className="snap-capture-dock">
+        <button className="snap-gallery-button" type="button" onClick={() => fileInputRef.current?.click()} aria-label="Choose photo">
+          <ImageIcon size={27} />
+        </button>
+        <button
+          className={processing ? 'snap-shutter-button processing' : 'snap-shutter-button'}
+          type="button"
+          disabled={processing || cameraStatus !== 'ready'}
+          onClick={capturePhoto}
+          aria-label="Take photo"
+        >
+          <span />
+        </button>
+        <button className="snap-paw-placeholder" type="button" aria-label="Catmunity">
+          <PawPrint size={28} />
+        </button>
+      </div>
+      <input
+        ref={fileInputRef}
+        className="snap-file-input"
+        type="file"
+        accept="image/*"
+        onChange={chooseFromGallery}
+      />
+      <label className="snap-native-capture">
         <input
           type="file"
           accept="image/*"
           capture="environment"
           disabled={processing}
-          onChange={(event) => onPhotoSelected(event.target.files?.[0])}
+          onChange={chooseFromGallery}
         />
-        <Camera size={38} />
-        <strong>{processing ? 'Preparing square crop...' : 'Click here to catch!'}</strong>
-        <span>{processing ? 'Standardizing the photo into a square cat image.' : 'Make sure they’re looking cute!'}</span>
+        <Camera size={16} /> Use device camera
       </label>
     </section>
   );
