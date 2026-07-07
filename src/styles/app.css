@@ -1781,6 +1781,21 @@ button:disabled {
     radial-gradient(circle at 50% 62%, transparent 0, rgba(0, 0, 0, 0.1) 58%, rgba(0, 0, 0, 0.4) 100%);
 }
 
+.snap-camera-corner-mask {
+  position: absolute;
+  z-index: 4;
+  top: calc(88px + env(safe-area-inset-top));
+  left: 12px;
+  right: 12px;
+  bottom: calc(142px + env(safe-area-inset-bottom));
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 34px 34px, transparent 0 33px, #000000 34px) top left / 42px 42px no-repeat,
+    radial-gradient(circle at 8px 34px, transparent 0 33px, #000000 34px) top right / 42px 42px no-repeat,
+    radial-gradient(circle at 34px 8px, transparent 0 33px, #000000 34px) bottom left / 42px 42px no-repeat,
+    radial-gradient(circle at 8px 8px, transparent 0 33px, #000000 34px) bottom right / 42px 42px no-repeat;
+}
+
 .snap-native-copy {
   position: absolute;
   z-index: 4;

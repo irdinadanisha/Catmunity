@@ -1628,6 +1628,7 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
           autoPlay
         />
       </div>
+      <div className="snap-camera-corner-mask" aria-hidden="true" />
       <div className="snap-camera-shade" />
       {cameraStatus !== 'ready' && (cameraStatus !== 'requesting' || showSlowLoading) && (
         <div className="snap-camera-permission">
