@@ -282,7 +282,8 @@ export async function createNewCatInSupabase({ capture, form, uiUserId }) {
   const user = await getSupabaseUser();
   if (!user) return null;
 
-  const localCat = createNewCatWithCanonicalLocation({ capture, form, currentUserId: uiUserId });
+  const persistentCapture = await persistCaptureImages(capture, user.id);
+  const localCat = createNewCatWithCanonicalLocation({ capture: persistentCapture, form, currentUserId: uiUserId });
   const catPayload = {
     name: localCat.name,
     colour: localCat.colour,
@@ -351,11 +352,12 @@ export async function addExistingCatToCollection({ userId: explicitUserId, catId
   const user = await getSupabaseUser();
   const userId = explicitUserId || user?.id;
   if (!userId) return false;
+  const persistentCapture = capture ? await persistCaptureImages(capture, userId) : capture;
 
   const userCatResult = await createSupabaseUserCat({
     userId,
     catId,
-    capture,
+    capture: persistentCapture,
   });
 
   if (!userCatResult) return false;
@@ -363,7 +365,7 @@ export async function addExistingCatToCollection({ userId: explicitUserId, catId
   await createSupabaseSighting({
     userId,
     catId,
-    capture,
+    capture: persistentCapture,
   });
 
   return true;
@@ -500,12 +502,13 @@ async function createSupabaseSighting({ userId, catId, capture, photoUrl = null,
 function mapSupabaseCat(cat, uiUserId, caught, userCat = null) {
   const limitedInfo = !caught;
   const originalImageUrl = isPersistentImageUrl(cat.original_image_url) ? cat.original_image_url : '';
+  const croppedImageUrl = isPersistentImageUrl(cat.cropped_image_url) ? cat.cropped_image_url : missingCatImageUrl;
   return {
     id: cat.id,
     name: cat.name || 'Unnamed Cat',
-    image_url: originalImageUrl || cat.cropped_image_url,
+    image_url: originalImageUrl || croppedImageUrl,
     original_image_url: originalImageUrl,
-    cropped_image_url: cat.cropped_image_url,
+    cropped_image_url: croppedImageUrl,
     color: limitedInfo ? '' : cat.colour || '',
     colour: limitedInfo ? '' : cat.colour || '',
     breed: limitedInfo ? '' : cat.breed || '',
@@ -540,6 +543,80 @@ function mapSupabaseCat(cat, uiUserId, caught, userCat = null) {
 function isPersistentImageUrl(value = '') {
   return /^https?:/i.test(value) || /^data:image\//i.test(value);
 }
+
+async function persistCaptureImages(capture, userId) {
+  if (!capture || !isSupabaseConfigured) return capture;
+
+  const [croppedImage, originalImage] = await Promise.all([
+    uploadCatPhotoFromUrl({
+      userId,
+      imageUrl: capture.croppedImage,
+      filename: capture.originalFileName,
+      variant: 'cropped',
+    }),
+    uploadCatPhotoFromUrl({
+      userId,
+      imageUrl: capture.originalImage,
+      filename: capture.originalFileName,
+      variant: 'original',
+    }),
+  ]);
+
+  return {
+    ...capture,
+    croppedImage: croppedImage || missingCatImageUrl,
+    originalImage: originalImage || croppedImage || missingCatImageUrl,
+  };
+}
+
+async function uploadCatPhotoFromUrl({ userId, imageUrl, filename = 'cat-photo.jpg', variant }) {
+  if (!imageUrl || isPersistentImageUrl(imageUrl)) return imageUrl;
+
+  try {
+    const response = await fetch(imageUrl);
+    if (!response.ok) throw new Error('Could not read cat photo before upload.');
+    const blob = await response.blob();
+    const extension = getImageExtension(blob.type, filename);
+    const cleanName = filename.replace(/\.[^.]+$/u, '').replace(/[^a-z0-9_-]+/giu, '-').replace(/^-|-$/gu, '') || 'cat-photo';
+    const path = `${userId}/${Date.now()}-${variant}-${cleanName}.${extension}`;
+    const { error } = await supabase.storage
+      .from('cat-photos')
+      .upload(path, blob, {
+        cacheControl: '31536000',
+        contentType: blob.type || 'image/jpeg',
+        upsert: false,
+      });
+
+    if (error) throw error;
+
+    const { data } = supabase.storage
+      .from('cat-photos')
+      .getPublicUrl(path);
+    return data.publicUrl;
+  } catch (error) {
+    console.warn('Cat photo upload failed', error);
+    return '';
+  }
+}
+
+function getImageExtension(contentType = '', filename = '') {
+  if (contentType.includes('png')) return 'png';
+  if (contentType.includes('webp')) return 'webp';
+  if (contentType.includes('gif')) return 'gif';
+  const match = filename.match(/\.([a-z0-9]+)$/iu);
+  return match?.[1]?.toLowerCase() || 'jpg';
+}
+
+const missingCatImageUrl = `data:image/svg+xml,${encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <rect width="400" height="400" rx="56" fill="#fff0e4"/>
+  <path d="M116 154 88 102a16 16 0 0 1 24-19l48 34a116 116 0 0 1 80 0l48-34a16 16 0 0 1 24 19l-28 52a116 116 0 1 1-168 0Z" fill="#f6cdbd"/>
+  <circle cx="154" cy="210" r="16" fill="#705247"/>
+  <circle cx="246" cy="210" r="16" fill="#705247"/>
+  <path d="M200 232c14 0 26 7 26 16s-12 16-26 16-26-7-26-16 12-16 26-16Z" fill="#e85f4b"/>
+  <path d="M168 284c18 16 46 16 64 0" fill="none" stroke="#705247" stroke-width="14" stroke-linecap="round"/>
+</svg>
+`)}`;
 
 function getAreaName(latitude, longitude) {
   if (latitude >= 3.145 && latitude <= 3.151 && longitude >= 101.691 && longitude <= 101.699) {
