@@ -36,6 +36,50 @@ export async function getCurrentAccurateLocation() {
   });
 }
 
+export async function getCurrentCatLocation() {
+  if (!navigator.geolocation) {
+    return {
+      ok: false,
+      error: 'unsupported',
+      message: 'Location is not available on this device.',
+    };
+  }
+
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        const approximate = getApproximateLocation(coords.latitude, coords.longitude);
+        resolve({
+          ok: true,
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          accuracyMeters: coords.accuracy,
+          approximateLatitude: approximate.latitude,
+          approximateLongitude: approximate.longitude,
+          areaName: approximate.areaName,
+          city: approximate.city,
+          country: approximate.country,
+          locationName: approximate.locationName,
+        });
+      },
+      (error) => {
+        resolve({
+          ok: false,
+          error: error.code === error.PERMISSION_DENIED ? 'denied' : 'unavailable',
+          message: error.code === error.PERMISSION_DENIED
+            ? 'Location permission is needed to register where this cat was found.'
+            : 'We could not detect your current location. Please try again.',
+        });
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 15000 },
+    );
+  });
+}
+
+export function reverseGeocodeLocation(latitude, longitude) {
+  return getApproximateLocation(latitude, longitude);
+}
+
 export function getApproximateLocation(latitude, longitude) {
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
     return {

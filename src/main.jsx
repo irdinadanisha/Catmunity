@@ -34,11 +34,11 @@ import {
 import {
   addExistingCatToUserCollection,
   addExistingCatToSupabase,
-  approximateLocation,
   createNewCatInSupabase,
   createNewCatWithCanonicalLocation,
   duplicateLocationRadiusMeters,
   fetchPublicUserCollection,
+  getCurrentCatLocation,
   getCatMapPosition,
   getDistanceMeters,
   getCurrentAccurateLocation,
@@ -131,6 +131,7 @@ function App() {
   const [publicProfileCats, setPublicProfileCats] = useState([]);
   const [postCatId, setPostCatId] = useState('');
   const [isProcessingCatPhoto, setIsProcessingCatPhoto] = useState(false);
+  const [isDetectingCatLocation, setIsDetectingCatLocation] = useState(false);
   const [savingCatDetails, setSavingCatDetails] = useState(false);
   const [successCat, setSuccessCat] = useState(null);
   const [authUser, setAuthUser] = useState(null);
@@ -332,6 +333,66 @@ function App() {
     window.setTimeout(() => setToast(''), 2200);
   }
 
+  function hasDetectedCatLocation(targetCapture = capture) {
+    return targetCapture?.locationStatus === 'ready'
+      && Number.isFinite(targetCapture.latitude)
+      && Number.isFinite(targetCapture.longitude);
+  }
+
+  function applyCatLocationToCapture(targetCapture, location) {
+    if (!targetCapture) return targetCapture;
+
+    if (!location?.ok) {
+      return {
+        ...targetCapture,
+        latitude: null,
+        longitude: null,
+        accuracyMeters: null,
+        approximateLatitude: null,
+        approximateLongitude: null,
+        areaName: '',
+        city: '',
+        country: '',
+        locationName: '',
+        locationStatus: 'needed',
+        locationError: location?.message || 'Location permission is needed to register where this cat was found.',
+      };
+    }
+
+    return {
+      ...targetCapture,
+      latitude: location.latitude,
+      longitude: location.longitude,
+      accuracyMeters: location.accuracyMeters,
+      approximateLatitude: location.approximateLatitude,
+      approximateLongitude: location.approximateLongitude,
+      areaName: location.areaName,
+      city: location.city,
+      country: location.country,
+      locationName: location.locationName,
+      locationStatus: 'ready',
+      locationError: '',
+    };
+  }
+
+  async function refreshCatCaptureLocation(extraCaptureFields = {}) {
+    setIsDetectingCatLocation(true);
+    try {
+      const location = await getCurrentCatLocation();
+      let nextCapture = null;
+      setCapture((current) => {
+        nextCapture = applyCatLocationToCapture({ ...current, ...extraCaptureFields }, location);
+        return nextCapture;
+      });
+      setDraftCat((current) => (current && nextCapture
+        ? { ...current, location_name: nextCapture.locationName }
+        : current));
+      return nextCapture;
+    } finally {
+      setIsDetectingCatLocation(false);
+    }
+  }
+
   async function openNotifications() {
     setNotificationsOpen(true);
     setUnreadNotificationCount(0);
@@ -515,30 +576,35 @@ function App() {
     setIsProcessingCatPhoto(true);
     const previewUrl = URL.createObjectURL(file);
     try {
-      const position = await getCurrentAccurateLocation();
-      setCapture({
+      const location = await getCurrentCatLocation();
+      setCapture(applyCatLocationToCapture({
         originalImage: previewUrl,
         originalFileName: file.name,
         croppedImage: '',
         cropMode: 'manual-square',
         source,
-        latitude: position.latitude,
-        longitude: position.longitude,
-        locationName: approximateLocation(position.latitude, position.longitude),
-      });
+      }, location));
       navigate('confirm');
     } finally {
       setIsProcessingCatPhoto(false);
     }
   }
 
-  function handleConfirmCatch(croppedImage) {
+  async function handleConfirmCatch(croppedImage) {
+    let nextCapture = null;
     if (croppedImage) {
       setCapture((current) => ({
         ...current,
         croppedImage,
         cropMode: 'square-crop',
       }));
+    }
+    if (!hasDetectedCatLocation()) {
+      nextCapture = await refreshCatCaptureLocation(croppedImage ? { croppedImage, cropMode: 'square-crop' } : {});
+      if (!hasDetectedCatLocation(nextCapture)) {
+        showToast('Location permission is needed before registering this cat.');
+        return;
+      }
     }
     navigate('registrationChoice');
   }
@@ -615,14 +681,22 @@ function App() {
       }
 
       const formPayload = { ...draftCat, ...form };
+      let captureForSave = capture;
+      if (!hasDetectedCatLocation(captureForSave)) {
+        captureForSave = await refreshCatCaptureLocation();
+        if (!hasDetectedCatLocation(captureForSave)) {
+          showToast('Location permission is needed before saving this cat.');
+          return;
+        }
+      }
       const localCat = createNewCatWithCanonicalLocation({
-        capture,
+        capture: captureForSave,
         form: formPayload,
         currentUserId,
       });
       const saved = isSupabaseConfigured
         ? await createNewCatInSupabase({
-          capture,
+          capture: captureForSave,
           form: formPayload,
           uiUserId: currentUserId,
         })
@@ -948,8 +1022,11 @@ function App() {
         {screen === 'detailsForm' && (
           <CatDetailsForm
             cat={draftCat}
+            capture={capture}
             mode={editingCatId ? 'edit' : 'create'}
             saving={savingCatDetails}
+            detectingLocation={isDetectingCatLocation}
+            onRetryLocation={() => refreshCatCaptureLocation()}
             onSave={handleSaveDetails}
             onBack={() => {
               setEditingCatId('');
@@ -2046,12 +2123,15 @@ function ConfirmScreen({ capture, onBack, onConfirm }) {
   const [isCropping, setIsCropping] = useState(false);
 
   if (!capture) return null;
+  const locationSubtitle = capture.locationStatus === 'ready'
+    ? `Location detected as ${capture.locationName}.`
+    : 'Location permission is needed before registering this cat.';
 
   async function handleUsePhoto(cropSettings) {
     setIsCropping(true);
     try {
       const croppedImage = await createSquareCatchCrop(capture.originalImage, capture.originalFileName, cropSettings);
-      onConfirm(croppedImage);
+      await onConfirm(croppedImage);
     } finally {
       setIsCropping(false);
     }
@@ -2060,7 +2140,7 @@ function ConfirmScreen({ capture, onBack, onConfirm }) {
   return (
     <section className="screen">
       <BackButton onBack={onBack} />
-      <ScreenHeader title="Catch this cat?" subtitle={`Location saved as ${capture.locationName}.`} icon={Sparkles} />
+      <ScreenHeader title="Catch this cat?" subtitle={locationSubtitle} icon={Sparkles} />
       <SquareCropEditor
         imageUrl={capture.originalImage}
         disabled={isCropping}
@@ -2408,7 +2488,16 @@ function CatCaughtSuccessScreen({ cat, onDone }) {
   );
 }
 
-function CatDetailsForm({ cat, mode = 'create', saving = false, onSave, onBack }) {
+function CatDetailsForm({
+  cat,
+  capture,
+  mode = 'create',
+  saving = false,
+  detectingLocation = false,
+  onRetryLocation,
+  onSave,
+  onBack,
+}) {
   const [form, setForm] = useState({
     name: cat?.name || '',
     color: cat?.color || '',
@@ -2444,6 +2533,9 @@ function CatDetailsForm({ cat, mode = 'create', saving = false, onSave, onBack }
     });
   }
 
+  const locationReady = mode === 'edit' || hasReadableCaptureLocation(capture);
+  const locationLabel = mode === 'edit' ? cat?.location_name : capture?.locationName;
+
   return (
     <section className="screen">
       <BackButton onBack={onBack} />
@@ -2457,8 +2549,10 @@ function CatDetailsForm({ cat, mode = 'create', saving = false, onSave, onBack }
         onSubmit={(event) => {
           event.preventDefault();
           if (saving) return;
+          if (!locationReady) return;
           onSave({
             ...form,
+            location_name: locationLabel || form.location_name,
             name: form.name.trim() || 'Unnamed Cat',
             tags: form.tags.split(',').map((tag) => tag.trim()).filter(Boolean),
           });
@@ -2486,14 +2580,57 @@ function CatDetailsForm({ cat, mode = 'create', saving = false, onSave, onBack }
           suggestions={catKeywordSuggestions.slice(0, 18)}
           onSelect={addTagSuggestion}
         />
-        <Field label="Location found" value={form.location_name} onChange={(value) => update('location_name', value)} />
+        <AutomaticLocationCard
+          capture={capture}
+          mode={mode}
+          fallbackLocation={form.location_name}
+          detecting={detectingLocation}
+          onRetry={onRetryLocation}
+        />
         <Field label="Date found" type="date" value={form.date_found} onChange={(value) => update('date_found', value)} />
-        <button className="primary-button" type="submit" disabled={saving}>
+        <button className="primary-button" type="submit" disabled={saving || !locationReady || detectingLocation}>
           <Check size={18} />
-          {saving ? 'Saving...' : mode === 'edit' ? 'Save changes' : 'Save to collection'}
+          {saving ? 'Saving...' : detectingLocation ? 'Detecting location...' : mode === 'edit' ? 'Save changes' : 'Save to collection'}
         </button>
       </form>
     </section>
+  );
+}
+
+function hasReadableCaptureLocation(capture) {
+  return capture?.locationStatus === 'ready' && Boolean(capture.locationName);
+}
+
+function AutomaticLocationCard({ capture, mode, fallbackLocation, detecting, onRetry }) {
+  const ready = mode === 'edit' || hasReadableCaptureLocation(capture);
+  const permissionNeeded = mode !== 'edit' && capture?.locationStatus !== 'ready';
+  const title = detecting
+    ? 'Detecting your location...'
+    : ready
+      ? (mode === 'edit' ? fallbackLocation : capture.locationName)
+      : 'Location permission needed';
+  const description = detecting
+    ? 'Please keep Catmunity open while we get your current position.'
+    : ready
+      ? 'Location is automatically detected when you catch a cat.'
+      : (capture?.locationError || 'Location permission is needed to register where this cat was found.');
+
+  return (
+    <div className={ready ? 'auto-location-card is-ready' : 'auto-location-card needs-location'}>
+      <span className="auto-location-icon">
+        <MapPin size={18} />
+      </span>
+      <div>
+        <strong>Location found</strong>
+        <p>{title}</p>
+        <small>{description}</small>
+        {permissionNeeded && onRetry && (
+          <button className="text-button auto-location-retry" type="button" onClick={onRetry} disabled={detecting}>
+            {detecting ? 'Detecting...' : 'Retry location'}
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
