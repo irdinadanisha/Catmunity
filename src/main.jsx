@@ -131,6 +131,8 @@ function App() {
   const [publicProfileCats, setPublicProfileCats] = useState([]);
   const [postCatId, setPostCatId] = useState('');
   const [isProcessingCatPhoto, setIsProcessingCatPhoto] = useState(false);
+  const [savingCatDetails, setSavingCatDetails] = useState(false);
+  const [successCat, setSuccessCat] = useState(null);
   const [authUser, setAuthUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(isSupabaseConfigured);
   const [followingIds, setFollowingIds] = useState([]);
@@ -573,56 +575,73 @@ function App() {
   }
 
   async function handleSaveDetails(form) {
-    if (editingCatId) {
-      const { error } = await updateCatDetailsInSupabase(editingCatId, form);
-      if (error) {
-        showToast(error.message || 'Cat details could not be updated.');
+    if (savingCatDetails) return;
+
+    setSavingCatDetails(true);
+    try {
+      if (editingCatId) {
+        const { error } = await updateCatDetailsInSupabase(editingCatId, form);
+        if (error) {
+          showToast(error.message || 'Cat details could not be updated.');
+          return;
+        }
+        const liveCats = await loadCatsFromSupabase(currentUserId);
+        setCats(liveCats || ((items) => items.map((cat) => (
+          cat.id === editingCatId
+            ? {
+              ...cat,
+              name: form.name.trim() || 'Unnamed Cat',
+              color: form.color,
+              colour: form.color,
+              breed: form.breed,
+              weight: form.weight,
+              behavior: form.behavior,
+              gender: form.gender,
+              fun_info: form.fun_info,
+              fun_facts: form.fun_info,
+              remarks: form.remarks,
+              location_name: form.location_name,
+              discovered_at: form.date_found ? new Date(`${form.date_found}T12:00:00`).toISOString() : cat.discovered_at,
+              updated_at: new Date().toISOString(),
+            }
+            : cat
+        ))));
+        setSelectedCatId(editingCatId);
+        setEditingCatId('');
+        setDraftCat(null);
+        showToast('Cat details updated.');
+        navigate('collection');
         return;
       }
-      const liveCats = await loadCatsFromSupabase(currentUserId);
-      setCats(liveCats || ((items) => items.map((cat) => (
-        cat.id === editingCatId
-          ? {
-            ...cat,
-            name: form.name.trim() || 'Unnamed Cat',
-            color: form.color,
-            colour: form.color,
-            breed: form.breed,
-            weight: form.weight,
-            behavior: form.behavior,
-            gender: form.gender,
-            fun_info: form.fun_info,
-            fun_facts: form.fun_info,
-            remarks: form.remarks,
-            location_name: form.location_name,
-            discovered_at: form.date_found ? new Date(`${form.date_found}T12:00:00`).toISOString() : cat.discovered_at,
-            updated_at: new Date().toISOString(),
-          }
-          : cat
-      ))));
-      setSelectedCatId(editingCatId);
-      setEditingCatId('');
-      setDraftCat(null);
-      showToast('Cat details updated.');
-      navigate('collection');
-      return;
+
+      const formPayload = { ...draftCat, ...form };
+      const localCat = createNewCatWithCanonicalLocation({
+        capture,
+        form: formPayload,
+        currentUserId,
+      });
+      const saved = isSupabaseConfigured
+        ? await createNewCatInSupabase({
+          capture,
+          form: formPayload,
+          uiUserId: currentUserId,
+        })
+        : localCat;
+
+      if (!saved) {
+        showToast('Cat could not be saved. Please try again.');
+        return;
+      }
+
+      setCats((items) => [saved, ...items]);
+      setSelectedCatId(saved.id);
+      setSuccessCat(saved);
+      navigate('catchSuccess');
+    } catch (error) {
+      showToast(error.message || 'Cat could not be saved. Please try again.');
+    } finally {
+      setSavingCatDetails(false);
     }
-
-    const localCat = createNewCatWithCanonicalLocation({
-      capture,
-      form: { ...draftCat, ...form },
-      currentUserId,
-    });
-    const saved = await createNewCatInSupabase({
-      capture,
-      form: { ...draftCat, ...form },
-      uiUserId: currentUserId,
-    }) || localCat;
-
-    setCats((items) => [saved, ...items]);
-    setSelectedCatId(saved.id);
-    showToast('New cat saved with one map pin.');
-    navigate('collection');
   }
 
   function startEditCat(catId) {
@@ -838,7 +857,7 @@ function App() {
   return (
     <div className="app-shell">
       {toast && <div className="toast"><Sparkles size={16} />{toast}</div>}
-      {screen !== 'welcome' && screen !== 'explore' && screen !== 'catch' && (
+      {screen !== 'welcome' && screen !== 'explore' && screen !== 'catch' && screen !== 'catchSuccess' && (
         <TopBar
           user={me}
           stats={stats}
@@ -878,7 +897,7 @@ function App() {
 
       <motion.main
         key={screen}
-        className={screen === 'welcome' ? 'main main--welcome' : screen === 'explore' ? 'main main--map' : screen === 'catch' ? 'main main--camera' : 'main'}
+        className={screen === 'welcome' ? 'main main--welcome' : screen === 'explore' ? 'main main--map' : screen === 'catch' ? 'main main--camera' : screen === 'catchSuccess' ? 'main main--success' : 'main'}
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
@@ -907,12 +926,19 @@ function App() {
           <CatDetailsForm
             cat={draftCat}
             mode={editingCatId ? 'edit' : 'create'}
+            saving={savingCatDetails}
             onSave={handleSaveDetails}
             onBack={() => {
               setEditingCatId('');
               setDraftCat(null);
               navigate(editingCatId ? 'collection' : 'confirm');
             }}
+          />
+        )}
+        {screen === 'catchSuccess' && (
+          <CatCaughtSuccessScreen
+            cat={successCat}
+            onDone={() => navigate('collection')}
           />
         )}
         {screen === 'collection' && (
@@ -990,7 +1016,7 @@ function App() {
         )}
       </motion.main>
 
-      {screen !== 'welcome' && screen !== 'catch' && (
+      {screen !== 'welcome' && screen !== 'catch' && screen !== 'catchSuccess' && (
         <nav className={screen === 'explore' ? 'bottom-nav bottom-nav--map' : 'bottom-nav'} aria-label="Main navigation">
           {tabs.map((tab) => {
             const Icon = tab.icon;
@@ -2289,7 +2315,64 @@ function RegistrationChoiceScreen({ cats, capture, currentUserId, onBack, onNewC
   );
 }
 
-function CatDetailsForm({ cat, mode = 'create', onSave, onBack }) {
+const successConfetti = [
+  { left: '14%', top: '28%', color: '#f06f55', delay: '0s', size: '8px' },
+  { left: '24%', top: '18%', color: '#f8c873', delay: '0.08s', size: '7px' },
+  { left: '36%', top: '24%', color: '#9ad9c6', delay: '0.16s', size: '9px' },
+  { left: '50%', top: '15%', color: '#f06f55', delay: '0.04s', size: '6px' },
+  { left: '64%', top: '25%', color: '#f8c873', delay: '0.12s', size: '8px' },
+  { left: '78%', top: '19%', color: '#9ad9c6', delay: '0.2s', size: '7px' },
+  { left: '18%', top: '58%', color: '#9ad9c6', delay: '0.18s', size: '6px' },
+  { left: '29%', top: '70%', color: '#f06f55', delay: '0.05s', size: '8px' },
+  { left: '72%', top: '66%', color: '#f06f55', delay: '0.14s', size: '7px' },
+  { left: '84%', top: '52%', color: '#f8c873', delay: '0.1s', size: '9px' },
+  { left: '42%', top: '76%', color: '#f8c873', delay: '0.22s', size: '6px' },
+  { left: '59%', top: '72%', color: '#9ad9c6', delay: '0.06s', size: '8px' },
+];
+
+function CatCaughtSuccessScreen({ cat, onDone }) {
+  useEffect(() => {
+    const timeoutId = window.setTimeout(onDone, 3200);
+    return () => window.clearTimeout(timeoutId);
+  }, [onDone]);
+
+  return (
+    <section className="catch-success-screen" aria-live="polite">
+      <div className="success-confetti" aria-hidden="true">
+        {successConfetti.map((piece, index) => (
+          <span
+            key={index}
+            style={{
+              '--confetti-left': piece.left,
+              '--confetti-top': piece.top,
+              '--confetti-color': piece.color,
+              '--confetti-delay': piece.delay,
+              '--confetti-size': piece.size,
+            }}
+          />
+        ))}
+      </div>
+      <div className="success-card">
+        <div className="success-icon-stack">
+          {cat?.cropped_image_url ? (
+            <img src={cat.cropped_image_url} alt={cat.name || 'Cat'} />
+          ) : (
+            <Cat size={44} />
+          )}
+          <span><PawPrint size={20} /></span>
+        </div>
+        <div>
+          <p className="success-eyebrow"><Sparkles size={16} /> Saved</p>
+          <h1>Cat catched!</h1>
+          <p>Added to your collection</p>
+          <small>Taking you to your collection...</small>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function CatDetailsForm({ cat, mode = 'create', saving = false, onSave, onBack }) {
   const [form, setForm] = useState({
     name: cat?.name || '',
     color: cat?.color || '',
@@ -2337,6 +2420,7 @@ function CatDetailsForm({ cat, mode = 'create', onSave, onBack }) {
         className="details-form"
         onSubmit={(event) => {
           event.preventDefault();
+          if (saving) return;
           onSave({
             ...form,
             name: form.name.trim() || 'Unnamed Cat',
@@ -2368,7 +2452,10 @@ function CatDetailsForm({ cat, mode = 'create', onSave, onBack }) {
         />
         <Field label="Location found" value={form.location_name} onChange={(value) => update('location_name', value)} />
         <Field label="Date found" type="date" value={form.date_found} onChange={(value) => update('date_found', value)} />
-        <button className="primary-button" type="submit"><Check size={18} /> {mode === 'edit' ? 'Save changes' : 'Save to collection'}</button>
+        <button className="primary-button" type="submit" disabled={saving}>
+          <Check size={18} />
+          {saving ? 'Saving...' : mode === 'edit' ? 'Save changes' : 'Save to collection'}
+        </button>
       </form>
     </section>
   );
