@@ -383,6 +383,126 @@ export async function removeCatFromUserCollection(userId, catId) {
   return { error };
 }
 
+export async function getCatOwnershipInfo(userId, catId) {
+  if (!isSupabaseConfigured || !userId || !catId) {
+    return {
+      isOriginalCreator: true,
+      totalCatchers: 1,
+      otherCatchers: 0,
+      error: null,
+    };
+  }
+
+  const [{ data: cat, error: catError }, { data: mapCat, error: mapError }] = await Promise.all([
+    supabase
+      .from('cats')
+      .select('id, created_by')
+      .eq('id', catId)
+      .single(),
+    supabase
+      .from('cat_public_map')
+      .select('id, sighting_count')
+      .eq('id', catId)
+      .single(),
+  ]);
+
+  if (catError || mapError) {
+    return {
+      isOriginalCreator: false,
+      totalCatchers: 0,
+      otherCatchers: 0,
+      error: catError || mapError,
+    };
+  }
+
+  const creatorId = cat?.created_by || '';
+  const totalCatchers = Number(mapCat?.sighting_count || 0);
+  const isOriginalCreator = creatorId === userId;
+
+  return {
+    isOriginalCreator,
+    totalCatchers,
+    otherCatchers: Math.max(0, totalCatchers - (isOriginalCreator ? 1 : 0)),
+    error: null,
+  };
+}
+
+export async function deleteCatAsOriginalCreator(userId, catId) {
+  const ownership = await getCatOwnershipInfo(userId, catId);
+  if (ownership.error) return { ...ownership, deletedGlobally: false };
+
+  if (!ownership.isOriginalCreator) {
+    return {
+      ...ownership,
+      deletedGlobally: false,
+      error: new Error('Only the first catcher can delete this cat from the map.'),
+    };
+  }
+
+  if (ownership.otherCatchers > 0) {
+    const { error } = await removeCatFromUserCollection(userId, catId);
+    return {
+      ...ownership,
+      deletedGlobally: false,
+      removedFromCollection: !error,
+      error,
+      blockedGlobalDelete: !error,
+    };
+  }
+
+  const postsResult = await supabase
+    .from('community_posts')
+    .delete()
+    .eq('user_id', userId)
+    .eq('cat_id', catId);
+
+  if (postsResult.error) {
+    return {
+      ...ownership,
+      deletedGlobally: false,
+      error: postsResult.error,
+    };
+  }
+
+  const { error } = await supabase
+    .from('cats')
+    .delete()
+    .eq('id', catId)
+    .eq('created_by', userId);
+
+  return {
+    ...ownership,
+    deletedGlobally: !error,
+    removedFromCollection: !error,
+    error,
+  };
+}
+
+export async function handleDeleteCat(userId, catId) {
+  if (!isSupabaseConfigured || !userId || !catId) {
+    return {
+      deletedGlobally: true,
+      removedFromCollection: true,
+      error: null,
+    };
+  }
+
+  const ownership = await getCatOwnershipInfo(userId, catId);
+  if (ownership.error) return { ...ownership, deletedGlobally: false };
+
+  if (ownership.isOriginalCreator) {
+    return deleteCatAsOriginalCreator(userId, catId);
+  }
+
+  const { error } = await removeCatFromUserCollection(userId, catId);
+  return {
+    ...ownership,
+    deletedGlobally: false,
+    removedFromCollection: !error,
+    error,
+  };
+}
+
 export async function updateCatDetailsInSupabase(catId, form) {
   if (!isSupabaseConfigured || !catId) return { data: null, error: new Error('Supabase is not configured.') };
 
@@ -519,8 +639,8 @@ function mapSupabaseCat(cat, uiUserId, caught, userCat = null) {
     fun_facts: limitedInfo ? '' : cat.fun_facts || '',
     remarks: limitedInfo ? '' : cat.remarks || '',
     tags: ['nearby'],
-    discovered_by: '',
-    created_by: '',
+    discovered_by: cat.created_by || '',
+    created_by: cat.created_by || '',
     caught_by_users: caught ? [uiUserId] : [],
     latitude: cat.latitude,
     longitude: cat.longitude,

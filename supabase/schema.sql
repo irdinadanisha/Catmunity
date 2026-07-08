@@ -159,6 +159,7 @@ select
   cats.remarks,
   cats.original_image_url,
   cats.cropped_image_url,
+  cats.created_by,
   cats.canonical_latitude as latitude,
   cats.canonical_longitude as longitude,
   cats.approximate_latitude,
@@ -191,6 +192,7 @@ select
   cats.remarks,
   cats.original_image_url,
   cats.cropped_image_url,
+  cats.created_by,
   cats.canonical_latitude as latitude,
   cats.canonical_longitude as longitude,
   cats.approximate_latitude,
@@ -294,6 +296,11 @@ with check (
       and user_cats.is_unlocked = true
   )
 );
+
+drop policy if exists "Creators can delete own cats" on public.cats;
+create policy "Creators can delete own cats"
+on public.cats for delete
+using (auth.uid() = created_by);
 
 drop policy if exists "Users can read own cat links" on public.user_cats;
 create policy "Users can read own cat links"

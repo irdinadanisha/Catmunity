@@ -43,9 +43,9 @@ import {
   getDistanceMeters,
   getCurrentAccurateLocation,
   getApproximateLocation,
+  handleDeleteCat,
   isWithinDuplicateRadius,
   loadCatsFromSupabase,
-  removeCatFromUserCollection,
   updateCatDetailsInSupabase,
 } from './services/catServices';
 import {
@@ -772,15 +772,36 @@ function App() {
   }
 
   async function handleRemoveCatFromCollection(catId) {
-    const { error } = await removeCatFromUserCollection(currentUserId, catId);
+    const catToRemove = cats.find((cat) => cat.id === catId);
+    const { error, deletedGlobally, blockedGlobalDelete } = await handleDeleteCat(currentUserId, catId);
     if (error) {
       showToast(error.message || 'Cat could not be removed.');
       return;
     }
     const liveCats = await loadCatsFromSupabase(currentUserId);
-    setCats(liveCats || []);
-    setSelectedCatId('');
-    showToast('Cat removed from your collection.');
+    setCats(liveCats || ((items) => {
+      if (deletedGlobally) return items.filter((cat) => cat.id !== catId);
+      return items.map((cat) => (
+        cat.id === catId
+          ? {
+            ...cat,
+            caught_by_users: cat.caught_by_users.filter((id) => id !== currentUserId),
+          }
+          : cat
+      ));
+    }));
+    setSelectedCatId((current) => (current === catId ? '' : current));
+    if (selectedUserId && selectedUserId !== currentUserId) {
+      const collection = await fetchPublicUserCollection(selectedUserId, currentUserId);
+      setPublicProfileCats(collection);
+    }
+    if (blockedGlobalDelete) {
+      showToast('Other users discovered this cat, so it was only removed from your collection.');
+    } else {
+      showToast(deletedGlobally || catToRemove?.created_by === currentUserId
+        ? 'Cat deleted from the map.'
+        : 'Cat removed from your collection.');
+    }
   }
 
   function requestRemoveCatFromCollection(catId) {
@@ -877,6 +898,8 @@ function App() {
       )}
       {pendingRemoveCatId && (
         <ConfirmRemoveCatModal
+          cat={cats.find((cat) => cat.id === pendingRemoveCatId)}
+          currentUserId={currentUserId}
           onCancel={() => setPendingRemoveCatId('')}
           onConfirm={confirmRemoveCatFromCollection}
         />
@@ -2331,10 +2354,16 @@ const successConfetti = [
 ];
 
 function CatCaughtSuccessScreen({ cat, onDone }) {
+  const onDoneRef = useRef(onDone);
+
   useEffect(() => {
-    const timeoutId = window.setTimeout(onDone, 3200);
-    return () => window.clearTimeout(timeoutId);
+    onDoneRef.current = onDone;
   }, [onDone]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => onDoneRef.current?.(), 3200);
+    return () => window.clearTimeout(timeoutId);
+  }, []);
 
   return (
     <section className="catch-success-screen" aria-live="polite">
@@ -2355,7 +2384,13 @@ function CatCaughtSuccessScreen({ cat, onDone }) {
       <div className="success-card">
         <div className="success-icon-stack">
           {cat?.cropped_image_url ? (
-            <img src={cat.cropped_image_url} alt={cat.name || 'Cat'} />
+            <img
+              src={cat.cropped_image_url}
+              alt={cat.name || 'Cat'}
+              onError={(event) => {
+                event.currentTarget.hidden = true;
+              }}
+            />
           ) : (
             <Cat size={44} />
           )}
@@ -2366,6 +2401,7 @@ function CatCaughtSuccessScreen({ cat, onDone }) {
           <h1>Cat catched!</h1>
           <p>Added to your collection</p>
           <small>Taking you to your collection...</small>
+          <button className="text-button success-skip-button" type="button" onClick={onDone}>View collection</button>
         </div>
       </div>
     </section>
@@ -2702,11 +2738,22 @@ function DiscoveredCatCard({
   );
 }
 
-function ConfirmRemoveCatModal({ onConfirm, onCancel }) {
+function ConfirmRemoveCatModal({ cat, currentUserId, onConfirm, onCancel }) {
+  const isOriginalCreator = cat?.created_by && cat.created_by === currentUserId;
+
   return (
     <div className="notification-overlay" role="dialog" aria-modal="true" aria-label="Confirm remove cat">
       <section className="confirm-remove-panel">
-        <h2>Are you sure you're getting rid of this PHAT cat?</h2>
+        <h2>
+          {isOriginalCreator
+            ? 'You were the first person to register this cat. Delete it?'
+            : "Are you sure you're getting rid of this PHAT cat?"}
+        </h2>
+        <p>
+          {isOriginalCreator
+            ? 'If nobody else discovered this cat, it will disappear from the map for everyone.'
+            : 'It will appear locked again for you, but the original map pin stays.'}
+        </p>
         <div className="confirm-remove-actions">
           <button className="text-button danger-text-button" type="button" onClick={onConfirm}>Yes</button>
           <button className="text-button" type="button" onClick={onCancel}>Oop- ok I'll keep em'</button>

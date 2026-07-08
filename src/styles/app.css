@@ -2419,6 +2419,15 @@ button:disabled {
   font-weight: 800;
 }
 
+.success-skip-button {
+  width: auto;
+  min-height: 38px;
+  margin: 18px auto 0;
+  padding: 0 16px;
+  color: #8a4f38;
+  background: rgba(255, 241, 216, 0.9);
+}
+
 .success-confetti {
   position: absolute;
   inset: 0;
@@ -3228,6 +3237,14 @@ button:disabled {
   margin: 0;
   font-size: 1.14rem;
   line-height: 1.25;
+}
+
+.confirm-remove-panel p {
+  margin: -6px 0 0;
+  color: #746158;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  font-weight: 750;
 }
 
 .confirm-remove-actions {
