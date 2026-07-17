@@ -1977,15 +1977,35 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
 
   function capturePhoto() {
     const video = videoRef.current;
+    const preview = previewRef.current;
     if (!video || cameraStatus !== 'ready' || processing) return;
 
-    const width = video.videoWidth || 1080;
-    const height = video.videoHeight || 1920;
+    const videoWidth = video.videoWidth || 1080;
+    const videoHeight = video.videoHeight || 1920;
+    const previewRect = preview?.getBoundingClientRect();
+    const previewWidth = previewRect?.width || video.clientWidth || videoWidth;
+    const previewHeight = previewRect?.height || video.clientHeight || videoHeight;
+    const visibleSource = getObjectFitCoverSourceRect({
+      sourceWidth: videoWidth,
+      sourceHeight: videoHeight,
+      targetWidth: previewWidth,
+      targetHeight: previewHeight,
+    });
     const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
+    canvas.width = Math.round(visibleSource.width);
+    canvas.height = Math.round(visibleSource.height);
     const context = canvas.getContext('2d');
-    context.drawImage(video, 0, 0, width, height);
+    context.drawImage(
+      video,
+      visibleSource.x,
+      visibleSource.y,
+      visibleSource.width,
+      visibleSource.height,
+      0,
+      0,
+      canvas.width,
+      canvas.height,
+    );
     canvas.toBlob((blob) => {
       if (!blob) return;
       const file = new File([blob], `catmunity-catch-${Date.now()}.jpg`, { type: 'image/jpeg' });
@@ -2120,6 +2140,38 @@ function CatchScreen({ onPhotoSelected, onClose, processing = false }) {
   );
 }
 
+function getObjectFitCoverSourceRect({ sourceWidth, sourceHeight, targetWidth, targetHeight }) {
+  const sourceRatio = sourceWidth / sourceHeight;
+  const targetRatio = targetWidth / targetHeight;
+
+  if (!Number.isFinite(sourceRatio) || !Number.isFinite(targetRatio) || !sourceWidth || !sourceHeight || !targetWidth || !targetHeight) {
+    return {
+      x: 0,
+      y: 0,
+      width: sourceWidth || 1,
+      height: sourceHeight || 1,
+    };
+  }
+
+  if (sourceRatio > targetRatio) {
+    const visibleWidth = sourceHeight * targetRatio;
+    return {
+      x: (sourceWidth - visibleWidth) / 2,
+      y: 0,
+      width: visibleWidth,
+      height: sourceHeight,
+    };
+  }
+
+  const visibleHeight = sourceWidth / targetRatio;
+  return {
+    x: 0,
+    y: (sourceHeight - visibleHeight) / 2,
+    width: sourceWidth,
+    height: visibleHeight,
+  };
+}
+
 function ConfirmScreen({ capture, onBack, onConfirm }) {
   const [isCropping, setIsCropping] = useState(false);
 
@@ -2168,7 +2220,7 @@ function SquareCropEditor({ imageUrl, disabled = false, onUsePhoto }) {
   const [imageMeta, setImageMeta] = useState(null);
   const [crop, setCrop] = useState({ x: 0, y: 0, scale: 1 });
   const imageFitScale = imageMeta
-    ? Math.min(frameSize / imageMeta.width, frameSize / imageMeta.height)
+    ? Math.max(frameSize / imageMeta.width, frameSize / imageMeta.height)
     : 1;
   const fittedWidth = imageMeta ? imageMeta.width * imageFitScale : frameSize;
   const fittedHeight = imageMeta ? imageMeta.height * imageFitScale : frameSize;
@@ -2189,7 +2241,7 @@ function SquareCropEditor({ imageUrl, disabled = false, onUsePhoto }) {
   function clampCrop(nextCrop) {
     const imageWidth = imageMeta?.width || 1;
     const imageHeight = imageMeta?.height || 1;
-    const baseScale = Math.min(frameSize / imageWidth, frameSize / imageHeight);
+    const baseScale = Math.max(frameSize / imageWidth, frameSize / imageHeight);
     const scale = Math.min(Math.max(nextCrop.scale, 1), 4);
     const drawnWidth = imageWidth * baseScale * scale;
     const drawnHeight = imageHeight * baseScale * scale;
@@ -4082,7 +4134,7 @@ async function createSquareCatchCrop(imageUrl, filename, settings) {
   const imageWidth = image.naturalWidth || image.width;
   const imageHeight = image.naturalHeight || image.height;
   const outputRatio = outputSize / (settings.frameSize || outputSize);
-  const baseScale = (settings.fitScale || Math.min((settings.frameSize || outputSize) / imageWidth, (settings.frameSize || outputSize) / imageHeight)) * outputRatio;
+  const baseScale = (settings.fitScale || Math.max((settings.frameSize || outputSize) / imageWidth, (settings.frameSize || outputSize) / imageHeight)) * outputRatio;
   const scale = baseScale * settings.scale;
   const drawnWidth = imageWidth * scale;
   const drawnHeight = imageHeight * scale;
