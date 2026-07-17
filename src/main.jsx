@@ -373,6 +373,8 @@ function App() {
       locationName: location.locationName,
       locationStatus: 'ready',
       locationError: '',
+      locationApproximate: Boolean(location.approximate),
+      locationSource: location.source || 'fresh-gps',
     };
   }
 
@@ -577,15 +579,20 @@ function App() {
     setIsProcessingCatPhoto(true);
     const previewUrl = URL.createObjectURL(file);
     try {
-      const location = await getCurrentCatLocation();
-      setCapture(applyCatLocationToCapture({
+      const nextCapture = {
         originalImage: previewUrl,
         originalFileName: file.name,
         croppedImage: '',
         cropMode: 'manual-square',
         source,
-      }, location));
+        locationStatus: 'detecting',
+        locationName: '',
+        locationError: '',
+      };
+      setCapture(nextCapture);
       navigate('confirm');
+      await refreshCatCaptureLocation(nextCapture);
+      console.debug('[Catmunity catch confirmation location refresh requested]', { source });
     } finally {
       setIsProcessingCatPhoto(false);
     }
@@ -1006,6 +1013,8 @@ function App() {
         {screen === 'confirm' && (
           <ConfirmScreen
             capture={capture}
+            detectingLocation={isDetectingCatLocation}
+            onRetryLocation={() => refreshCatCaptureLocation()}
             onBack={() => navigate('catch')}
             onConfirm={handleConfirmCatch}
           />
@@ -2172,13 +2181,32 @@ function getObjectFitCoverSourceRect({ sourceWidth, sourceHeight, targetWidth, t
   };
 }
 
-function ConfirmScreen({ capture, onBack, onConfirm }) {
+function ConfirmScreen({ capture, detectingLocation = false, onRetryLocation, onBack, onConfirm }) {
   const [isCropping, setIsCropping] = useState(false);
+  const reverseGeocodeRetryRef = useRef(false);
+  const { isLoaded: googleMapsLoaded } = useJsApiLoader({
+    googleMapsApiKey,
+  });
+
+  useEffect(() => {
+    if (
+      googleMapsLoaded &&
+      capture?.locationSource === 'fresh-gps-local-fallback' &&
+      !reverseGeocodeRetryRef.current &&
+      onRetryLocation
+    ) {
+      reverseGeocodeRetryRef.current = true;
+      onRetryLocation();
+    }
+  }, [capture?.locationSource, googleMapsLoaded, onRetryLocation]);
 
   if (!capture) return null;
-  const locationSubtitle = capture.locationStatus === 'ready'
-    ? `Location detected as ${capture.locationName}.`
-    : 'Location permission is needed before registering this cat.';
+  const locationReady = capture.locationStatus === 'ready';
+  const locationSubtitle = detectingLocation || capture.locationStatus === 'detecting'
+    ? 'Detecting your location...'
+    : locationReady
+      ? `${capture.locationApproximate ? 'Approximate location detected as' : 'Location detected as'} ${capture.locationName}.`
+      : (capture.locationError || 'Location permission is needed before registering this cat.');
 
   async function handleUsePhoto(cropSettings) {
     setIsCropping(true);
@@ -2194,6 +2222,21 @@ function ConfirmScreen({ capture, onBack, onConfirm }) {
     <section className="screen">
       <BackButton onBack={onBack} />
       <ScreenHeader title="Catch this cat?" subtitle={locationSubtitle} icon={Sparkles} />
+      <div className={locationReady ? 'confirm-location-card is-ready' : 'confirm-location-card needs-location'}>
+        <MapPin size={17} />
+        <span>
+          {detectingLocation || capture.locationStatus === 'detecting'
+            ? 'Detecting your location...'
+            : locationReady
+              ? capture.locationName
+              : 'Location permission needed'}
+        </span>
+        {onRetryLocation && (
+          <button type="button" onClick={onRetryLocation} disabled={detectingLocation}>
+            {detectingLocation ? 'Detecting...' : 'Retry location'}
+          </button>
+        )}
+      </div>
       <SquareCropEditor
         imageUrl={capture.originalImage}
         disabled={isCropping}
@@ -2203,8 +2246,8 @@ function ConfirmScreen({ capture, onBack, onConfirm }) {
         <button className="secondary-button" onClick={onBack} disabled={isCropping}>
           <X size={18} /> {capture.source === 'gallery' ? 'Choose another' : 'Retake'}
         </button>
-        <button className="primary-button" disabled={isCropping} form="catch-crop-form">
-          <Check size={18} /> {isCropping ? 'Cropping...' : 'Use Photo'}
+        <button className="primary-button" disabled={isCropping || detectingLocation || !locationReady} form="catch-crop-form">
+          <Check size={18} /> {isCropping ? 'Cropping...' : detectingLocation ? 'Detecting location...' : 'Use Photo'}
         </button>
       </div>
     </section>

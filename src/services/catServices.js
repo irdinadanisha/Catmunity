@@ -47,8 +47,18 @@ export async function getCurrentCatLocation() {
 
   return new Promise((resolve) => {
     navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
+      async ({ coords }) => {
         const approximate = getApproximateLocation(coords.latitude, coords.longitude);
+        const geocoded = await reverseGeocodeLocation(coords.latitude, coords.longitude);
+        const readable = geocoded || approximate;
+        console.debug('[Catmunity location]', {
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          accuracyMeters: coords.accuracy,
+          reverseGeocodeResult: geocoded,
+          finalAreaName: readable.locationName,
+          source: geocoded ? 'fresh-gps-google-reverse-geocode' : 'fresh-gps-local-fallback',
+        });
         resolve({
           ok: true,
           latitude: coords.latitude,
@@ -56,13 +66,20 @@ export async function getCurrentCatLocation() {
           accuracyMeters: coords.accuracy,
           approximateLatitude: approximate.latitude,
           approximateLongitude: approximate.longitude,
-          areaName: approximate.areaName,
-          city: approximate.city,
-          country: approximate.country,
-          locationName: approximate.locationName,
+          areaName: readable.areaName,
+          city: readable.city,
+          country: readable.country,
+          locationName: readable.locationName,
+          approximate: coords.accuracy > 80,
+          source: geocoded ? 'fresh-gps-google-reverse-geocode' : 'fresh-gps-local-fallback',
         });
       },
       (error) => {
+        console.debug('[Catmunity location]', {
+          error: error.code === error.PERMISSION_DENIED ? 'denied' : 'unavailable',
+          message: error.message,
+          source: 'geolocation-failed',
+        });
         resolve({
           ok: false,
           error: error.code === error.PERMISSION_DENIED ? 'denied' : 'unavailable',
@@ -71,13 +88,30 @@ export async function getCurrentCatLocation() {
             : 'We could not detect your current location. Please try again.',
         });
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 15000 },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
     );
   });
 }
 
-export function reverseGeocodeLocation(latitude, longitude) {
-  return getApproximateLocation(latitude, longitude);
+export async function reverseGeocodeLocation(latitude, longitude) {
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  if (typeof window === 'undefined' || !window.google?.maps?.Geocoder) return null;
+
+  try {
+    const geocoder = new window.google.maps.Geocoder();
+    const { results } = await geocoder.geocode({ location: { lat: latitude, lng: longitude } });
+    const parsed = parseGoogleReverseGeocode(results || []);
+    console.debug('[Catmunity reverse geocode]', {
+      latitude,
+      longitude,
+      result: parsed,
+      rawFirstResult: results?.[0],
+    });
+    return parsed;
+  } catch (error) {
+    console.warn('[Catmunity reverse geocode failed]', error);
+    return null;
+  }
 }
 
 export function getApproximateLocation(latitude, longitude) {
@@ -112,7 +146,16 @@ export function approximateLocation(latitude, longitude) {
 export function createNewCatWithCanonicalLocation({ capture, form = {}, currentUserId }) {
   const now = new Date().toISOString();
   const catId = form.id || `cat-${Date.now()}`;
-  const approximate = getApproximateLocation(capture.latitude, capture.longitude);
+  const fallbackApproximate = getApproximateLocation(capture.latitude, capture.longitude);
+  const approximate = {
+    ...fallbackApproximate,
+    latitude: capture.approximateLatitude ?? fallbackApproximate.latitude,
+    longitude: capture.approximateLongitude ?? fallbackApproximate.longitude,
+    areaName: capture.areaName || fallbackApproximate.areaName,
+    city: capture.city || fallbackApproximate.city,
+    country: capture.country || fallbackApproximate.country,
+    locationName: capture.locationName || fallbackApproximate.locationName,
+  };
   const tags = Array.isArray(form.tags)
     ? form.tags
     : String(form.tags || 'new find')
@@ -586,9 +629,7 @@ export async function updateCatDetailsInSupabase(catId, form) {
 }
 
 function createUserCatRecord({ userId, catId, capture, isUnlocked, userGivenName = '', userNotes = '', discoveredAt = '' }) {
-  const approximate = capture
-    ? getApproximateLocation(capture.latitude, capture.longitude)
-    : getApproximateLocation(null, null);
+  const approximate = getCaptureApproximateLocation(capture);
 
   return {
     id: `user-cat-${userId}-${catId}-${Date.now()}`,
@@ -610,9 +651,7 @@ async function getSupabaseUser() {
 }
 
 async function createSupabaseUserCat({ userId, catId, capture, userGivenName = '', userNotes = '', discoveredAt = '' }) {
-  const approximate = capture
-    ? getApproximateLocation(capture.latitude, capture.longitude)
-    : getApproximateLocation(null, null);
+  const approximate = getCaptureApproximateLocation(capture);
 
   const { data, error } = await supabase
     .from('user_cats')
@@ -642,9 +681,7 @@ async function createSupabaseUserCat({ userId, catId, capture, userGivenName = '
 }
 
 async function createSupabaseSighting({ userId, catId, capture, photoUrl = null, remarks = '' }) {
-  const approximate = capture
-    ? getApproximateLocation(capture.latitude, capture.longitude)
-    : getApproximateLocation(null, null);
+  const approximate = getCaptureApproximateLocation(capture);
 
   const { error } = await supabase
     .from('cat_sightings')
@@ -701,6 +738,22 @@ function mapSupabaseCat(cat, uiUserId, caught, userCat = null) {
     created_at: cat.created_at,
     updated_at: cat.updated_at,
     map: { x: 52, y: 48 },
+  };
+}
+
+function getCaptureApproximateLocation(capture) {
+  const fallback = capture
+    ? getApproximateLocation(capture.latitude, capture.longitude)
+    : getApproximateLocation(null, null);
+
+  return {
+    ...fallback,
+    latitude: capture?.approximateLatitude ?? fallback.latitude,
+    longitude: capture?.approximateLongitude ?? fallback.longitude,
+    areaName: capture?.areaName || fallback.areaName,
+    city: capture?.city || fallback.city,
+    country: capture?.country || fallback.country,
+    locationName: capture?.locationName || fallback.locationName,
   };
 }
 
@@ -782,7 +835,41 @@ const missingCatImageUrl = `data:image/svg+xml,${encodeURIComponent(`
 </svg>
 `)}`;
 
+function parseGoogleReverseGeocode(results) {
+  const components = results.flatMap((result) => result.address_components || []);
+  const areaName =
+    findAddressComponent(components, ['sublocality_level_1']) ||
+    findAddressComponent(components, ['neighborhood']) ||
+    findAddressComponent(components, ['sublocality']) ||
+    findAddressComponent(components, ['sublocality_level_2']) ||
+    findAddressComponent(components, ['locality']) ||
+    findAddressComponent(components, ['administrative_area_level_2']) ||
+    findAddressComponent(components, ['administrative_area_level_1']);
+  const city =
+    findAddressComponent(components, ['locality']) ||
+    findAddressComponent(components, ['administrative_area_level_2']) ||
+    'Kuala Lumpur';
+  const country = findAddressComponent(components, ['country']) || 'Malaysia';
+
+  if (!areaName) return null;
+
+  return {
+    areaName,
+    city,
+    country,
+    locationName: areaName === city ? `${areaName}, ${country}` : `${areaName}, ${city}`,
+  };
+}
+
+function findAddressComponent(components, types) {
+  return components.find((component) => types.every((type) => component.types.includes(type)))?.long_name || '';
+}
+
 function getAreaName(latitude, longitude) {
+  if (latitude >= 3.19 && latitude <= 3.225 && longitude >= 101.715 && longitude <= 101.748) {
+    return 'Wangsa Maju';
+  }
+
   if (latitude >= 3.145 && latitude <= 3.151 && longitude >= 101.691 && longitude <= 101.699) {
     return 'Petaling Street area';
   }
@@ -795,8 +882,8 @@ function getAreaName(latitude, longitude) {
     return 'University Garden area';
   }
 
-  if (latitude >= 3.195 && latitude <= 3.235 && longitude >= 101.725 && longitude <= 101.775) {
-    return 'Melawati area';
+  if (latitude >= 3.205 && latitude <= 3.235 && longitude >= 101.748 && longitude <= 101.775) {
+    return 'Melawati';
   }
 
   if (latitude >= 3.13 && latitude <= 3.18 && longitude >= 101.735 && longitude <= 101.79) {
