@@ -44,6 +44,7 @@ import {
   getCurrentAccurateLocation,
   getApproximateLocation,
   handleDeleteCat,
+  findNearbyCats,
   isWithinDuplicateRadius,
   loadCatsFromSupabase,
   updateCatDetailsInSupabase,
@@ -2357,7 +2358,13 @@ function SquareCropEditor({ imageUrl, disabled = false, onUsePhoto }) {
 }
 
 function RegistrationChoiceScreen({ cats, capture, currentUserId, onBack, onNewCat, onExistingCat }) {
-  const nearbyCats = cats
+  const [freshNearbyCats, setFreshNearbyCats] = useState([]);
+  const [checkingNearbyCats, setCheckingNearbyCats] = useState(false);
+  const candidateCats = useMemo(
+    () => mergeCatsById([...cats, ...freshNearbyCats]),
+    [cats, freshNearbyCats],
+  );
+  const nearbyCats = candidateCats
     .map((cat) => ({
       cat,
       distance: Math.round(getDistanceMeters({
@@ -2365,7 +2372,32 @@ function RegistrationChoiceScreen({ cats, capture, currentUserId, onBack, onNewC
         longitude: cat.canonical_longitude ?? cat.longitude,
       }, capture)),
     }))
-    .filter(({ distance }) => Number.isFinite(distance) && distance <= duplicateLocationRadiusMeters);
+    .filter(({ distance }) => Number.isFinite(distance) && distance <= duplicateLocationRadiusMeters)
+    .sort((first, second) => first.distance - second.distance);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadFreshNearbyCats() {
+      if (!Number.isFinite(capture?.latitude) || !Number.isFinite(capture?.longitude)) {
+        setFreshNearbyCats([]);
+        return;
+      }
+
+      setCheckingNearbyCats(true);
+      const matches = await findNearbyCats(capture.latitude, capture.longitude, duplicateLocationRadiusMeters);
+      if (!cancelled) {
+        setFreshNearbyCats(matches || []);
+        setCheckingNearbyCats(false);
+      }
+    }
+
+    loadFreshNearbyCats();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [capture?.latitude, capture?.longitude]);
 
   return (
     <section className="screen registration-choice-screen">
@@ -2384,7 +2416,9 @@ function RegistrationChoiceScreen({ cats, capture, currentUserId, onBack, onNewC
       </button>
       <div className="section-title-row">
         <h2>Nearby matches</h2>
-        <span className="quiet-label">{nearbyCats.length} within {duplicateLocationRadiusMeters}m</span>
+        <span className="quiet-label">
+          {checkingNearbyCats ? 'Checking area...' : `${nearbyCats.length} within ${duplicateLocationRadiusMeters}m`}
+        </span>
       </div>
       <div className="existing-cat-list">
         {nearbyCats.map(({ cat, distance }) => {
@@ -2406,7 +2440,10 @@ function RegistrationChoiceScreen({ cats, capture, currentUserId, onBack, onNewC
             </button>
           );
         })}
-        {nearbyCats.length === 0 && (
+        {checkingNearbyCats && nearbyCats.length === 0 && (
+          <p className="empty-community-copy">Checking cats already caught within {duplicateLocationRadiusMeters}m...</p>
+        )}
+        {!checkingNearbyCats && nearbyCats.length === 0 && (
           <p className="empty-community-copy">No cats found within {duplicateLocationRadiusMeters}m. Continue as a new cat.</p>
         )}
       </div>
@@ -2416,6 +2453,24 @@ function RegistrationChoiceScreen({ cats, capture, currentUserId, onBack, onNewC
       </div>
     </section>
   );
+}
+
+function mergeCatsById(items) {
+  const byId = new Map();
+  items.filter(Boolean).forEach((cat) => {
+    const existing = byId.get(cat.id);
+    byId.set(cat.id, {
+      ...existing,
+      ...cat,
+      caught_by_users: [
+        ...new Set([
+          ...(existing?.caught_by_users || []),
+          ...(cat.caught_by_users || []),
+        ]),
+      ],
+    });
+  });
+  return [...byId.values()];
 }
 
 const successConfetti = [
