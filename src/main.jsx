@@ -3213,6 +3213,7 @@ function CommunityScreen({
           )}
         </div>
       </section>
+      <div className="safety-strip"><ShieldCheck size={17} /> This app is for memories and sightings. Give every cat space and kindness.</div>
       <div className="section-title-row">
         <div>
           <h2>Timeline</h2>
@@ -3482,7 +3483,6 @@ function SettingsScreen({ user, userId, signedIn, onBack, onProfileSave, onSignO
           <LogOut size={18} /> Sign out
         </button>
       )}
-      <div className="safety-strip"><ShieldCheck size={17} /> This app is for memories and sightings. Give every cat space and kindness.</div>
       {cropPhoto && (
         <ProfilePhotoCropper
           imageUrl={cropPhoto.previewUrl}
