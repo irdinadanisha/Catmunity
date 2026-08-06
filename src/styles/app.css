@@ -2979,6 +2979,41 @@ button:disabled {
   object-fit: cover;
 }
 
+.detail-swipe-cue {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  color: #ffffff;
+  background: rgba(43, 33, 29, 0.48);
+  box-shadow: 0 12px 28px rgba(43, 33, 29, 0.18);
+  backdrop-filter: blur(10px);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.detail-swipe-cue span {
+  font-size: 0.72rem;
+  font-weight: 950;
+}
+
+.detail-swipe-cue div {
+  display: flex;
+  gap: 4px;
+}
+
+.detail-swipe-cue i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+}
+
 .lock-overlay {
   position: absolute;
   inset: 0;

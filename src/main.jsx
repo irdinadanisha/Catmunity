@@ -1427,7 +1427,7 @@ function getPostImageUrls(cat, extraImages = []) {
 function getDetailImageSlides(cat, users = [], onOpenUser = () => {}) {
   const owner = users.find((user) => user.id === cat?.created_by);
   const ownImages = [cat?.cropped_image_url, cat?.original_image_url].filter(isPersistentImageUrl);
-  const canonicalImages = [cat?.canonical_cropped_image_url, cat?.canonical_original_image_url].filter(isPersistentImageUrl);
+  const canonicalOwnerImage = [cat?.canonical_original_image_url, cat?.canonical_cropped_image_url].find(isPersistentImageUrl);
   const slides = [];
 
   ownImages.forEach((url) => {
@@ -1436,16 +1436,14 @@ function getDetailImageSlides(cat, users = [], onOpenUser = () => {}) {
     }
   });
 
-  canonicalImages.forEach((url) => {
-    if (!slides.some((slide) => slide.url === url)) {
-      slides.push({
-        url,
-        label: owner ? `${owner.name || owner.username || 'Original catcher'}'s photo` : 'Original catcher photo',
-        owner,
-        onOpenOwner: owner ? () => onOpenUser(owner.id) : null,
-      });
-    }
-  });
+  if (canonicalOwnerImage && !slides.some((slide) => slide.url === canonicalOwnerImage)) {
+    slides.push({
+      url: canonicalOwnerImage,
+      label: owner ? `${owner.name || owner.username || 'Original catcher'}'s photo` : 'Original catcher photo',
+      owner,
+      onOpenOwner: owner ? () => onOpenUser(owner.id) : null,
+    });
+  }
 
   return slides;
 }
@@ -3095,6 +3093,16 @@ function CatDetailScreen({ selectedCat, currentUserId, users = [], onOpenUser = 
             </figure>
           ))}
         </div>
+        {detailImageSlides.length > 1 && (
+          <div className="detail-swipe-cue" aria-hidden="true">
+            <span>Swipe</span>
+            <div>
+              {detailImageSlides.map((slide, index) => (
+                <i key={`${slide.url}-dot-${index}`} />
+              ))}
+            </div>
+          </div>
+        )}
         {locked && <div className="lock-overlay"><Lock size={30} /> Limited preview</div>}
       </div>
       {locked && (
