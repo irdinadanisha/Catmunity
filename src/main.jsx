@@ -325,7 +325,7 @@ function App() {
     if (!authUser) return undefined;
 
     const catcherIds = [
-      ...new Set(cats.flatMap((cat) => cat.caught_by_users || []).filter(Boolean)),
+      ...new Set(cats.flatMap((cat) => [...(cat.caught_by_users || []), cat.created_by]).filter(Boolean)),
     ];
     if (!catcherIds.length) return undefined;
 
@@ -1418,13 +1418,57 @@ function getPostImageUrl(cat) {
 
 function getPostImageUrls(cat, extraImages = []) {
   return [
-    cat?.cropped_image_url,
     cat?.original_image_url,
-    cat?.canonical_cropped_image_url,
-    cat?.canonical_original_image_url,
-    ...(cat?.photo_urls || []),
+    cat?.cropped_image_url,
     ...(extraImages || []),
   ].filter(isPersistentImageUrl).filter((url, index, urls) => urls.indexOf(url) === index);
+}
+
+function getDetailImageSlides(cat, users = [], onOpenUser = () => {}) {
+  const owner = users.find((user) => user.id === cat?.created_by);
+  const ownImages = [cat?.cropped_image_url, cat?.original_image_url].filter(isPersistentImageUrl);
+  const canonicalImages = [cat?.canonical_cropped_image_url, cat?.canonical_original_image_url].filter(isPersistentImageUrl);
+  const slides = [];
+
+  ownImages.forEach((url) => {
+    if (!slides.some((slide) => slide.url === url)) {
+      slides.push({ url, label: 'Your photo' });
+    }
+  });
+
+  canonicalImages.forEach((url) => {
+    if (!slides.some((slide) => slide.url === url)) {
+      slides.push({
+        url,
+        label: owner ? `${owner.name || owner.username || 'Original catcher'}'s photo` : 'Original catcher photo',
+        owner,
+        onOpenOwner: owner ? () => onOpenUser(owner.id) : null,
+      });
+    }
+  });
+
+  return slides;
+}
+
+function getCommunityPostImages(post, cat) {
+  let uniqueImages = [...new Set([...(post?.image_urls || []), post?.image_url].filter(isPersistentImageUrl))];
+  const personalOriginal = cat?.original_image_url;
+  const personalCrop = cat?.cropped_image_url;
+  const canonicalImages = new Set([
+    cat?.canonical_cropped_image_url,
+    cat?.canonical_original_image_url,
+  ].filter(isPersistentImageUrl));
+
+  if (isPersistentImageUrl(personalOriginal) && isPersistentImageUrl(personalCrop) && uniqueImages.includes(personalOriginal)) {
+    uniqueImages = uniqueImages.filter((url) => url !== personalCrop);
+  }
+
+  if (cat?.created_by && post?.user_id && post.user_id !== cat.created_by) {
+    const personalImages = uniqueImages.filter((url) => !canonicalImages.has(url));
+    if (personalImages.length) return personalImages;
+  }
+
+  return uniqueImages;
 }
 
 function renderMentionText(text = '') {
@@ -3028,11 +3072,29 @@ function CatDetailScreen({ selectedCat, currentUserId, users = [], onOpenUser = 
 
   const locked = !selectedCat.caught_by_users.includes(currentUserId);
   const estimatedCat = getEstimatedMapCat(selectedCat);
+  const detailImageSlides = getDetailImageSlides(selectedCat, users, onOpenUser);
   return (
     <section className="screen">
       <ScreenHeader title={selectedCat.name || 'Unnamed Cat'} subtitle={locked ? 'Estimated discovery area' : selectedCat.location_name} icon={locked ? Lock : Cat} />
       <div className="detail-hero">
-        <img src={selectedCat.cropped_image_url} alt={selectedCat.name || 'Cat'} />
+        <div className="detail-photo-strip" aria-label="Cat photos">
+          {detailImageSlides.map((slide, index) => (
+            <figure className="detail-photo-slide" key={`${slide.url}-${index}`}>
+              <img src={slide.url} alt={slide.label || selectedCat.name || 'Cat'} />
+              {slide.owner && (
+                <button
+                  className="detail-owner-badge"
+                  type="button"
+                  onClick={slide.onOpenOwner}
+                  aria-label={`Open ${slide.owner.name || slide.owner.username || 'original catcher'}'s profile`}
+                  title={slide.owner.username ? `@${slide.owner.username}` : slide.owner.name}
+                >
+                  <UserAvatar user={slide.owner} className="detail-owner-avatar" />
+                </button>
+              )}
+            </figure>
+          ))}
+        </div>
         {locked && <div className="lock-overlay"><Lock size={30} /> Limited preview</div>}
       </div>
       {locked && (
@@ -3383,9 +3445,7 @@ function CommunityScreen({
 function CommunityPostCard({ post, user, cat, isFriendPost, onOpenUser, onToggleLike, onComment, onDelete }) {
   const [commentText, setCommentText] = useState('');
   const [imageFailed, setImageFailed] = useState(false);
-  const postImageUrls = !imageFailed
-    ? [...new Set([...(post.image_urls || []), post.image_url].filter(isPersistentImageUrl))]
-    : [];
+  const postImageUrls = !imageFailed ? getCommunityPostImages(post, cat) : [];
   const fallbackPostImage = cat?.cropped_image_url;
   const displayImages = postImageUrls.length ? postImageUrls : [fallbackPostImage].filter(Boolean);
 
