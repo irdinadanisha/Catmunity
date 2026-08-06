@@ -169,6 +169,9 @@ export function createNewCatWithCanonicalLocation({ capture, form = {}, currentU
     image_url: capture.originalImage,
     cropped_image_url: capture.croppedImage,
     original_image_url: capture.originalImage,
+    canonical_cropped_image_url: capture.croppedImage,
+    canonical_original_image_url: capture.originalImage,
+    photo_urls: [capture.croppedImage, capture.originalImage].filter(Boolean),
     color: form.color || '',
     colour: form.color || '',
     breed: form.breed || '',
@@ -224,6 +227,9 @@ export function addExistingCatToUserCollection(cats, catId, userId, capture = nu
 
     return {
       ...cat,
+      cropped_image_url: capture?.croppedImage || cat.cropped_image_url,
+      original_image_url: capture?.originalImage || cat.original_image_url,
+      photo_urls: [...new Set([...(cat.photo_urls || []), capture?.croppedImage, capture?.originalImage].filter(Boolean))],
       caught_by_users: [...cat.caught_by_users, userId],
       user_cats: [...(cat.user_cats || []), sighting],
       sighting_count: (cat.sighting_count || cat.caught_by_users.length || 0) + 1,
@@ -299,11 +305,7 @@ export async function fetchCatsForMap(uiUserId) {
       .from('cat_public_map')
       .select('*')
       .order('updated_at', { ascending: false }),
-    supabase
-      .from('user_cats')
-      .select('cat_id, is_unlocked, discovered_at')
-      .eq('user_id', user.id)
-      .eq('is_unlocked', true),
+    loadUnlockedUserCatLinks(user.id),
   ]);
 
   if (catsError || userCatsError) {
@@ -316,6 +318,24 @@ export async function fetchCatsForMap(uiUserId) {
   return (publicCats || []).map((cat) =>
     mapSupabaseCat(cat, uiUserId, userCatsByCatId.has(cat.id), userCatsByCatId.get(cat.id), catcherIdsByCatId.get(cat.id)),
   );
+}
+
+async function loadUnlockedUserCatLinks(userId) {
+  const result = await supabase
+    .from('user_cats')
+    .select('cat_id, is_unlocked, discovered_at, user_given_name, user_notes, colour, breed, weight, behavior, gender, fun_facts, remarks, original_image_url, cropped_image_url, photo_urls')
+    .eq('user_id', userId)
+    .eq('is_unlocked', true);
+
+  if (result.error?.code === 'PGRST204' || /colour|photo_urls|original_image_url|fun_facts/i.test(result.error?.message || '')) {
+    return supabase
+      .from('user_cats')
+      .select('cat_id, is_unlocked, discovered_at')
+      .eq('user_id', userId)
+      .eq('is_unlocked', true);
+  }
+
+  return result;
 }
 
 export async function fetchUserCollection(userId) {
@@ -348,7 +368,7 @@ export async function fetchPublicUserCollection(profileUserId, viewerUserId) {
   const catcherIdsByCatId = await fetchCatcherIdsByCatId((profileCats || []).map((cat) => cat.id));
   const viewerCatsByCatId = new Map((viewerCats || []).map((item) => [item.cat_id, item]));
   return (profileCats || []).map((cat) =>
-    mapSupabaseCat(cat, viewerUserId, viewerCatsByCatId.has(cat.id), viewerCatsByCatId.get(cat.id), catcherIdsByCatId.get(cat.id)),
+    mapSupabaseCat(cat, viewerUserId, viewerCatsByCatId.has(cat.id), null, catcherIdsByCatId.get(cat.id)),
   );
 }
 
@@ -435,7 +455,8 @@ export async function createNewCatInSupabase({ capture, form, uiUserId }) {
   await createSupabaseUserCat({
     userId: user.id,
     catId: createdCat.id,
-    capture,
+    capture: persistentCapture,
+    personalDetails: localCat,
     userGivenName: localCat.name,
     userNotes: localCat.remarks,
     discoveredAt: form.date_found,
@@ -624,34 +645,29 @@ export async function updateCatDetailsInSupabase(catId, form) {
   const user = await getSupabaseUser();
   if (!user) return { data: null, error: new Error('You need to be signed in to edit cat details.') };
 
-  const { data, error } = await supabase
-    .from('cats')
-    .update({
-      name: form.name?.trim() || 'Unnamed Cat',
-      colour: form.color || null,
-      breed: form.breed || null,
-      weight: form.weight || null,
-      behavior: form.behavior || null,
-      gender: form.gender || null,
-      fun_facts: form.fun_info || null,
-      remarks: form.remarks || null,
-      location_name: form.location_name || null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', catId)
-    .select()
-    .single();
-
-  if (!error && form.date_found) {
-    await supabase
-      .from('user_cats')
-      .update({
-        discovered_at: new Date(`${form.date_found}T12:00:00`).toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('user_id', user.id)
-      .eq('cat_id', catId);
+  const updates = {
+    user_given_name: form.name?.trim() || 'Unnamed Cat',
+    user_notes: form.remarks || null,
+    colour: form.color || null,
+    breed: form.breed || null,
+    weight: form.weight || null,
+    behavior: form.behavior || null,
+    gender: form.gender || null,
+    fun_facts: form.fun_info || null,
+    remarks: form.remarks || null,
+    updated_at: new Date().toISOString(),
+  };
+  if (form.date_found) {
+    updates.discovered_at = new Date(`${form.date_found}T12:00:00`).toISOString();
   }
+
+  const { data, error } = await supabase
+    .from('user_cats')
+    .update(updates)
+    .eq('user_id', user.id)
+    .eq('cat_id', catId)
+    .select()
+    .maybeSingle();
 
   return { data, error };
 }
@@ -666,6 +682,16 @@ function createUserCatRecord({ userId, catId, capture, isUnlocked, userGivenName
     discovered_at: discoveredAt ? new Date(`${discoveredAt}T12:00:00`).toISOString() : new Date().toISOString(),
     user_given_name: userGivenName || null,
     user_notes: userNotes || null,
+    colour: capture?.color || null,
+    breed: capture?.breed || null,
+    weight: capture?.weight || null,
+    behavior: capture?.behavior || null,
+    gender: capture?.gender || null,
+    fun_facts: capture?.fun_info || null,
+    remarks: capture?.remarks || null,
+    original_image_url: capture?.originalImage || null,
+    cropped_image_url: capture?.croppedImage || null,
+    photo_urls: [capture?.croppedImage, capture?.originalImage].filter(Boolean),
     is_unlocked: isUnlocked,
     sighting_area_name: approximate.areaName,
     approximate_sighting_latitude: approximate.latitude,
@@ -678,27 +704,64 @@ async function getSupabaseUser() {
   return session?.user || null;
 }
 
-async function createSupabaseUserCat({ userId, catId, capture, userGivenName = '', userNotes = '', discoveredAt = '' }) {
+async function createSupabaseUserCat({ userId, catId, capture, personalDetails = {}, userGivenName = '', userNotes = '', discoveredAt = '' }) {
   const approximate = getCaptureApproximateLocation(capture);
+  const photoUrls = [capture?.croppedImage, capture?.originalImage].filter(Boolean);
+  const payload = {
+    user_id: userId,
+    cat_id: catId,
+    user_given_name: userGivenName || personalDetails.name || null,
+    user_notes: userNotes || personalDetails.remarks || null,
+    colour: personalDetails.color || personalDetails.colour || null,
+    breed: personalDetails.breed || null,
+    weight: personalDetails.weight || null,
+    behavior: personalDetails.behavior || null,
+    gender: personalDetails.gender || null,
+    fun_facts: personalDetails.fun_info || personalDetails.fun_facts || null,
+    remarks: personalDetails.remarks || null,
+    original_image_url: capture?.originalImage || null,
+    cropped_image_url: capture?.croppedImage || null,
+    photo_urls: photoUrls,
+    discovered_at: discoveredAt ? new Date(`${discoveredAt}T12:00:00`).toISOString() : new Date().toISOString(),
+    is_unlocked: true,
+    sighting_area_name: approximate.areaName,
+    approximate_sighting_latitude: approximate.latitude,
+    approximate_sighting_longitude: approximate.longitude,
+  };
 
   const { data, error } = await supabase
     .from('user_cats')
-    .upsert(
-      {
-        user_id: userId,
-        cat_id: catId,
-        user_given_name: userGivenName || null,
-        user_notes: userNotes || null,
-        discovered_at: discoveredAt ? new Date(`${discoveredAt}T12:00:00`).toISOString() : new Date().toISOString(),
-        is_unlocked: true,
-        sighting_area_name: approximate.areaName,
-        approximate_sighting_latitude: approximate.latitude,
-        approximate_sighting_longitude: approximate.longitude,
-      },
-      { onConflict: 'user_id,cat_id' },
-    )
+    .upsert(payload, { onConflict: 'user_id,cat_id' })
     .select()
     .single();
+
+  if (error?.code === 'PGRST204' || /colour|photo_urls|original_image_url|fun_facts/i.test(error?.message || '')) {
+    const {
+      colour,
+      breed,
+      weight,
+      behavior,
+      gender,
+      fun_facts,
+      remarks,
+      original_image_url,
+      cropped_image_url,
+      photo_urls,
+      ...legacyPayload
+    } = payload;
+    const fallback = await supabase
+      .from('user_cats')
+      .upsert(legacyPayload, { onConflict: 'user_id,cat_id' })
+      .select()
+      .single();
+
+    if (fallback.error) {
+      console.warn('Supabase user_cats upsert failed', fallback.error);
+      return null;
+    }
+
+    return fallback.data;
+  }
 
   if (error) {
     console.warn('Supabase user_cats upsert failed', error);
@@ -730,24 +793,33 @@ async function createSupabaseSighting({ userId, catId, capture, photoUrl = null,
 
 function mapSupabaseCat(cat, uiUserId, caught, userCat = null, catcherUserIds = []) {
   const limitedInfo = !caught;
-  const originalImageUrl = isPersistentImageUrl(cat.original_image_url) ? cat.original_image_url : '';
-  const croppedImageUrl = isPersistentImageUrl(cat.cropped_image_url) ? cat.cropped_image_url : missingCatImageUrl;
+  const personalOriginalImageUrl = isPersistentImageUrl(userCat?.original_image_url) ? userCat.original_image_url : '';
+  const personalCroppedImageUrl = isPersistentImageUrl(userCat?.cropped_image_url) ? userCat.cropped_image_url : '';
+  const sharedOriginalImageUrl = isPersistentImageUrl(cat.original_image_url) ? cat.original_image_url : '';
+  const sharedCroppedImageUrl = isPersistentImageUrl(cat.cropped_image_url) ? cat.cropped_image_url : missingCatImageUrl;
+  const originalImageUrl = personalOriginalImageUrl || sharedOriginalImageUrl;
+  const croppedImageUrl = personalCroppedImageUrl || sharedCroppedImageUrl;
+  const canonicalOriginalImageUrl = isPersistentImageUrl(cat.canonical_original_image_url) ? cat.canonical_original_image_url : sharedOriginalImageUrl;
+  const canonicalCroppedImageUrl = isPersistentImageUrl(cat.canonical_cropped_image_url) ? cat.canonical_cropped_image_url : sharedCroppedImageUrl;
   const caughtByUsers = [...new Set([...(catcherUserIds || []), ...(caught && uiUserId ? [uiUserId] : [])].filter(Boolean))];
   return {
     id: cat.id,
-    name: cat.name || 'Unnamed Cat',
+    name: userCat?.user_given_name || cat.name || 'Unnamed Cat',
     image_url: originalImageUrl || croppedImageUrl,
     original_image_url: originalImageUrl,
     cropped_image_url: croppedImageUrl,
-    color: limitedInfo ? '' : cat.colour || '',
-    colour: limitedInfo ? '' : cat.colour || '',
-    breed: limitedInfo ? '' : cat.breed || '',
-    weight: limitedInfo ? '' : cat.weight || '',
-    behavior: limitedInfo ? '' : cat.behavior || '',
-    gender: limitedInfo ? '' : cat.gender || '',
-    fun_info: limitedInfo ? '' : cat.fun_facts || '',
-    fun_facts: limitedInfo ? '' : cat.fun_facts || '',
-    remarks: limitedInfo ? '' : cat.remarks || '',
+    canonical_original_image_url: canonicalOriginalImageUrl,
+    canonical_cropped_image_url: canonicalCroppedImageUrl,
+    photo_urls: [...new Set([...(userCat?.photo_urls || []), ...(cat.photo_urls || []), croppedImageUrl, originalImageUrl, canonicalCroppedImageUrl].filter(isPersistentImageUrl))],
+    color: limitedInfo ? '' : userCat?.colour || cat.colour || '',
+    colour: limitedInfo ? '' : userCat?.colour || cat.colour || '',
+    breed: limitedInfo ? '' : userCat?.breed || cat.breed || '',
+    weight: limitedInfo ? '' : userCat?.weight || cat.weight || '',
+    behavior: limitedInfo ? '' : userCat?.behavior || cat.behavior || '',
+    gender: limitedInfo ? '' : userCat?.gender || cat.gender || '',
+    fun_info: limitedInfo ? '' : userCat?.fun_facts || cat.fun_facts || '',
+    fun_facts: limitedInfo ? '' : userCat?.fun_facts || cat.fun_facts || '',
+    remarks: limitedInfo ? '' : userCat?.remarks || userCat?.user_notes || cat.remarks || '',
     tags: ['nearby'],
     discovered_by: cat.created_by || '',
     created_by: cat.created_by || '',
@@ -817,6 +889,22 @@ async function persistCaptureImages(capture, userId) {
     croppedImage: croppedImage || missingCatImageUrl,
     originalImage: originalImage || croppedImage || missingCatImageUrl,
   };
+}
+
+export async function persistCommunityPostImages(imageUrls = [], userId) {
+  if (!isSupabaseConfigured || !userId) return imageUrls;
+
+  const uniqueUrls = [...new Set(imageUrls.filter(Boolean))];
+  const uploaded = await Promise.all(uniqueUrls.map((imageUrl, index) =>
+    uploadCatPhotoFromUrl({
+      userId,
+      imageUrl,
+      filename: `community-post-${index + 1}.jpg`,
+      variant: `post-${index + 1}`,
+    }),
+  ));
+
+  return uploaded.filter(Boolean);
 }
 
 async function uploadCatPhotoFromUrl({ userId, imageUrl, filename = 'cat-photo.jpg', variant }) {

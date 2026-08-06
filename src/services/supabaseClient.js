@@ -292,11 +292,24 @@ export async function loadProfilesByIds(ids) {
 export async function loadCommunityPosts(currentUserId) {
   if (!isSupabaseConfigured) return { data: { posts: [], comments: [], likes: [], profiles: [] }, error: null };
 
-  const [{ data: posts, error: postsError }, { data: comments, error: commentsError }, { data: likes, error: likesError }] = await Promise.all([
-    supabase
+  async function loadPostsWithImages() {
+    const result = await supabase
       .from('community_posts')
-      .select('id, user_id, cat_id, caption, image_url, location_name, mentions, created_at')
-      .order('created_at', { ascending: false }),
+      .select('id, user_id, cat_id, caption, image_url, image_urls, location_name, mentions, created_at')
+      .order('created_at', { ascending: false });
+
+    if (result.error?.code === 'PGRST204' || /image_urls/i.test(result.error?.message || '')) {
+      return supabase
+        .from('community_posts')
+        .select('id, user_id, cat_id, caption, image_url, location_name, mentions, created_at')
+        .order('created_at', { ascending: false });
+    }
+
+    return result;
+  }
+
+  const [{ data: posts, error: postsError }, { data: comments, error: commentsError }, { data: likes, error: likesError }] = await Promise.all([
+    loadPostsWithImages(),
     supabase
       .from('comments')
       .select('id, post_id, user_id, body, mentions, created_at')
@@ -329,21 +342,33 @@ export async function loadCommunityPosts(currentUserId) {
   };
 }
 
-export async function createCommunityPost({ userId, catId, caption, imageUrl, locationName, mentions = [] }) {
+export async function createCommunityPost({ userId, catId, caption, imageUrl, imageUrls = [], locationName, mentions = [] }) {
   if (!isSupabaseConfigured) return { data: null, error: new Error('Supabase is not configured.') };
+
+  const payload = {
+    user_id: userId,
+    cat_id: catId || null,
+    caption,
+    image_url: imageUrl || imageUrls[0] || null,
+    image_urls: imageUrls.filter(Boolean),
+    location_name: locationName || null,
+    mentions,
+  };
 
   const { data, error } = await supabase
     .from('community_posts')
-    .insert({
-      user_id: userId,
-      cat_id: catId || null,
-      caption,
-      image_url: imageUrl || null,
-      location_name: locationName || null,
-      mentions,
-    })
+    .insert(payload)
     .select()
     .single();
+
+  if (error?.code === 'PGRST204' || /image_urls/i.test(error?.message || '')) {
+    const { image_urls: _imageUrls, ...legacyPayload } = payload;
+    return supabase
+      .from('community_posts')
+      .insert(legacyPayload)
+      .select()
+      .single();
+  }
 
   return { data, error };
 }

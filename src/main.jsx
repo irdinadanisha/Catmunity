@@ -47,6 +47,7 @@ import {
   findNearbyCats,
   isWithinDuplicateRadius,
   loadCatsFromSupabase,
+  persistCommunityPostImages,
   updateCatDetailsInSupabase,
 } from './services/catServices';
 import {
@@ -708,8 +709,16 @@ function App() {
     const liveCats = await loadCatsFromSupabase(currentUserId);
     setCats(liveCats || ((items) => addExistingCatToUserCollection(items, catId, currentUserId, capture)));
     setSelectedCatId(catId);
-    showToast('Existing cat added to your collection.');
-    navigate('detail');
+    setEditingCatId(catId);
+    setDraftCat({
+      ...existingCat,
+      cropped_image_url: capture.croppedImage || existingCat?.cropped_image_url,
+      original_image_url: capture.originalImage || existingCat?.original_image_url,
+      location_name: capture.locationName || existingCat?.location_name,
+      discovered_at: new Date().toISOString(),
+    });
+    showToast('Same cat found. Add your own details.');
+    navigate('detailsForm');
   }
 
   async function handleSaveDetails(form) {
@@ -738,6 +747,9 @@ function App() {
               fun_info: form.fun_info,
               fun_facts: form.fun_info,
               remarks: form.remarks,
+              cropped_image_url: draftCat?.cropped_image_url || cat.cropped_image_url,
+              original_image_url: draftCat?.original_image_url || cat.original_image_url,
+              photo_urls: [...new Set([...(cat.photo_urls || []), draftCat?.cropped_image_url, draftCat?.original_image_url].filter(Boolean))],
               location_name: form.location_name,
               discovered_at: form.date_found ? new Date(`${form.date_found}T12:00:00`).toISOString() : cat.discovered_at,
               updated_at: new Date().toISOString(),
@@ -820,12 +832,14 @@ function App() {
       showToast('Only unlocked cats can be posted.');
       return;
     }
+    const imageUrls = await persistCommunityPostImages(getPostImageUrls(cat, post.extraImages), currentUserId);
 
     const { data: createdPost, error } = await createCommunityPost({
       userId: currentUserId,
       catId: cat.id,
       caption: post.body,
-      imageUrl: getPostImageUrl(cat),
+      imageUrl: imageUrls[0] || getPostImageUrl(cat),
+      imageUrls,
       locationName: cat.area_name || cat.location_name,
       mentions: extractMentions(post.body),
     });
@@ -1357,6 +1371,7 @@ function mapCommunityData(data, currentUserId) {
       user_id: post.user_id,
       cat_id: post.cat_id,
       image_url: post.image_url,
+      image_urls: post.image_urls || [],
       body: post.caption,
       location_name: post.location_name || 'Catmunity',
       mentions: post.mentions || [],
@@ -1398,7 +1413,18 @@ function isPersistentImageUrl(value = '') {
 }
 
 function getPostImageUrl(cat) {
-  return [cat?.original_image_url, cat?.image_url, cat?.cropped_image_url].find(isPersistentImageUrl) || cat?.cropped_image_url || '';
+  return getPostImageUrls(cat)[0] || '';
+}
+
+function getPostImageUrls(cat, extraImages = []) {
+  return [
+    cat?.cropped_image_url,
+    cat?.original_image_url,
+    cat?.canonical_cropped_image_url,
+    cat?.canonical_original_image_url,
+    ...(cat?.photo_urls || []),
+    ...(extraImages || []),
+  ].filter(isPersistentImageUrl).filter((url, index, urls) => urls.indexOf(url) === index);
 }
 
 function renderMentionText(text = '') {
@@ -3357,7 +3383,11 @@ function CommunityScreen({
 function CommunityPostCard({ post, user, cat, isFriendPost, onOpenUser, onToggleLike, onComment, onDelete }) {
   const [commentText, setCommentText] = useState('');
   const [imageFailed, setImageFailed] = useState(false);
-  const postImageUrl = !imageFailed && isPersistentImageUrl(post.image_url) ? post.image_url : cat?.cropped_image_url;
+  const postImageUrls = !imageFailed
+    ? [...new Set([...(post.image_urls || []), post.image_url].filter(isPersistentImageUrl))]
+    : [];
+  const fallbackPostImage = cat?.cropped_image_url;
+  const displayImages = postImageUrls.length ? postImageUrls : [fallbackPostImage].filter(Boolean);
 
   function submitComment(event) {
     event.preventDefault();
@@ -3375,13 +3405,18 @@ function CommunityPostCard({ post, user, cat, isFriendPost, onOpenUser, onToggle
           <small>{isFriendPost ? 'Friend post' : 'Nearby'} · {post.created_at} · {post.location_name}</small>
         </span>
       </button>
-      {postImageUrl && (
-        <img
-          className="post-image"
-          src={postImageUrl}
-          alt="Community cat sighting"
-          onError={() => setImageFailed(true)}
-        />
+      {displayImages.length > 0 && (
+        <div className={displayImages.length > 1 ? 'post-image-gallery' : 'post-image-gallery single'}>
+          {displayImages.map((imageUrl, index) => (
+            <img
+              key={`${imageUrl}-${index}`}
+              className="post-image"
+              src={imageUrl}
+              alt={index === 0 ? 'Community cat sighting' : 'Additional cat sighting'}
+              onError={() => setImageFailed(true)}
+            />
+          ))}
+        </div>
       )}
       <p>{renderMentionText(post.body)}</p>
       <div className="post-actions">
@@ -3418,6 +3453,16 @@ function CommunityPostCard({ post, user, cat, isFriendPost, onOpenUser, onToggle
 
 function CreatePostScreen({ cat, onBack, onCreate }) {
   const [body, setBody] = useState('');
+  const [extraImages, setExtraImages] = useState([]);
+
+  async function handleExtraImages(event) {
+    const files = [...(event.target.files || [])].filter((file) => file.type.startsWith('image/'));
+    if (!files.length) return;
+    const imageUrls = await Promise.all(files.map(readImageFileAsDataUrl));
+    setExtraImages((images) => [...images, ...imageUrls]);
+    event.target.value = '';
+  }
+
   return (
     <section className="screen">
       <BackButton onBack={onBack} />
@@ -3438,13 +3483,33 @@ function CreatePostScreen({ cat, onBack, onCreate }) {
         onSubmit={(event) => {
           event.preventDefault();
           if (!cat) return;
-          onCreate({ catId: cat.id, body: body || 'Spotted a very cute cat today.' });
+          onCreate({ catId: cat.id, body: body || 'Spotted a very cute cat today.', extraImages });
         }}
       >
         <label>
           <span>Caption</span>
           <textarea value={body} placeholder="A calm cafe cat was sunbathing... @friend" onChange={(event) => setBody(event.target.value)} />
         </label>
+        <label className="post-extra-upload">
+          <span>More pictures</span>
+          <input type="file" accept="image/*" multiple onChange={handleExtraImages} />
+          <em><ImageIcon size={16} /> Add more pictures</em>
+        </label>
+        {extraImages.length > 0 && (
+          <div className="post-extra-preview">
+            {extraImages.map((imageUrl, index) => (
+              <button
+                key={`${imageUrl}-${index}`}
+                type="button"
+                onClick={() => setExtraImages((images) => images.filter((_, imageIndex) => imageIndex !== index))}
+                aria-label="Remove extra picture"
+              >
+                <img src={imageUrl} alt="Extra cat preview" />
+                <X size={14} />
+              </button>
+            ))}
+          </div>
+        )}
         <button className="primary-button" type="submit" disabled={!cat}><Sparkles size={18} /> Share sighting</button>
       </form>
     </section>

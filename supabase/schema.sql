@@ -68,6 +68,16 @@ create table if not exists public.user_cats (
   discovery_method text,
   user_given_name text,
   user_notes text,
+  colour text,
+  breed text,
+  weight text,
+  behavior text,
+  gender text,
+  fun_facts text,
+  remarks text,
+  original_image_url text,
+  cropped_image_url text,
+  photo_urls text[] not null default '{}',
   is_unlocked boolean not null default false,
   sighting_area_name text,
   approximate_sighting_latitude double precision,
@@ -83,6 +93,16 @@ add column if not exists gender text;
 
 alter table public.user_cats
 add column if not exists discovery_method text,
+add column if not exists colour text,
+add column if not exists breed text,
+add column if not exists weight text,
+add column if not exists behavior text,
+add column if not exists gender text,
+add column if not exists fun_facts text,
+add column if not exists remarks text,
+add column if not exists original_image_url text,
+add column if not exists cropped_image_url text,
+add column if not exists photo_urls text[] not null default '{}',
 add column if not exists created_at timestamptz not null default now(),
 add column if not exists updated_at timestamptz not null default now();
 
@@ -107,11 +127,15 @@ create table if not exists public.community_posts (
   cat_id uuid references public.cats(id) on delete set null,
   caption text not null default '',
   image_url text,
+  image_urls text[] not null default '{}',
   location_name text,
   mentions text[] not null default '{}',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.community_posts
+add column if not exists image_urls text[] not null default '{}';
 
 create table if not exists public.post_likes (
   post_id uuid not null references public.community_posts(id) on delete cascade,
@@ -182,16 +206,16 @@ select
   user_cats.user_id as profile_user_id,
   user_cats.discovered_at,
   cats.id,
-  cats.name,
-  cats.colour,
-  cats.breed,
-  cats.weight,
-  cats.behavior,
-  cats.gender,
-  cats.fun_facts,
-  cats.remarks,
-  cats.original_image_url,
-  cats.cropped_image_url,
+  coalesce(user_cats.user_given_name, cats.name) as name,
+  coalesce(user_cats.colour, cats.colour) as colour,
+  coalesce(user_cats.breed, cats.breed) as breed,
+  coalesce(user_cats.weight, cats.weight) as weight,
+  coalesce(user_cats.behavior, cats.behavior) as behavior,
+  coalesce(user_cats.gender, cats.gender) as gender,
+  coalesce(user_cats.fun_facts, cats.fun_facts) as fun_facts,
+  coalesce(user_cats.remarks, user_cats.user_notes, cats.remarks) as remarks,
+  coalesce(user_cats.original_image_url, cats.original_image_url) as original_image_url,
+  coalesce(user_cats.cropped_image_url, cats.cropped_image_url) as cropped_image_url,
   cats.created_by,
   cats.canonical_latitude as latitude,
   cats.canonical_longitude as longitude,
@@ -202,7 +226,10 @@ select
   cats.city,
   cats.country,
   cats.created_at,
-  cats.updated_at
+  cats.updated_at,
+  user_cats.photo_urls,
+  cats.original_image_url as canonical_original_image_url,
+  cats.cropped_image_url as canonical_cropped_image_url
 from public.user_cats
 join public.cats on cats.id = user_cats.cat_id
 join public.profiles on profiles.id = user_cats.user_id
