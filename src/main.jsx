@@ -577,8 +577,8 @@ function App() {
   async function handlePhotoSelected(file, source = 'camera') {
     if (!file) return;
     setIsProcessingCatPhoto(true);
-    const previewUrl = URL.createObjectURL(file);
     try {
+      const previewUrl = await readImageFileAsDataUrl(file);
       const nextCapture = {
         originalImage: previewUrl,
         originalFileName: file.name,
@@ -593,6 +593,9 @@ function App() {
       navigate('confirm');
       await refreshCatCaptureLocation(nextCapture);
       console.debug('[Catmunity catch confirmation location refresh requested]', { source });
+    } catch (error) {
+      console.error('[Catmunity photo selection failed]', error);
+      showToast('That photo could not be opened. Please choose another image.');
     } finally {
       setIsProcessingCatPhoto(false);
     }
@@ -2276,6 +2279,7 @@ function SquareCropEditor({ imageUrl, disabled = false, onUsePhoto }) {
   const pinchRef = useRef(null);
   const [frameSize, setFrameSize] = useState(320);
   const [imageMeta, setImageMeta] = useState(null);
+  const [imageFailed, setImageFailed] = useState(false);
   const [crop, setCrop] = useState({ x: 0, y: 0, scale: 1 });
   const imageFitScale = imageMeta
     ? Math.max(frameSize / imageMeta.width, frameSize / imageMeta.height)
@@ -2295,6 +2299,12 @@ function SquareCropEditor({ imageUrl, disabled = false, onUsePhoto }) {
     observer.observe(frameRef.current);
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    setImageFailed(false);
+    setImageMeta(null);
+    setCrop({ x: 0, y: 0, scale: 1 });
+  }, [imageUrl]);
 
   function clampCrop(nextCrop) {
     const imageWidth = imageMeta?.width || 1;
@@ -2318,6 +2328,7 @@ function SquareCropEditor({ imageUrl, disabled = false, onUsePhoto }) {
   }
 
   function handleImageLoad(event) {
+    setImageFailed(false);
     setImageMeta({
       width: event.currentTarget.naturalWidth || event.currentTarget.width,
       height: event.currentTarget.naturalHeight || event.currentTarget.height,
@@ -2448,18 +2459,27 @@ function SquareCropEditor({ imageUrl, disabled = false, onUsePhoto }) {
         onTouchEnd={handleTouchEnd}
         onTouchCancel={handleTouchEnd}
       >
-        <img
-          ref={imageRef}
-          src={imageUrl}
-          alt="Move and pinch to fit the cat inside the square"
-          draggable="false"
-          onLoad={handleImageLoad}
-          style={{
-            width: `${fittedWidth}px`,
-            height: `${fittedHeight}px`,
-            transform: `translate(calc(-50% + ${crop.x}px), calc(-50% + ${crop.y}px)) scale(${crop.scale})`,
-          }}
-        />
+        {imageFailed ? (
+          <div className="catch-crop-error">
+            <ImageIcon size={28} />
+            <strong>Photo could not load</strong>
+            <span>Choose another image and we will open the crop editor again.</span>
+          </div>
+        ) : (
+          <img
+            ref={imageRef}
+            src={imageUrl}
+            alt="Move and pinch to fit the cat inside the square"
+            draggable="false"
+            onLoad={handleImageLoad}
+            onError={() => setImageFailed(true)}
+            style={{
+              width: `${fittedWidth}px`,
+              height: `${fittedHeight}px`,
+              transform: `translate(calc(-50% + ${crop.x}px), calc(-50% + ${crop.y}px)) scale(${crop.scale})`,
+            }}
+          />
+        )}
         <div className="catch-crop-grid" aria-hidden="true" />
       </div>
       <p className="catch-crop-hint">Drag or pinch to fit the cat inside the square.</p>
@@ -4235,6 +4255,21 @@ async function createCroppedProfilePhoto(imageUrl, filename, settings) {
     throw new Error('Could not crop profile photo.');
   }
   return new File([blob], getCroppedFilename(filename), { type: 'image/jpeg' });
+}
+
+function readImageFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+      } else {
+        reject(new Error('Selected image could not be read.'));
+      }
+    };
+    reader.onerror = () => reject(reader.error || new Error('Selected image could not be read.'));
+    reader.readAsDataURL(file);
+  });
 }
 
 async function createSquareCatchCrop(imageUrl, filename, settings) {

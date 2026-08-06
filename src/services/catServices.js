@@ -761,6 +761,10 @@ function isPersistentImageUrl(value = '') {
   return /^https?:/i.test(value) || /^data:image\//i.test(value);
 }
 
+function isRemoteImageUrl(value = '') {
+  return /^https?:/i.test(value);
+}
+
 async function persistCaptureImages(capture, userId) {
   if (!capture || !isSupabaseConfigured) return capture;
 
@@ -787,7 +791,7 @@ async function persistCaptureImages(capture, userId) {
 }
 
 async function uploadCatPhotoFromUrl({ userId, imageUrl, filename = 'cat-photo.jpg', variant }) {
-  if (!imageUrl || isPersistentImageUrl(imageUrl)) return imageUrl;
+  if (!imageUrl || isRemoteImageUrl(imageUrl)) return imageUrl;
 
   try {
     const response = await fetch(imageUrl);

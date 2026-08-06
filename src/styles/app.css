@@ -2180,6 +2180,31 @@ button:disabled {
   user-select: none;
 }
 
+.catch-crop-error {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  padding: 24px;
+  color: #7d6254;
+  text-align: center;
+  background: linear-gradient(135deg, rgba(255, 248, 239, 0.92), rgba(255, 238, 226, 0.86));
+}
+
+.catch-crop-error strong {
+  color: #332821;
+  font-size: 1rem;
+}
+
+.catch-crop-error span {
+  max-width: 220px;
+  font-size: 0.86rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
 .catch-crop-grid {
   position: absolute;
   inset: 0;
