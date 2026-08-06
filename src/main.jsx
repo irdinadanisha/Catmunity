@@ -167,6 +167,7 @@ function App() {
   const [editingCatId, setEditingCatId] = useState('');
   const [pendingRemoveCatId, setPendingRemoveCatId] = useState('');
   const [selectedCatId, setSelectedCatId] = useState('');
+  const [detailCatOverride, setDetailCatOverride] = useState(null);
   const [selectedUserId, setSelectedUserId] = useState('');
   const [publicProfileCats, setPublicProfileCats] = useState([]);
   const [postCatId, setPostCatId] = useState('');
@@ -369,7 +370,7 @@ function App() {
   }, [authUser, currentUserId]);
 
   const caughtCats = cats.filter((cat) => cat.caught_by_users.includes(currentUserId));
-  const selectedCat = cats.find((cat) => cat.id === selectedCatId) || cats[0] || null;
+  const selectedCat = detailCatOverride || cats.find((cat) => cat.id === selectedCatId) || cats[0] || null;
   const communityUsers = useMemo(
     () => mergeUsers([me, ...socialUsers]),
     [me, socialUsers],
@@ -1012,9 +1013,11 @@ function App() {
     navigate,
     selectedCat,
     setSelectedCatId,
+    setDetailCatOverride,
     users: communityUsers,
     onOpenUser: (userId) => {
       if (userId === currentUserId) {
+        setDetailCatOverride(null);
         navigate('profile');
         return;
       }
@@ -1157,6 +1160,7 @@ function App() {
             onOpenFollowList={openFollowList}
             onOpenSettings={() => navigate('settings')}
             onSelectCat={(id) => {
+              setDetailCatOverride(null);
               setSelectedCatId(id);
               navigate('detail');
             }}
@@ -1171,8 +1175,9 @@ function App() {
             onOpenFollowList={openFollowList}
             onBack={() => navigate('collection')}
             onPostCat={startCommunityPost}
-            onSelectCat={(id) => {
-              setSelectedCatId(id);
+            onSelectCat={(cat) => {
+              setDetailCatOverride(cat);
+              setSelectedCatId(cat.id);
               navigate('detail');
             }}
           />
@@ -1418,23 +1423,24 @@ function getPostImageUrl(cat) {
 
 function getPostImageUrls(cat, extraImages = []) {
   return [
-    cat?.original_image_url,
-    cat?.cropped_image_url,
+    getPrimaryCatPhoto(cat),
     ...(extraImages || []),
   ].filter(isPersistentImageUrl).filter((url, index, urls) => urls.indexOf(url) === index);
 }
 
+function getPrimaryCatPhoto(cat) {
+  return [cat?.original_image_url, cat?.cropped_image_url].find(isPersistentImageUrl) || '';
+}
+
 function getDetailImageSlides(cat, users = [], onOpenUser = () => {}) {
   const owner = users.find((user) => user.id === cat?.created_by);
-  const ownImages = [cat?.cropped_image_url, cat?.original_image_url].filter(isPersistentImageUrl);
+  const ownPrimaryImage = getPrimaryCatPhoto(cat);
   const canonicalOwnerImage = [cat?.canonical_original_image_url, cat?.canonical_cropped_image_url].find(isPersistentImageUrl);
   const slides = [];
 
-  ownImages.forEach((url) => {
-    if (!slides.some((slide) => slide.url === url)) {
-      slides.push({ url, label: 'Your photo' });
-    }
-  });
+  if (ownPrimaryImage) {
+    slides.push({ url: ownPrimaryImage, label: 'Cat photo' });
+  }
 
   if (canonicalOwnerImage && !slides.some((slide) => slide.url === canonicalOwnerImage)) {
     slides.push({
@@ -1450,7 +1456,7 @@ function getDetailImageSlides(cat, users = [], onOpenUser = () => {}) {
 
 function getCommunityPostImages(post, cat) {
   let uniqueImages = [...new Set([...(post?.image_urls || []), post?.image_url].filter(isPersistentImageUrl))];
-  const personalOriginal = cat?.original_image_url;
+  const personalOriginal = getPrimaryCatPhoto(cat);
   const personalCrop = cat?.cropped_image_url;
   const canonicalImages = new Set([
     cat?.canonical_cropped_image_url,
@@ -1674,7 +1680,7 @@ function WelcomeScreen({ onStart }) {
   );
 }
 
-function ExploreScreen({ cats, currentUser, currentUserId, navigate, setSelectedCatId }) {
+function ExploreScreen({ cats, currentUser, currentUserId, navigate, setSelectedCatId, setDetailCatOverride }) {
   const [activeCatId, setActiveCatId] = useState(cats[0]?.id);
   const [query, setQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('All');
@@ -1707,11 +1713,13 @@ function ExploreScreen({ cats, currentUser, currentUserId, navigate, setSelected
   });
 
   function openCat(cat) {
+    setDetailCatOverride(null);
     setSelectedCatId(cat.id);
     navigate('detail');
   }
 
   function selectCatOnMap(cat) {
+    setDetailCatOverride(null);
     setActiveCatId(cat.id);
     setSelectedCatId(cat.id);
     setSheetFocusSignal((signal) => signal + 1);
@@ -1782,6 +1790,7 @@ function ExploreScreen({ cats, currentUser, currentUserId, navigate, setSelected
               cat={{ ...cat, distance: `${(index * 0.16 + 0.08).toFixed(2)} km` }}
               locked={!cat.caught_by_users.includes(currentUserId)}
               onOpen={() => {
+                setDetailCatOverride(null);
                 setActiveCatId(cat.id);
                 setSelectedCatId(cat.id);
                 navigate('detail');
@@ -2946,6 +2955,7 @@ function CollectionScreen({
   user,
   navigate,
   setSelectedCatId,
+  setDetailCatOverride,
   onPostCat,
   onEditCat,
   onRemoveCat,
@@ -2968,6 +2978,7 @@ function CollectionScreen({
         <span className="quiet-label">Original pins</span>
       </div>
       <MiniMap cats={caughtCats} onSelect={(cat) => {
+        setDetailCatOverride(null);
         setSelectedCatId(cat.id);
         navigate('detail');
       }} />
@@ -2983,6 +2994,7 @@ function CollectionScreen({
             viewerHasUnlocked
             isOwnProfile
             onOpen={() => {
+              setDetailCatOverride(null);
               setSelectedCatId(cat.id);
               navigate('detail');
             }}
