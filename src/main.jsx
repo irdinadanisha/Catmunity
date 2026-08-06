@@ -1056,8 +1056,6 @@ function App() {
             {...commonProps}
             stats={stats}
             user={me}
-            followCounts={followCountsByUserId[currentUserId] || { following: followingProfiles.length, followers: followerProfiles.length }}
-            onOpenFollowList={openFollowList}
             onPostCat={startCommunityPost}
             onEditCat={startEditCat}
             onRemoveCat={requestRemoveCatFromCollection}
@@ -2805,26 +2803,20 @@ function CollectionScreen({
   caughtCats,
   stats,
   user,
-  followCounts,
   navigate,
   setSelectedCatId,
-  onOpenFollowList,
   onPostCat,
   onEditCat,
   onRemoveCat,
 }) {
   return (
     <section className="screen collection-screen">
-      <div className="profile-hero">
-        <UserAvatar user={user} className="profile-hero-avatar" />
+      <div className="collection-title-card">
+        <UserAvatar user={user} className="collection-title-avatar" />
         <div>
-          <p className="eyebrow">Public profile</p>
-          <h1>{user.name}</h1>
-          <UserHandle user={user} />
-          <p>{user.bio}</p>
-          <FollowCounts user={user} counts={followCounts} onOpen={onOpenFollowList} />
+          <p className="eyebrow">Collection</p>
+          <h1>{user.name || 'Catmunity Friend'}'s collection</h1>
         </div>
-        <span className="profile-status"><ShieldCheck size={14} /> {user.public_profile ? 'Public' : 'Private'}</span>
       </div>
       <div className="metric-tabs" aria-label="Collection stats">
         <Stat label="Caught" value={stats.caught} icon={Cat} />
@@ -2892,13 +2884,6 @@ function OwnProfileScreen({
       <button className="secondary-button profile-settings-button" type="button" onClick={onOpenSettings}>
         <Settings size={18} /> Settings
       </button>
-
-      <div className="profile-readonly-info">
-        <InfoRow label="Username" value={`@${user.username || 'urs'}`} />
-        <InfoRow label="Display name" value={user.name || 'Catmunity Friend'} />
-        <InfoRow label="Account privacy" value={user.public_profile ? 'Public account' : 'Private account'} />
-        <InfoRow label="Bio" value={user.bio || 'No bio yet.'} />
-      </div>
 
       <div className="metric-tabs" aria-label="Profile stats">
         <Stat label="Caught" value={stats.caught} icon={Cat} />
