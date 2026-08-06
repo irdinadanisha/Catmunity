@@ -321,6 +321,29 @@ function App() {
   }, [authUser, currentUserId]);
 
   useEffect(() => {
+    if (!authUser) return undefined;
+
+    const catcherIds = [
+      ...new Set(cats.flatMap((cat) => cat.caught_by_users || []).filter(Boolean)),
+    ];
+    if (!catcherIds.length) return undefined;
+
+    let cancelled = false;
+
+    async function loadCatcherProfiles() {
+      const { data: profiles = [] } = await loadProfilesByIds(catcherIds);
+      if (cancelled) return;
+      setSocialUsers((users) => mergeUsers([...users, ...profiles.map(mapCommunityProfile)]));
+    }
+
+    loadCatcherProfiles();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser, cats]);
+
+  useEffect(() => {
     if (isSupabaseConfigured && !authUser) return undefined;
 
     let cancelled = false;
@@ -975,6 +998,14 @@ function App() {
     navigate,
     selectedCat,
     setSelectedCatId,
+    users: communityUsers,
+    onOpenUser: (userId) => {
+      if (userId === currentUserId) {
+        navigate('profile');
+        return;
+      }
+      openPublicProfile(userId);
+    },
   };
 
 
@@ -2960,7 +2991,7 @@ function OwnProfileScreen({
   );
 }
 
-function CatDetailScreen({ selectedCat, currentUserId }) {
+function CatDetailScreen({ selectedCat, currentUserId, users = [], onOpenUser = () => {} }) {
   if (!selectedCat) {
     return (
       <section className="screen">
@@ -3001,9 +3032,44 @@ function CatDetailScreen({ selectedCat, currentUserId }) {
           <div className="tag-row">
             {selectedCat.tags.map((tag) => <span key={tag}>{tag}</span>)}
           </div>
+          <CaughtByUsers
+            cat={selectedCat}
+            users={users}
+            currentUserId={currentUserId}
+            onOpenUser={onOpenUser}
+          />
         </div>
       )}
     </section>
+  );
+}
+
+function CaughtByUsers({ cat, users, currentUserId, onOpenUser }) {
+  const catcherIds = [...new Set(cat.caught_by_users || [])];
+  const catchers = catcherIds
+    .map((id) => users.find((user) => user.id === id) || (id === currentUserId ? users.find((user) => user.id === currentUserId) : null))
+    .filter(Boolean);
+
+  if (catchers.length <= 1) return null;
+
+  return (
+    <div className="caught-by-strip">
+      <span>Caught by</span>
+      <div>
+        {catchers.map((user) => (
+          <button
+            key={user.id}
+            type="button"
+            className="caught-by-avatar-button"
+            onClick={() => onOpenUser(user.id)}
+            aria-label={`Open ${user.name || user.username || 'Catmunity user'}'s profile`}
+            title={user.username ? `@${user.username}` : user.name}
+          >
+            <UserAvatar user={user} className="caught-by-avatar" />
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 

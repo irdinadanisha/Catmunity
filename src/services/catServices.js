@@ -311,8 +311,11 @@ export async function fetchCatsForMap(uiUserId) {
     return null;
   }
 
+  const catcherIdsByCatId = await fetchCatcherIdsByCatId((publicCats || []).map((cat) => cat.id));
   const userCatsByCatId = new Map((userCats || []).map((item) => [item.cat_id, item]));
-  return (publicCats || []).map((cat) => mapSupabaseCat(cat, uiUserId, userCatsByCatId.has(cat.id), userCatsByCatId.get(cat.id)));
+  return (publicCats || []).map((cat) =>
+    mapSupabaseCat(cat, uiUserId, userCatsByCatId.has(cat.id), userCatsByCatId.get(cat.id), catcherIdsByCatId.get(cat.id)),
+  );
 }
 
 export async function fetchUserCollection(userId) {
@@ -342,8 +345,33 @@ export async function fetchPublicUserCollection(profileUserId, viewerUserId) {
     return [];
   }
 
+  const catcherIdsByCatId = await fetchCatcherIdsByCatId((profileCats || []).map((cat) => cat.id));
   const viewerCatsByCatId = new Map((viewerCats || []).map((item) => [item.cat_id, item]));
-  return (profileCats || []).map((cat) => mapSupabaseCat(cat, viewerUserId, viewerCatsByCatId.has(cat.id), viewerCatsByCatId.get(cat.id)));
+  return (profileCats || []).map((cat) =>
+    mapSupabaseCat(cat, viewerUserId, viewerCatsByCatId.has(cat.id), viewerCatsByCatId.get(cat.id), catcherIdsByCatId.get(cat.id)),
+  );
+}
+
+async function fetchCatcherIdsByCatId(catIds = []) {
+  const uniqueCatIds = [...new Set(catIds.filter(Boolean))];
+  if (!uniqueCatIds.length) return new Map();
+
+  const { data, error } = await supabase
+    .from('public_user_cat_map')
+    .select('id, profile_user_id')
+    .in('id', uniqueCatIds);
+
+  if (error) {
+    console.warn('Supabase cat catcher load failed', error);
+    return new Map();
+  }
+
+  return (data || []).reduce((map, item) => {
+    const ids = map.get(item.id) || [];
+    if (item.profile_user_id && !ids.includes(item.profile_user_id)) ids.push(item.profile_user_id);
+    map.set(item.id, ids);
+    return map;
+  }, new Map());
 }
 
 export async function findNearbyCats(latitude, longitude, radiusMeters = duplicateLocationRadiusMeters) {
@@ -700,10 +728,11 @@ async function createSupabaseSighting({ userId, catId, capture, photoUrl = null,
   }
 }
 
-function mapSupabaseCat(cat, uiUserId, caught, userCat = null) {
+function mapSupabaseCat(cat, uiUserId, caught, userCat = null, catcherUserIds = []) {
   const limitedInfo = !caught;
   const originalImageUrl = isPersistentImageUrl(cat.original_image_url) ? cat.original_image_url : '';
   const croppedImageUrl = isPersistentImageUrl(cat.cropped_image_url) ? cat.cropped_image_url : missingCatImageUrl;
+  const caughtByUsers = [...new Set([...(catcherUserIds || []), ...(caught && uiUserId ? [uiUserId] : [])].filter(Boolean))];
   return {
     id: cat.id,
     name: cat.name || 'Unnamed Cat',
@@ -722,7 +751,7 @@ function mapSupabaseCat(cat, uiUserId, caught, userCat = null) {
     tags: ['nearby'],
     discovered_by: cat.created_by || '',
     created_by: cat.created_by || '',
-    caught_by_users: caught ? [uiUserId] : [],
+    caught_by_users: caughtByUsers,
     latitude: cat.latitude,
     longitude: cat.longitude,
     canonical_latitude: cat.latitude,
