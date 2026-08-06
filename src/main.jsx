@@ -119,6 +119,44 @@ const catKeywordSuggestions = [
   'active',
 ];
 
+class AppErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidCatch(error, info) {
+    console.error('[Catmunity app crashed]', error, info);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="app-shell">
+          <main className="main">
+            <section className="screen">
+              <div className="app-error-card">
+                <PawPrint size={30} />
+                <strong>Catmunity needs a quick refresh.</strong>
+                <span>{this.state.error.message || 'Something went wrong while opening this screen.'}</span>
+                <button type="button" className="primary-button" onClick={() => window.location.reload()}>
+                  Refresh app
+                </button>
+              </div>
+            </section>
+          </main>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 function App() {
   const [screen, setScreen] = useState('explore');
   const [cats, setCats] = useState([]);
@@ -2201,22 +2239,6 @@ function getObjectFitCoverSourceRect({ sourceWidth, sourceHeight, targetWidth, t
 
 function ConfirmScreen({ capture, detectingLocation = false, onRetryLocation, onBack, onConfirm }) {
   const [isCropping, setIsCropping] = useState(false);
-  const reverseGeocodeRetryRef = useRef(false);
-  const { isLoaded: googleMapsLoaded } = useJsApiLoader({
-    googleMapsApiKey,
-  });
-
-  useEffect(() => {
-    if (
-      googleMapsLoaded &&
-      capture?.locationSource === 'fresh-gps-local-fallback' &&
-      !reverseGeocodeRetryRef.current &&
-      onRetryLocation
-    ) {
-      reverseGeocodeRetryRef.current = true;
-      onRetryLocation();
-    }
-  }, [capture?.locationSource, googleMapsLoaded, onRetryLocation]);
 
   if (!capture) return null;
   const locationReady = capture.locationStatus === 'ready';
@@ -4315,4 +4337,8 @@ function getCroppedFilename(filename) {
   return `${baseName}-cropped.jpg`;
 }
 
-createRoot(document.getElementById('root')).render(<App />);
+createRoot(document.getElementById('root')).render(
+  <AppErrorBoundary>
+    <App />
+  </AppErrorBoundary>,
+);

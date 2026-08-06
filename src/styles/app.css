@@ -634,6 +634,33 @@ button:disabled {
   font-size: 0.88rem;
 }
 
+.app-error-card {
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+  padding: 24px 18px;
+  border-radius: 26px;
+  color: #5d4a3b;
+  text-align: center;
+  background:
+    linear-gradient(135deg, rgba(255, 240, 200, 0.68), rgba(255, 255, 255, 0.86)),
+    rgba(255, 252, 247, 0.78);
+  border: 1px solid rgba(84, 58, 39, 0.08);
+  box-shadow: 0 18px 42px rgba(83, 55, 38, 0.1);
+}
+
+.app-error-card strong {
+  color: #2b211d;
+  font-size: 1.15rem;
+}
+
+.app-error-card span {
+  max-width: 280px;
+  color: #7d6254;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
 .explore-live {
   position: relative;
   min-height: 100vh;
