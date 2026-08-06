@@ -1380,6 +1380,7 @@ function mapCommunityData(data, currentUserId) {
       body: post.caption,
       location_name: post.location_name || 'Catmunity',
       mentions: post.mentions || [],
+      raw_created_at: post.created_at,
       created_at: formatPostTime(post.created_at),
       likeCount: likeUsers.length,
       likedByMe: likeUsers.includes(currentUserId),
@@ -1467,12 +1468,24 @@ function getCommunityPostImages(post, cat) {
     uniqueImages = uniqueImages.filter((url) => url !== personalCrop);
   }
 
+  uniqueImages = collapseLegacyPostAutoPair(uniqueImages, post);
+
   if (cat?.created_by && post?.user_id && post.user_id !== cat.created_by) {
     const personalImages = uniqueImages.filter((url) => !canonicalImages.has(url));
     if (personalImages.length) return personalImages;
   }
 
   return uniqueImages;
+}
+
+function collapseLegacyPostAutoPair(images, post) {
+  if (images.length < 2) return images;
+
+  const cutoff = new Date('2026-08-06T10:30:00.000Z').getTime();
+  const createdAt = new Date(post?.raw_created_at || '').getTime();
+  if (!Number.isFinite(createdAt) || createdAt > cutoff) return images;
+
+  return [images[0], ...images.slice(2)];
 }
 
 function renderMentionText(text = '') {
