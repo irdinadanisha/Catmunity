@@ -89,7 +89,7 @@ const tabs = [
   { id: 'collection', label: 'Collection', icon: MapPin },
   { id: 'catch', label: 'Catch!', icon: Cat },
   { id: 'community', label: 'Community', icon: Users },
-  { id: 'settings', label: 'Profile', icon: User },
+  { id: 'profile', label: 'Profile', icon: User },
 ];
 
 const fallbackUserId = 'local-user';
@@ -1064,6 +1064,20 @@ function App() {
           />
         )}
         {screen === 'detail' && <CatDetailScreen {...commonProps} />}
+        {screen === 'profile' && (
+          <OwnProfileScreen
+            user={me}
+            cats={caughtCats}
+            stats={stats}
+            followCounts={followCountsByUserId[currentUserId] || { following: followingProfiles.length, followers: followerProfiles.length }}
+            onOpenFollowList={openFollowList}
+            onOpenSettings={() => navigate('settings')}
+            onSelectCat={(id) => {
+              setSelectedCatId(id);
+              navigate('detail');
+            }}
+          />
+        )}
         {screen === 'publicProfile' && (
           <PublicProfileScreen
             user={selectedUser}
@@ -1120,6 +1134,7 @@ function App() {
             user={me}
             userId={currentUserId}
             signedIn={Boolean(authUser)}
+            onBack={() => navigate('profile')}
             onProfileSave={handleProfileSave}
             onSignOut={handleSignOut}
           />
@@ -1130,7 +1145,9 @@ function App() {
         <nav className={screen === 'explore' ? 'bottom-nav bottom-nav--map' : 'bottom-nav'} aria-label="Main navigation">
           {tabs.map((tab) => {
             const Icon = tab.icon;
-            const active = screen === tab.id || (tab.id === 'collection' && ['detail', 'publicProfile'].includes(screen));
+            const active = screen === tab.id ||
+              (tab.id === 'collection' && ['detail', 'publicProfile'].includes(screen)) ||
+              (tab.id === 'profile' && screen === 'settings');
             return (
               <button className={active ? 'nav-item active' : 'nav-item'} key={tab.id} onClick={() => navigate(tab.id)}>
                 <Icon size={20} />
@@ -2849,6 +2866,73 @@ function CollectionScreen({
   );
 }
 
+function OwnProfileScreen({
+  user,
+  cats,
+  stats,
+  followCounts,
+  onOpenFollowList,
+  onOpenSettings,
+  onSelectCat,
+}) {
+  return (
+    <section className="screen own-profile-screen">
+      <div className="profile-readonly-hero">
+        <UserAvatar user={user} className="profile-readonly-avatar" />
+        <div>
+          <p className="eyebrow">Profile</p>
+          <h1>{user.name || 'Catmunity Friend'}</h1>
+          <UserHandle user={user} />
+          <p>{user.bio || 'No bio yet.'}</p>
+          <FollowCounts user={user} counts={followCounts} onOpen={onOpenFollowList} />
+        </div>
+        <span className="profile-status"><ShieldCheck size={14} /> {user.public_profile ? 'Public' : 'Private'}</span>
+      </div>
+
+      <button className="secondary-button profile-settings-button" type="button" onClick={onOpenSettings}>
+        <Settings size={18} /> Settings
+      </button>
+
+      <div className="profile-readonly-info">
+        <InfoRow label="Username" value={`@${user.username || 'urs'}`} />
+        <InfoRow label="Display name" value={user.name || 'Catmunity Friend'} />
+        <InfoRow label="Account privacy" value={user.public_profile ? 'Public account' : 'Private account'} />
+        <InfoRow label="Bio" value={user.bio || 'No bio yet.'} />
+      </div>
+
+      <div className="metric-tabs" aria-label="Profile stats">
+        <Stat label="Caught" value={stats.caught} icon={Cat} />
+        <Stat label="Areas" value={stats.areas} icon={MapPin} />
+      </div>
+
+      <div className="section-title-row">
+        <h2>Discovery map</h2>
+        <span className="quiet-label">Original pins</span>
+      </div>
+      <MiniMap cats={cats} onSelect={(cat) => onSelectCat(cat.id)} />
+
+      <div className="section-title-row">
+        <h2>Discovered cats</h2>
+        <span className="quiet-label">{cats.length} profiles</span>
+      </div>
+      <div className="profile-cat-grid">
+        {cats.map((cat) => (
+          <DiscoveredCatCard
+            key={cat.id}
+            cat={cat}
+            viewerHasUnlocked
+            isOwnProfile={false}
+            onOpen={() => onSelectCat(cat.id)}
+          />
+        ))}
+        {cats.length === 0 && (
+          <p className="empty-community-copy">No cats discovered yet. Catch your first cat to get started!</p>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function CatDetailScreen({ selectedCat, currentUserId }) {
   if (!selectedCat) {
     return (
@@ -3273,7 +3357,7 @@ function CreatePostScreen({ cat, onBack, onCreate }) {
   );
 }
 
-function SettingsScreen({ user, userId, signedIn, onProfileSave, onSignOut }) {
+function SettingsScreen({ user, userId, signedIn, onBack, onProfileSave, onSignOut }) {
   const [form, setForm] = useState({
     username: user.username || '',
     name: user.name || '',
@@ -3350,6 +3434,7 @@ function SettingsScreen({ user, userId, signedIn, onProfileSave, onSignOut }) {
 
   return (
     <section className="screen">
+      <BackButton onBack={onBack} />
       <ScreenHeader title="Profile settings" subtitle="Update how your Catmunity account appears." icon={Settings} />
       <form className="profile-settings-card" onSubmit={handleSubmit}>
         <div className="profile-settings-preview">
