@@ -369,7 +369,7 @@ function App() {
     };
   }, [authUser, currentUserId]);
 
-  const caughtCats = cats.filter((cat) => cat.caught_by_users.includes(currentUserId));
+  const caughtCats = cats.filter((cat) => (cat.caught_by_users || []).includes(currentUserId));
   const selectedCat = detailCatOverride || cats.find((cat) => cat.id === selectedCatId) || cats[0] || null;
   const communityUsers = useMemo(
     () => mergeUsers([me, ...socialUsers]),
@@ -829,7 +829,7 @@ function App() {
 
   async function handleCreatePost(post) {
     const cat = cats.find((item) => item.id === post.catId);
-    if (!cat || !cat.caught_by_users.includes(currentUserId)) {
+    if (!cat || !(cat.caught_by_users || []).includes(currentUserId)) {
       showToast('Only unlocked cats can be posted.');
       return;
     }
@@ -946,7 +946,7 @@ function App() {
         cat.id === catId
           ? {
             ...cat,
-            caught_by_users: cat.caught_by_users.filter((id) => id !== currentUserId),
+            caught_by_users: (cat.caught_by_users || []).filter((id) => id !== currentUserId),
           }
           : cat
       ));
@@ -1691,7 +1691,7 @@ function ExploreScreen({ cats, currentUser, currentUserId, navigate, setSelected
   const normalizedQuery = normalizeSearchText(query);
   const detectedKeywords = catKeywordSuggestions.filter((keyword) => normalizedQuery.includes(normalizeSearchText(keyword)));
   const nearbyCats = cats.filter((cat) => {
-    const caught = cat.caught_by_users.includes(currentUserId);
+    const caught = (cat.caught_by_users || []).includes(currentUserId);
     const searchableText = getCatSearchText(cat, caught);
     const matchesTextQuery =
       !normalizedQuery ||
@@ -1788,7 +1788,7 @@ function ExploreScreen({ cats, currentUser, currentUserId, navigate, setSelected
             <CatCard
               key={cat.id}
               cat={{ ...cat, distance: `${(index * 0.16 + 0.08).toFixed(2)} km` }}
-              locked={!cat.caught_by_users.includes(currentUserId)}
+              locked={!(cat.caught_by_users || []).includes(currentUserId)}
               onOpen={() => {
                 setDetailCatOverride(null);
                 setActiveCatId(cat.id);
@@ -2682,7 +2682,7 @@ function RegistrationChoiceScreen({ cats, capture, currentUserId, onBack, onNewC
       </div>
       <div className="existing-cat-list">
         {nearbyCats.map(({ cat, distance }) => {
-          const caught = cat.caught_by_users.includes(currentUserId);
+          const caught = (cat.caught_by_users || []).includes(currentUserId);
           return (
             <button
               key={cat.id}
@@ -3080,7 +3080,7 @@ function CatDetailScreen({ selectedCat, currentUserId, users = [], onOpenUser = 
     );
   }
 
-  const locked = !selectedCat.caught_by_users.includes(currentUserId);
+  const locked = !(selectedCat.caught_by_users || []).includes(currentUserId);
   const estimatedCat = getEstimatedMapCat(selectedCat);
   const detailImageSlides = getDetailImageSlides(selectedCat, users, onOpenUser);
   return (
@@ -3212,14 +3212,14 @@ function PublicProfileScreen({ user, cats, currentUserId, followCounts, onOpenFo
       <MiniMap cats={cats} approximate />
       <div className="gallery-grid">
         {cats.map((cat) => {
-          const viewerHasUnlocked = cat.caught_by_users.includes(currentUserId);
+          const viewerHasUnlocked = (cat.caught_by_users || []).includes(currentUserId);
           return (
             <DiscoveredCatCard
               key={cat.id}
               cat={cat}
               viewerHasUnlocked={viewerHasUnlocked}
               isOwnProfile={false}
-              onOpen={() => onSelectCat(cat.id)}
+              onOpen={() => onSelectCat(cat)}
               onPostToCommunity={viewerHasUnlocked ? () => onPostCat(cat.id) : null}
             />
           );
@@ -4191,7 +4191,7 @@ function RealGoogleMap({ cats, currentUser, currentUserId, activeCatId, centerSi
           </OverlayView>
         )}
         {cats.map((cat, index) => {
-          const locked = !cat.caught_by_users.includes(currentUserId);
+          const locked = !(cat.caught_by_users || []).includes(currentUserId);
           const position = getCatMapPosition(cat);
           return (
             <OverlayView
@@ -4205,7 +4205,7 @@ function RealGoogleMap({ cats, currentUser, currentUserId, activeCatId, centerSi
                 onClick={() => onSelect(cat)}
                 aria-label={`${cat.name}, ${locked ? 'locked' : 'caught'}`}
               >
-                <CatHeadMarker image={cat.cropped_image_url} locked={locked} count={cat.sighting_count || cat.caught_by_users.length || index + 1} />
+                <CatHeadMarker image={cat.cropped_image_url} locked={locked} count={cat.sighting_count || (cat.caught_by_users || []).length || index + 1} />
               </button>
             </OverlayView>
           );
@@ -4238,7 +4238,7 @@ function MockMap({ cats, currentUserId, activeCatId, onSelect }) {
       </div>
       <div className="map-label">Live cat radar</div>
       {cats.map((cat, index) => {
-        const locked = !cat.caught_by_users.includes(currentUserId);
+        const locked = !(cat.caught_by_users || []).includes(currentUserId);
         return (
           <button
             key={cat.id}

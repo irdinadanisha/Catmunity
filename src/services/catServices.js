@@ -216,7 +216,7 @@ export function createNewCatWithCanonicalLocation({ capture, form = {}, currentU
 
 export function addExistingCatToUserCollection(cats, catId, userId, capture = null) {
   return cats.map((cat) => {
-    if (cat.id !== catId || cat.caught_by_users.includes(userId)) return cat;
+    if (cat.id !== catId || (cat.caught_by_users || []).includes(userId)) return cat;
 
     const sighting = createUserCatRecord({
       userId,
@@ -230,9 +230,9 @@ export function addExistingCatToUserCollection(cats, catId, userId, capture = nu
       cropped_image_url: capture?.croppedImage || cat.cropped_image_url,
       original_image_url: capture?.originalImage || cat.original_image_url,
       photo_urls: [...new Set([...(cat.photo_urls || []), capture?.croppedImage, capture?.originalImage].filter(Boolean))],
-      caught_by_users: [...cat.caught_by_users, userId],
+      caught_by_users: [...(cat.caught_by_users || []), userId],
       user_cats: [...(cat.user_cats || []), sighting],
-      sighting_count: (cat.sighting_count || cat.caught_by_users.length || 0) + 1,
+      sighting_count: (cat.sighting_count || (cat.caught_by_users || []).length || 0) + 1,
       updated_at: new Date().toISOString(),
     };
   });
@@ -287,7 +287,7 @@ export function saveCatCatch(cat) {
 }
 
 export function getLockedStateForUser(cat, userId) {
-  return !cat.caught_by_users.includes(userId);
+  return !(cat.caught_by_users || []).includes(userId);
 }
 
 export async function loadCatsFromSupabase(uiUserId) {
