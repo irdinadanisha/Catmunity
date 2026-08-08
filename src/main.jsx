@@ -3010,14 +3010,16 @@ function CollectionScreen({
     <section className="screen collection-screen">
       <div className="collection-title-card">
         <UserAvatar user={user} className="collection-title-avatar" />
-        <div>
+        <div className="collection-title-copy">
           <p className="eyebrow">Collection</p>
-          <h1>{user.name || 'Catmunity Friend'}'s cats</h1>
+          <div className="collection-title-main">
+            <h1>{user.name || 'Catmunity Friend'}'s cats</h1>
+            <div className="collection-title-stats" aria-label="Collection stats">
+              <span><Cat size={24} /><strong>{stats.caught}</strong></span>
+              <span><MapPin size={24} /><strong>{stats.areas}</strong></span>
+            </div>
+          </div>
         </div>
-      </div>
-      <div className="metric-tabs collection-metrics" aria-label="Collection stats">
-        <Stat label="Caught" value={stats.caught} icon={Cat} />
-        <Stat label="Areas" value={stats.areas} icon={MapPin} />
       </div>
       <div className="section-title-row">
         <h2>Discovery map</h2>
@@ -3347,7 +3349,7 @@ function DiscoveredCatCard({
                   onRemoveFromCollection();
                 }}
               >
-                <X size={14} /> remove
+                <X size={14} /> Remove
               </button>
             )}
           </div>

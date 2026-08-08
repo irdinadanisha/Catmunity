@@ -2699,7 +2699,7 @@ button:disabled {
 .collection-title-card h1 {
   margin: 0;
   color: #2b211d;
-  font-size: clamp(1.45rem, 6vw, 2rem);
+  font-size: clamp(1.35rem, 5.4vw, 1.95rem);
   line-height: 1.06;
   letter-spacing: 0;
 }
@@ -2708,34 +2708,40 @@ button:disabled {
   margin: 0 0 5px;
 }
 
-.collection-metrics {
+.collection-title-copy {
+  min-width: 0;
+}
+
+.collection-title-main {
   display: flex;
   align-items: center;
-  gap: 24px;
-  padding: 2px 0 8px;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.collection-metrics .stat {
-  width: auto;
-  min-height: auto;
-  grid-template-columns: auto auto;
-  grid-template-areas:
-    "icon value"
-    "icon label";
-  column-gap: 8px;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
+.collection-title-main h1 {
+  min-width: 0;
 }
 
-.collection-metrics .stat-icon {
-  width: auto;
-  height: auto;
-  border-radius: 0;
+.collection-title-stats {
+  display: grid;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.collection-title-stats span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px;
   color: #8f542b;
-  background: transparent;
+}
+
+.collection-title-stats strong {
+  color: #ef6250;
+  font-size: 1.05rem;
+  line-height: 1;
+  font-weight: 950;
 }
 
 .profile-hero {
