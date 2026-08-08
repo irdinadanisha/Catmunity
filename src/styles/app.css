@@ -1256,7 +1256,7 @@ button:disabled {
 .sheet-search-row {
   height: 48px;
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto 1fr;
   align-items: center;
   gap: 8px;
   padding: 0 10px 0 14px;
@@ -1272,17 +1272,6 @@ button:disabled {
   outline: 0;
   background: transparent;
   color: #2b211d;
-}
-
-.sheet-search-row button {
-  width: 34px;
-  height: 34px;
-  border: 0;
-  border-radius: 12px;
-  display: grid;
-  place-items: center;
-  color: #b34d3e;
-  background: rgba(232, 95, 75, 0.12);
 }
 
 .filter-rail {
@@ -2773,10 +2762,16 @@ button:disabled {
   color: #3e2d26;
 }
 
-.profile-status {
+.profile-status-actions {
   position: absolute;
   right: 12px;
   top: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.profile-status {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -2787,6 +2782,19 @@ button:disabled {
   color: #295a4b;
   font-size: 0.74rem;
   font-weight: 900;
+}
+
+.profile-settings-icon-button {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: #6b4a39;
+  background: rgba(255, 246, 231, 0.82);
+  box-shadow: 0 10px 22px rgba(83, 55, 38, 0.08);
 }
 
 .own-profile-screen {
@@ -2829,10 +2837,6 @@ button:disabled {
   line-height: 1.35;
 }
 
-.profile-settings-button {
-  min-height: 46px;
-}
-
 .metric-tabs {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2857,11 +2861,11 @@ button:disabled {
 
 .stat svg {
   grid-area: icon;
-  width: 36px;
-  height: 36px;
-  padding: 9px;
-  border-radius: 14px;
-  background: #fff0c8;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
   color: #8a5222;
 }
 

@@ -25,7 +25,6 @@ import {
   Send,
   Settings,
   ShieldCheck,
-  SlidersHorizontal,
   Sparkles,
   Trash2,
   UnlockKeyhole,
@@ -1791,10 +1790,9 @@ function ExploreScreen({ cats, currentUser, currentUserId, navigate, setSelected
               <Search size={18} />
               <input
                 value={query}
-                placeholder="Search cats around you..."
+                placeholder="Find cats near you!"
                 onChange={(event) => setQuery(event.target.value)}
               />
-              <button aria-label="Filters"><SlidersHorizontal size={17} /></button>
             </div>
             <div className="filter-rail" aria-label="Cat filters">
               {filters.map((filter) => (
@@ -3073,12 +3071,13 @@ function OwnProfileScreen({
           <p>{user.bio || 'No bio yet.'}</p>
           <FollowCounts user={user} counts={followCounts} onOpen={onOpenFollowList} />
         </div>
-        <span className="profile-status"><ShieldCheck size={14} /> {user.public_profile ? 'Public' : 'Private'}</span>
+        <div className="profile-status-actions">
+          <span className="profile-status"><ShieldCheck size={14} /> {user.public_profile ? 'Public' : 'Private'}</span>
+          <button className="profile-settings-icon-button" type="button" onClick={onOpenSettings} aria-label="Profile settings">
+            <Settings size={17} />
+          </button>
+        </div>
       </div>
-
-      <button className="secondary-button profile-settings-button" type="button" onClick={onOpenSettings}>
-        <Settings size={18} /> Settings
-      </button>
 
       <div className="metric-tabs" aria-label="Profile stats">
         <Stat label="Caught" value={stats.caught} icon={Cat} />
@@ -4519,7 +4518,6 @@ function CatCard({ cat, locked, onOpen, action }) {
       <div>
         <div className="card-title-row">
           <h3>{locked ? cat.name || 'Unknown Cat' : cat.name || 'Unnamed Cat'}</h3>
-          <CatStatusBadge locked={locked} />
         </div>
         {!locked && <p>{cat.color} · {cat.fun_info}</p>}
         {!locked && (
@@ -4531,7 +4529,7 @@ function CatCard({ cat, locked, onOpen, action }) {
         )}
       </div>
       {action && <button aria-label={locked ? 'Unlock cat' : 'Open cat'} onClick={(event) => { event.stopPropagation(); action(); }}>
-        {locked ? <Lock size={16} /> : <Cat size={16} />}
+        {locked ? <Lock size={16} /> : <UnlockKeyhole size={16} />}
       </button>}
     </article>
   );
