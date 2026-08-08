@@ -17,7 +17,6 @@ import {
   Map as MapIcon,
   MapPin,
   MessageCircle,
-  MoreHorizontal,
   PawPrint,
   Pencil,
   Plus,
@@ -3007,7 +3006,8 @@ function CatDetailsForm({
                   onClick={() => setConfirmPictureChange(true)}
                   aria-label="Change cat picture"
                 >
-                  <MoreHorizontal size={18} />
+                  <ImageIcon size={18} />
+                  <RotateCcw size={14} />
                 </button>
                 <input
                   ref={replacementInputRef}
@@ -3020,9 +3020,6 @@ function CatDetailsForm({
               </>
             )}
           </div>
-          {mode === 'edit' && (
-            <p className="field-helper">Tap the three dots to change this cat picture.</p>
-          )}
         </div>
         {confirmPictureChange && (
           <div className="notification-overlay" role="dialog" aria-modal="true" aria-label="Change cat picture">
