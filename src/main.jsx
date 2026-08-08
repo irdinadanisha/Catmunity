@@ -3549,19 +3549,19 @@ function CommunityPostCard({ post, user, currentUser, cat, isFriendPost, onOpenU
               <MessageCircle size={22} />
               <span>{post.comments.length}</span>
             </span>
+            {onDelete && (
+              <button className="post-delete-icon" type="button" onClick={onDelete} aria-label="Delete post">
+                <Trash2 size={16} />
+              </button>
+            )}
           </div>
         </div>
-        {onDelete && (
-          <button className="post-delete-icon" type="button" onClick={onDelete} aria-label="Delete post">
-            <Trash2 size={16} />
-          </button>
-        )}
       </div>
       <div className="comment-list">
         {post.comments.map((comment) => (
           <article className="thread-item comment" key={comment.id}>
-            <svg className="thread-reply-connector" viewBox="0 0 54 66" preserveAspectRatio="none" aria-hidden="true" focusable="false">
-              <path d="M22 0 V26 C22 36 30 44 40 44 H54" />
+            <svg className="thread-reply-connector" viewBox="0 0 62 92" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+              <path d="M22 0 V50 C22 62 31 70 43 70 H62" />
             </svg>
             <UserAvatar user={comment.user} className="comment-avatar thread-avatar" />
             <div className="thread-body comment-body">
