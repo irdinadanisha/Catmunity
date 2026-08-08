@@ -3525,11 +3525,9 @@ function CommunityPostCard({ post, user, currentUser, cat, isFriendPost, onOpenU
 
   return (
     <article className="post-card thread-card">
-      {post.comments.length > 0 && (
-        <svg className="thread-main-connector" viewBox="0 0 62 100" preserveAspectRatio="none" aria-hidden="true" focusable="false">
-          <path d="M22 0 V100" />
-        </svg>
-      )}
+      <svg className="thread-main-connector" viewBox="0 0 62 100" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+        <path d="M22 0 V100" />
+      </svg>
       <div className="thread-item thread-post">
         <UserAvatar user={user} className="post-user-avatar thread-avatar" />
         <div className="thread-body">
@@ -3540,9 +3538,16 @@ function CommunityPostCard({ post, user, currentUser, cat, isFriendPost, onOpenU
                 <UserHandle user={user} />
               </span>
             </button>
-            <small>{post.created_at}</small>
+            <span className="comment-header-actions">
+              <small>{post.created_at}</small>
+              {onDelete && (
+                <button className="post-delete-icon" type="button" onClick={onDelete} aria-label="Delete post">
+                  <Trash2 size={13} />
+                </button>
+              )}
+            </span>
           </div>
-          <small className="thread-meta">{isFriendPost ? 'Friend post' : 'Nearby'} · {post.location_name}</small>
+          <small className="thread-meta">{post.location_name}</small>
           {displayImages.length > 0 && (
             <div className={displayImages.length > 1 ? 'post-image-gallery' : 'post-image-gallery single'}>
               {displayImages.map((imageUrl, index) => (
@@ -3571,20 +3576,12 @@ function CommunityPostCard({ post, user, currentUser, cat, isFriendPost, onOpenU
               <MessageCircle size={22} />
               <span>{post.comments.length}</span>
             </span>
-            {onDelete && (
-              <button className="post-delete-icon" type="button" onClick={onDelete} aria-label="Delete post">
-                <Trash2 size={16} />
-              </button>
-            )}
           </div>
         </div>
       </div>
       <div className="comment-list">
         {post.comments.map((comment) => (
           <article className="thread-item comment" key={comment.id}>
-            <svg className="thread-reply-connector" viewBox="0 0 62 44" preserveAspectRatio="none" aria-hidden="true" focusable="false">
-              <path d="M22 0 C22 16 30 22 44 22 H62" />
-            </svg>
             <UserAvatar user={comment.user} className="comment-avatar thread-avatar" />
             <div className="thread-body comment-body">
               <div className="thread-header">
