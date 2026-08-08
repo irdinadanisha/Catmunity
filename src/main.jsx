@@ -3509,6 +3509,11 @@ function CommunityPostCard({ post, user, currentUser, cat, isFriendPost, onOpenU
   return (
     <article className="post-card thread-card">
       <div className="thread-item thread-post">
+        {post.comments.length > 0 && (
+          <svg className="thread-parent-connector" viewBox="0 0 62 100" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+            <path d="M22 48 V100" />
+          </svg>
+        )}
         <UserAvatar user={user} className="post-user-avatar thread-avatar" />
         <div className="thread-body">
           <div className="thread-header">

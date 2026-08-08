@@ -3665,15 +3665,34 @@ button:disabled {
   display: none;
 }
 
-.thread-reply-connector {
+.thread-parent-connector {
   position: absolute;
   left: 0;
-  top: -48px;
+  top: 0;
   width: 62px;
-  height: 96px;
+  height: calc(100% + 60px);
   overflow: visible;
   pointer-events: none;
   z-index: 1;
+}
+
+.thread-parent-connector path {
+  fill: none;
+  stroke: rgba(114, 85, 71, 0.22);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.thread-reply-connector {
+  position: absolute;
+  left: 0;
+  top: -60px;
+  width: 62px;
+  height: 108px;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 2;
 }
 
 .thread-reply-connector path {
@@ -3740,7 +3759,7 @@ button:disabled {
   content: "";
   position: absolute;
   left: 21px;
-  top: -48px;
+  top: -60px;
   bottom: 24px;
   width: 3px;
   border-radius: 999px;
