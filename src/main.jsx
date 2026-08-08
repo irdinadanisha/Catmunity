@@ -56,6 +56,7 @@ import {
   createCommunityComment,
   createCommunityPost,
   createNotification,
+  deleteCommunityComment,
   deleteCommunityPost,
   fetchFollowCounts,
   fetchFollowersList,
@@ -928,6 +929,19 @@ function App() {
     await refreshCommunityPosts();
   }
 
+  async function handleDeleteComment(commentId) {
+    const confirmed = window.confirm('Delete comment?');
+    if (!confirmed) return;
+
+    const { error } = await deleteCommunityComment(commentId);
+    if (error) {
+      showToast(error.message || 'Comment could not be deleted.');
+      return;
+    }
+
+    await refreshCommunityPosts();
+  }
+
   async function handleDeletePost(postId) {
     const { error } = await deleteCommunityPost(postId, currentUserId);
     if (error) {
@@ -1212,6 +1226,7 @@ function App() {
             onToggleLike={handleTogglePostLike}
             onComment={handleCreateComment}
             onDeletePost={handleDeletePost}
+            onDeleteComment={handleDeleteComment}
             onOpenUser={(id) => {
               openPublicProfile(id);
             }}
@@ -3372,6 +3387,7 @@ function CommunityScreen({
   onToggleLike,
   onComment,
   onDeletePost,
+  onDeleteComment,
   onOpenUser,
 }) {
   const [currentArea, setCurrentArea] = useState('Finding your area...');
@@ -3473,6 +3489,7 @@ function CommunityScreen({
             onToggleLike={() => onToggleLike(post)}
             onComment={(body) => onComment(post.id, body)}
             onDelete={post.user_id === currentUserId ? () => onDeletePost(post.id) : null}
+            onDeleteComment={onDeleteComment}
           />
         );
       })}
@@ -3483,7 +3500,7 @@ function CommunityScreen({
   );
 }
 
-function CommunityPostCard({ post, user, currentUser, cat, isFriendPost, onOpenUser, onToggleLike, onComment, onDelete }) {
+function CommunityPostCard({ post, user, currentUser, cat, isFriendPost, onOpenUser, onToggleLike, onComment, onDelete, onDeleteComment }) {
   const [commentText, setCommentText] = useState('');
   const [commentImages, setCommentImages] = useState([]);
   const [imageFailed, setImageFailed] = useState(false);
@@ -3572,7 +3589,19 @@ function CommunityPostCard({ post, user, currentUser, cat, isFriendPost, onOpenU
             <div className="thread-body comment-body">
               <div className="thread-header">
                 <strong>@{comment.user?.username || 'catmunity'}</strong>
-                <small>{comment.created_at}</small>
+                <span className="comment-header-actions">
+                  <small>{comment.created_at}</small>
+                  {(currentUser?.id === comment.user_id || currentUser?.id === post.user_id) && onDeleteComment && (
+                    <button
+                      className="comment-delete-icon"
+                      type="button"
+                      onClick={() => onDeleteComment(comment.id)}
+                      aria-label="Delete comment"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  )}
+                </span>
               </div>
               {comment.body && <p>{renderMentionText(comment.body)}</p>}
               {comment.image_urls?.length > 0 && (

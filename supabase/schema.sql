@@ -429,9 +429,18 @@ using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
 
 drop policy if exists "Users can delete own comments" on public.comments;
-create policy "Users can delete own comments"
+drop policy if exists "Users and post owners can delete comments" on public.comments;
+create policy "Users and post owners can delete comments"
 on public.comments for delete
-using (auth.uid() = user_id);
+using (
+  (select auth.uid()) = user_id
+  or exists (
+    select 1
+    from public.community_posts
+    where community_posts.id = comments.post_id
+      and community_posts.user_id = (select auth.uid())
+  )
+);
 
 drop policy if exists "Users can read own notifications" on public.notifications;
 create policy "Users can read own notifications"

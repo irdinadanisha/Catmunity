@@ -449,6 +449,17 @@ export async function createCommunityComment({ postId, userId, body, imageUrls =
   return { data, error };
 }
 
+export async function deleteCommunityComment(commentId) {
+  if (!isSupabaseConfigured) return { error: new Error('Supabase is not configured.') };
+
+  const { error } = await supabase
+    .from('comments')
+    .delete()
+    .eq('id', commentId);
+
+  return { error };
+}
+
 export async function fetchNotifications(userId) {
   if (!isSupabaseConfigured || !userId) return { data: [], error: null };
 
