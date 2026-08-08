@@ -413,10 +413,21 @@ button:disabled {
   inset: 0;
   display: flex;
   justify-content: center;
-  align-items: flex-start;
-  padding: 82px 16px calc(var(--bottom-nav-height) + 18px);
+  align-items: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: max(18px, env(safe-area-inset-top)) 16px max(18px, env(safe-area-inset-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: rgba(36, 27, 23, 0.16);
   backdrop-filter: blur(10px);
+}
+
+.notification-overlay > * {
+  margin: auto;
+  max-height: calc(100vh - 36px);
+  max-height: calc(100dvh - 36px);
+  overflow-y: auto;
 }
 
 .notification-panel,
