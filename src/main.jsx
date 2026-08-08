@@ -169,6 +169,7 @@ function App() {
   const [draftCat, setDraftCat] = useState(null);
   const [editingCatId, setEditingCatId] = useState('');
   const [pendingRemoveCatId, setPendingRemoveCatId] = useState('');
+  const [pendingDeleteCommentId, setPendingDeleteCommentId] = useState('');
   const [selectedCatId, setSelectedCatId] = useState('');
   const [detailCatOverride, setDetailCatOverride] = useState(null);
   const [selectedUserId, setSelectedUserId] = useState('');
@@ -929,16 +930,16 @@ function App() {
     await refreshCommunityPosts();
   }
 
-  async function handleDeleteComment(commentId) {
-    const confirmed = window.confirm('Delete comment?');
-    if (!confirmed) return;
-
+  async function confirmDeleteComment() {
+    if (!pendingDeleteCommentId) return;
+    const commentId = pendingDeleteCommentId;
     const { error } = await deleteCommunityComment(commentId);
     if (error) {
       showToast(error.message || 'Comment could not be deleted.');
       return;
     }
 
+    setPendingDeleteCommentId('');
     await refreshCommunityPosts();
   }
 
@@ -1095,6 +1096,12 @@ function App() {
           onConfirm={confirmRemoveCatFromCollection}
         />
       )}
+      {pendingDeleteCommentId && (
+        <ConfirmDeleteCommentModal
+          onCancel={() => setPendingDeleteCommentId('')}
+          onConfirm={confirmDeleteComment}
+        />
+      )}
       {followListModal && (
         <FollowListModal
           modal={followListModal}
@@ -1226,7 +1233,7 @@ function App() {
             onToggleLike={handleTogglePostLike}
             onComment={handleCreateComment}
             onDeletePost={handleDeletePost}
-            onDeleteComment={handleDeleteComment}
+            onDeleteComment={setPendingDeleteCommentId}
             onOpenUser={(id) => {
               openPublicProfile(id);
             }}
@@ -3364,6 +3371,21 @@ function ConfirmRemoveCatModal({ cat, currentUserId, onConfirm, onCancel }) {
         <div className="confirm-remove-actions">
           <button className="text-button danger-text-button" type="button" onClick={onConfirm}>Yes</button>
           <button className="text-button" type="button" onClick={onCancel}>Oop- ok I'll keep em'</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ConfirmDeleteCommentModal({ onConfirm, onCancel }) {
+  return (
+    <div className="notification-overlay" role="dialog" aria-modal="true" aria-label="Confirm delete comment">
+      <section className="confirm-remove-panel">
+        <h2>Delete comment?</h2>
+        <p>This reply will disappear from the thread.</p>
+        <div className="confirm-remove-actions">
+          <button className="text-button danger-text-button" type="button" onClick={onConfirm}>Yes</button>
+          <button className="text-button" type="button" onClick={onCancel}>Oop- nvm</button>
         </div>
       </section>
     </div>
