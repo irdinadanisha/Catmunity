@@ -232,7 +232,7 @@ export async function searchCommunityProfilesByUsername(query, currentUserId) {
   const cleanQuery = normalizeUsername(query);
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, username, display_name, avatar_url, bio, public_profile')
+    .select('id, username, display_name, avatar_url, bio, public_profile, created_at')
     .ilike('username', `%${cleanQuery}%`)
     .eq('public_profile', true)
     .neq('id', currentUserId)
@@ -305,10 +305,51 @@ export async function loadProfilesByIds(ids) {
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, username, display_name, avatar_url, bio, public_profile')
+    .select('id, username, display_name, avatar_url, bio, public_profile, created_at')
     .in('id', ids);
 
   return { data: data || [], error };
+}
+
+export async function fetchFavoriteCatIds(userId) {
+  if (!isSupabaseConfigured || !userId) return { data: [], error: null };
+
+  const { data, error } = await supabase
+    .from('user_favorite_cats')
+    .select('cat_id, position')
+    .eq('user_id', userId)
+    .order('position', { ascending: true });
+
+  if (error?.code === '42P01' || /user_favorite_cats/i.test(error?.message || '')) {
+    return { data: [], error: null };
+  }
+
+  return { data: (data || []).map((item) => item.cat_id).filter(Boolean), error };
+}
+
+export async function saveFavoriteCatIds(userId, catIds = []) {
+  if (!isSupabaseConfigured || !userId) return { data: [], error: null };
+
+  const cleanCatIds = [...new Set(catIds.filter(Boolean))].slice(0, 3);
+  const deleteResult = await supabase
+    .from('user_favorite_cats')
+    .delete()
+    .eq('user_id', userId);
+
+  if (deleteResult.error?.code === '42P01' || /user_favorite_cats/i.test(deleteResult.error?.message || '')) {
+    return { data: [], error: null };
+  }
+
+  if (deleteResult.error) return { data: [], error: deleteResult.error };
+  if (!cleanCatIds.length) return { data: [], error: null };
+
+  const { data, error } = await supabase
+    .from('user_favorite_cats')
+    .insert(cleanCatIds.map((catId, position) => ({ user_id: userId, cat_id: catId, position })))
+    .select('cat_id, position')
+    .order('position', { ascending: true });
+
+  return { data: (data || []).map((item) => item.cat_id).filter(Boolean), error };
 }
 
 export async function loadCommunityPosts(currentUserId) {
@@ -542,7 +583,7 @@ export async function loadProfilesByUsernames(usernames) {
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, username, display_name, avatar_url, bio, public_profile')
+    .select('id, username, display_name, avatar_url, bio, public_profile, created_at')
     .in('username', usernames);
 
   return { data: data || [], error };

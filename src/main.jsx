@@ -57,6 +57,7 @@ import {
   createNotification,
   deleteCommunityComment,
   deleteCommunityPost,
+  fetchFavoriteCatIds,
   fetchFollowCounts,
   fetchFollowersList,
   fetchFollowingList,
@@ -74,6 +75,7 @@ import {
   markNotificationsAsRead,
   normalizeUsername,
   resendSignupConfirmation,
+  saveFavoriteCatIds,
   searchCommunityProfilesByUsername,
   signInWithEmail,
   signOutUser,
@@ -187,6 +189,7 @@ function App() {
   const [followCountsByUserId, setFollowCountsByUserId] = useState({});
   const [followListModal, setFollowListModal] = useState(null);
   const [socialUsers, setSocialUsers] = useState([]);
+  const [favoriteCatIdsByUserId, setFavoriteCatIdsByUserId] = useState({});
   const [notifications, setNotifications] = useState([]);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -241,6 +244,7 @@ function App() {
       setFollowCountsByUserId({});
       setFollowListModal(null);
       setSocialUsers([]);
+      setFavoriteCatIdsByUserId({});
       return undefined;
     }
 
@@ -270,6 +274,24 @@ function App() {
     }
 
     loadSocialGraph();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser, currentUserId]);
+
+  useEffect(() => {
+    if (!authUser) return undefined;
+
+    let cancelled = false;
+
+    async function loadOwnFavourites() {
+      const { data = [] } = await fetchFavoriteCatIds(currentUserId);
+      if (cancelled) return;
+      setFavoriteCatIdsByUserId((items) => ({ ...items, [currentUserId]: data }));
+    }
+
+    loadOwnFavourites();
 
     return () => {
       cancelled = true;
@@ -1006,10 +1028,25 @@ function App() {
 
   async function openPublicProfile(userId) {
     setSelectedUserId(userId);
-    await loadFollowCountsForUser(userId);
-    const collection = await fetchPublicUserCollection(userId, currentUserId);
+    const [{ data: favoriteIds = [] }, collection] = await Promise.all([
+      fetchFavoriteCatIds(userId),
+      fetchPublicUserCollection(userId, currentUserId),
+      loadFollowCountsForUser(userId),
+    ]);
+    setFavoriteCatIdsByUserId((items) => ({ ...items, [userId]: favoriteIds }));
     setPublicProfileCats(collection);
     navigate('publicProfile');
+  }
+
+  async function handleSaveFavoriteCats(catIds) {
+    const cleanIds = [...new Set(catIds.filter(Boolean))].slice(0, 3);
+    setFavoriteCatIdsByUserId((items) => ({ ...items, [currentUserId]: cleanIds }));
+    const { error } = await saveFavoriteCatIds(currentUserId, cleanIds);
+    if (error) {
+      showToast(error.message || 'Favourite cats could not be saved.');
+      return;
+    }
+    showToast('Favourite cats updated.');
   }
 
   async function notifyMentionedUsers({ text, type, title, body, relatedPostId, relatedCatId }) {
@@ -1190,9 +1227,15 @@ function App() {
             user={me}
             cats={caughtCats}
             stats={stats}
+            posts={posts}
+            favoriteCatIds={favoriteCatIdsByUserId[currentUserId] || []}
             followCounts={followCountsByUserId[currentUserId] || { following: followingProfiles.length, followers: followerProfiles.length }}
+            mutualFriendCount={followingIds.filter((id) => followerProfiles.some((profile) => profile.id === id)).length}
             onOpenFollowList={openFollowList}
             onOpenSettings={() => navigate('settings')}
+            onSaveFavorites={handleSaveFavoriteCats}
+            onOpenCollection={() => navigate('collection')}
+            onOpenPost={() => navigate('community')}
             onSelectCat={(id) => {
               setDetailCatOverride(null);
               setSelectedCatId(id);
@@ -1204,11 +1247,15 @@ function App() {
           <PublicProfileScreen
             user={selectedUser}
             cats={publicCats}
+            posts={posts}
             currentUserId={currentUserId}
+            favoriteCatIds={favoriteCatIdsByUserId[selectedUser.id] || []}
             followCounts={followCountsByUserId[selectedUser.id] || { following: 0, followers: 0 }}
             onOpenFollowList={openFollowList}
             onBack={() => navigate('collection')}
             onPostCat={startCommunityPost}
+            onOpenCollection={() => navigate('collection')}
+            onOpenPost={() => navigate('community')}
             onSelectCat={(cat) => {
               setDetailCatOverride(cat);
               setSelectedCatId(cat.id);
@@ -1314,6 +1361,7 @@ function createAppUser(authUser) {
     bio: authUser.user_metadata?.bio || 'Saving neighborhood cat memories with Catmunity.',
     public_profile: authUser.user_metadata?.public_profile ?? true,
     email: authUser.email,
+    created_at: authUser.created_at || '',
   };
 }
 
@@ -1355,6 +1403,7 @@ function mapCommunityProfile(profile) {
     avatar_url: profile.avatar_url || '',
     bio: profile.bio || '',
     public_profile: profile.public_profile,
+    created_at: profile.created_at || '',
   };
 }
 
@@ -1450,6 +1499,110 @@ function formatDiscoveryDate(value) {
   }).format(date);
 }
 
+function formatMemberSince(value) {
+  if (!value) return 'recently';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'recently';
+  return date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+}
+
+function getCatmunityIdentity(uniqueCatCount) {
+  if (uniqueCatCount >= 50) return 'Cat Mayor';
+  if (uniqueCatCount >= 25) return 'Cat Detective';
+  if (uniqueCatCount >= 10) return 'Cat Spotter';
+  if (uniqueCatCount >= 1) return 'New Paw';
+  return 'New to Catmunity';
+}
+
+function getDiscoveryHour(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.getHours();
+}
+
+function getUniqueCatsInHourRange(cats, predicate) {
+  return new Set(cats.filter((cat) => {
+    const hour = getDiscoveryHour(cat.discovered_at);
+    return hour !== null && predicate(hour);
+  }).map((cat) => cat.id)).size;
+}
+
+function getProfileStats(cats = [], posts = []) {
+  const uniqueCats = new Set(cats.map((cat) => cat.id)).size;
+  const uniqueAreas = new Set(cats.map((cat) => cat.location_name || cat.area_name).filter(Boolean)).size;
+  const totalLikes = posts.reduce((sum, post) => sum + (post.likeCount || 0), 0);
+  const nightCats = getUniqueCatsInHourRange(cats, (hour) => hour >= 20 || hour < 5);
+  const earlyCats = getUniqueCatsInHourRange(cats, (hour) => hour >= 5 && hour < 8);
+  const timeIcon = nightCats > earlyCats ? '🌙' : earlyCats > 0 ? '🌅' : '☀️';
+  const timeLabel = nightCats > earlyCats ? 'night owl' : earlyCats > 0 ? 'early paws' : 'daylight';
+
+  return {
+    cats: uniqueCats,
+    caught: uniqueCats,
+    areas: uniqueAreas,
+    likes: totalLikes,
+    timeIcon,
+    timeLabel,
+  };
+}
+
+function getProfileBadges({ cats = [], posts = [], mutualFriendCount = 0 }) {
+  const uniqueCatsUnlocked = new Set(cats.map((cat) => cat.id)).size;
+  const uniqueNightCats = getUniqueCatsInHourRange(cats, (hour) => hour >= 20 || hour < 5);
+  const uniqueEarlyMorningCats = getUniqueCatsInHourRange(cats, (hour) => hour >= 5 && hour < 8);
+  const previouslyLockedCatsUnlocked = new Set(cats.filter((cat) => cat.created_by && !cat.caught_by_users?.includes(cat.created_by)).map((cat) => cat.id)).size;
+
+  return [
+    {
+      icon: '🐾',
+      name: 'First Catch',
+      unlocked: uniqueCatsUnlocked >= 1,
+      description: 'You found your first cat in Catmunity.',
+      requirement: 'Unlock at least 1 unique cat.',
+      progress: `${Math.min(uniqueCatsUnlocked, 1)} / 1 cat`,
+    },
+    {
+      icon: '🌙',
+      name: 'Night Spotter',
+      unlocked: uniqueNightCats >= 5,
+      description: 'For finding cats during late-night hours.',
+      requirement: 'Discover 5 unique cats from 8:00 PM to 4:59 AM.',
+      progress: `${Math.min(uniqueNightCats, 5)} / 5 night cats`,
+    },
+    {
+      icon: '🗺️',
+      name: 'Explorer',
+      unlocked: uniqueCatsUnlocked >= 10,
+      description: 'You have explored enough to meet many cats.',
+      requirement: 'Unlock 10 different cats.',
+      progress: `${Math.min(uniqueCatsUnlocked, 10)} / 10 cats`,
+    },
+    {
+      icon: '❤️',
+      name: 'Cat Friend',
+      unlocked: uniqueCatsUnlocked >= 20 && previouslyLockedCatsUnlocked >= 10,
+      description: 'For personally unlocking cats that were already part of Catmunity.',
+      requirement: 'Unlock 20 unique cats and 10 previously locked cats.',
+      progress: `${Math.min(uniqueCatsUnlocked, 20)} / 20 cats · ${Math.min(previouslyLockedCatsUnlocked, 10)} / 10 locked cats`,
+    },
+    {
+      icon: '🌅',
+      name: 'Early Paws',
+      unlocked: uniqueEarlyMorningCats >= 5,
+      description: 'For gentle early-morning cat discoveries.',
+      requirement: 'Discover 5 unique cats from 5:00 AM to 8:00 AM.',
+      progress: `${Math.min(uniqueEarlyMorningCats, 5)} / 5 early cats`,
+    },
+    {
+      icon: '🦋',
+      name: 'Social Butterfly',
+      unlocked: mutualFriendCount >= 10,
+      description: 'For mutual Catmunity friendships.',
+      requirement: 'Have 10 mutual friends.',
+      progress: `${Math.min(mutualFriendCount, 10)} / 10 mutual friends`,
+    },
+  ];
+}
+
 function isPersistentImageUrl(value = '') {
   return /^https?:/i.test(value) || /^data:image\//i.test(value);
 }
@@ -1512,6 +1665,10 @@ function getCommunityPostImages(post, cat) {
   }
 
   return uniqueImages;
+}
+
+function getPostThumbnail(post) {
+  return [...(post?.image_urls || []), post?.image_url].find(isPersistentImageUrl) || '';
 }
 
 function collapseLegacyPostAutoPair(images, post) {
@@ -3203,59 +3360,35 @@ function OwnProfileScreen({
   user,
   cats,
   stats,
+  posts,
+  favoriteCatIds,
   followCounts,
+  mutualFriendCount = 0,
   onOpenFollowList,
   onOpenSettings,
+  onSaveFavorites,
+  onOpenCollection,
+  onOpenPost,
   onSelectCat,
 }) {
   return (
     <section className="screen own-profile-screen">
-      <div className="profile-readonly-hero">
-        <UserAvatar user={user} className="profile-readonly-avatar" />
-        <div>
-          <p className="eyebrow">Profile</p>
-          <h1>{user.name || 'Catmunity Friend'}</h1>
-          <UserHandle user={user} />
-          <p>{user.bio || 'No bio yet.'}</p>
-          <FollowCounts user={user} counts={followCounts} onOpen={onOpenFollowList} />
-        </div>
-        <div className="profile-status-actions">
-          <span className="profile-status"><ShieldCheck size={14} /> {user.public_profile ? 'Public' : 'Private'}</span>
-          <button className="profile-settings-icon-button" type="button" onClick={onOpenSettings} aria-label="Profile settings">
-            <Settings size={17} />
-          </button>
-        </div>
-      </div>
-
-      <div className="metric-tabs" aria-label="Profile stats">
-        <Stat label="Caught" value={stats.caught} icon={Cat} />
-        <Stat label="Areas" value={stats.areas} icon={MapPin} />
-      </div>
-
-      <div className="section-title-row">
-        <h2>Discovery map</h2>
-        <span className="quiet-label">Original pins</span>
-      </div>
-      <MiniMap cats={cats} onSelect={(cat) => onSelectCat(cat.id)} />
-
-      <div className="section-title-row">
-        <h2>Discovered cats</h2>
-        <span className="quiet-label">{cats.length} profiles</span>
-      </div>
-      <div className="profile-cat-grid">
-        {cats.map((cat) => (
-          <DiscoveredCatCard
-            key={cat.id}
-            cat={cat}
-            viewerHasUnlocked
-            isOwnProfile={false}
-            onOpen={() => onSelectCat(cat.id)}
-          />
-        ))}
-        {cats.length === 0 && (
-          <p className="empty-community-copy">No cats discovered yet. Catch your first cat to get started!</p>
-        )}
-      </div>
+      <ProfileOverview
+        user={user}
+        cats={cats}
+        posts={posts}
+        stats={stats}
+        favoriteCatIds={favoriteCatIds}
+        followCounts={followCounts}
+        mutualFriendCount={mutualFriendCount}
+        isOwnProfile
+        onOpenFollowList={onOpenFollowList}
+        onOpenSettings={onOpenSettings}
+        onSaveFavorites={onSaveFavorites}
+        onOpenCollection={onOpenCollection}
+        onOpenPost={onOpenPost}
+        onSelectCat={onSelectCat}
+      />
     </section>
   );
 }
@@ -3384,39 +3517,266 @@ function getEstimatedMapCat(cat) {
   };
 }
 
-function PublicProfileScreen({ user, cats, currentUserId, followCounts, onOpenFollowList, onBack, onSelectCat, onPostCat }) {
+function PublicProfileScreen({
+  user,
+  cats,
+  posts,
+  currentUserId,
+  favoriteCatIds,
+  followCounts,
+  onOpenFollowList,
+  onBack,
+  onSelectCat,
+  onOpenCollection,
+  onOpenPost,
+}) {
   return (
     <section className="screen">
       <BackButton onBack={onBack} />
-      <div className="profile-header">
-        <UserAvatar user={user} className="profile-header-avatar" />
+      <ProfileOverview
+        user={user}
+        cats={cats}
+        posts={posts}
+        favoriteCatIds={favoriteCatIds}
+        followCounts={followCounts}
+        currentUserId={currentUserId}
+        onOpenFollowList={onOpenFollowList}
+        onOpenCollection={onOpenCollection}
+        onOpenPost={onOpenPost}
+        onSelectCat={(id) => {
+          const cat = cats.find((item) => item.id === id);
+          if (cat) onSelectCat(cat);
+        }}
+      />
+    </section>
+  );
+}
+
+function ProfileOverview({
+  user,
+  cats,
+  posts = [],
+  stats,
+  favoriteCatIds = [],
+  followCounts,
+  mutualFriendCount = 0,
+  isOwnProfile = false,
+  currentUserId = '',
+  onOpenFollowList,
+  onOpenSettings,
+  onSaveFavorites,
+  onOpenCollection,
+  onOpenPost,
+  onSelectCat,
+}) {
+  const profilePosts = posts.filter((post) => post.user_id === user.id);
+  const profileStats = {
+    ...getProfileStats(cats, profilePosts),
+    ...(stats || {}),
+  };
+  const badgeSummary = getProfileBadges({
+    cats,
+    posts: profilePosts,
+    mutualFriendCount,
+  });
+
+  return (
+    <>
+      <div className="profile-readonly-hero">
+        <UserAvatar user={user} className="profile-readonly-avatar" />
         <div>
-          <p className="eyebrow">Public profile</p>
-          <h1>{user.name}</h1>
+          <p className="eyebrow">Profile</p>
+          <h1>{user.name || 'Catmunity Friend'}</h1>
           <UserHandle user={user} />
-          <p>{user.bio}</p>
+          <p>{user.bio || 'No bio yet.'}</p>
           <FollowCounts user={user} counts={followCounts} onOpen={onOpenFollowList} />
         </div>
+        <div className="profile-status-actions">
+          <span className="profile-status"><ShieldCheck size={14} /> {user.public_profile ? 'Public' : 'Private'}</span>
+          {isOwnProfile && (
+            <button className="profile-settings-icon-button" type="button" onClick={onOpenSettings} aria-label="Profile settings">
+              <Settings size={17} />
+            </button>
+          )}
+        </div>
       </div>
-      <MiniMap cats={cats} approximate />
-      <div className="gallery-grid">
-        {cats.map((cat) => {
-          const viewerHasUnlocked = (cat.caught_by_users || []).includes(currentUserId);
-          return (
-            <DiscoveredCatCard
-              key={cat.id}
-              cat={cat}
-              viewerHasUnlocked={viewerHasUnlocked}
-              isOwnProfile={false}
-              onOpen={() => onSelectCat(cat)}
-              onPostToCommunity={viewerHasUnlocked ? () => onPostCat(cat.id) : null}
-            />
-          );
-        })}
-        {cats.length === 0 && (
-          <p className="empty-community-copy">No cats discovered yet.</p>
+
+      <ProfileIdentity cats={cats} user={user} />
+      <FavouriteCats
+        cats={cats}
+        favoriteCatIds={favoriteCatIds}
+        isOwnProfile={isOwnProfile}
+        onSaveFavorites={onSaveFavorites}
+        onSelectCat={onSelectCat}
+      />
+      <ProfileStatsSection stats={profileStats} />
+      <ProfileBadges badges={badgeSummary} />
+      <RecentDiscoveries cats={cats} onSelectCat={onSelectCat} onOpenCollection={onOpenCollection} />
+      <ProfilePostGrid posts={profilePosts} onOpenPost={onOpenPost} />
+    </>
+  );
+}
+
+function ProfileIdentity({ cats, user }) {
+  const count = cats.length;
+  const identity = getCatmunityIdentity(count);
+  return (
+    <section className="profile-section profile-identity-section">
+      <p className="eyebrow"><PawPrint size={14} /> Catmunity identity</p>
+      <div>
+        <strong>{identity}</strong>
+        <span>Member since {formatMemberSince(user.created_at)}</span>
+      </div>
+    </section>
+  );
+}
+
+function FavouriteCats({ cats, favoriteCatIds, isOwnProfile, onSaveFavorites, onSelectCat }) {
+  const [editing, setEditing] = useState(false);
+  const favoriteCats = favoriteCatIds.map((id) => cats.find((cat) => cat.id === id)).filter(Boolean).slice(0, 3);
+  const availableCats = cats.filter((cat) => !favoriteCatIds.includes(cat.id));
+
+  function toggleFavorite(catId) {
+    const nextIds = favoriteCatIds.includes(catId)
+      ? favoriteCatIds.filter((id) => id !== catId)
+      : [...favoriteCatIds, catId].slice(0, 3);
+    onSaveFavorites?.(nextIds);
+  }
+
+  return (
+    <section className="profile-section">
+      <div className="section-title-row">
+        <h2>Favourite cats</h2>
+        {isOwnProfile && cats.length > 0 && (
+          <button className="mini-text-button" type="button" onClick={() => setEditing((value) => !value)}>
+            {editing ? 'Done' : 'Edit'}
+          </button>
         )}
       </div>
+      {favoriteCats.length > 0 ? (
+        <div className="favorite-cat-row">
+          {favoriteCats.map((cat) => (
+            <button key={cat.id} type="button" onClick={() => onSelectCat(cat.id)}>
+              <img src={cat.cropped_image_url} alt={cat.name || 'Cat'} />
+              <span>{cat.name || 'Unnamed Cat'}</span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="profile-empty-line">Pick up to 3 of your favourite cats.</p>
+      )}
+      {editing && (
+        <div className="favorite-editor">
+          {[...favoriteCats, ...availableCats].slice(0, 12).map((cat) => (
+            <button
+              key={cat.id}
+              type="button"
+              className={favoriteCatIds.includes(cat.id) ? 'selected' : ''}
+              onClick={() => toggleFavorite(cat.id)}
+              disabled={!favoriteCatIds.includes(cat.id) && favoriteCatIds.length >= 3}
+            >
+              <img src={cat.cropped_image_url} alt="" />
+              <span>{cat.name || 'Cat'}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ProfileStatsSection({ stats }) {
+  return (
+    <section className="profile-section">
+      <h2>Your cat life</h2>
+      <div className="profile-life-grid">
+        <Stat label="cats" value={stats.cats} icon={Cat} />
+        <Stat label="areas" value={stats.areas} icon={MapPin} />
+        <Stat label="likes" value={stats.likes} icon={Heart} />
+        <Stat label={stats.timeLabel} value={stats.timeIcon} />
+      </div>
+    </section>
+  );
+}
+
+function ProfileBadges({ badges }) {
+  const [selectedBadge, setSelectedBadge] = useState(null);
+  return (
+    <section className="profile-section">
+      <div className="section-title-row">
+        <h2>Badges</h2>
+        <span className="quiet-label">View all</span>
+      </div>
+      <div className="badge-grid">
+        {badges.map((badge) => (
+          <button
+            key={badge.name}
+            type="button"
+            className={badge.unlocked ? 'profile-badge unlocked' : 'profile-badge locked'}
+            onClick={() => setSelectedBadge(badge)}
+          >
+            <span>{badge.unlocked ? badge.icon : '🔒'}</span>
+            <strong>{badge.name}</strong>
+            {!badge.unlocked && <small>{badge.progress}</small>}
+          </button>
+        ))}
+      </div>
+      {selectedBadge && (
+        <div className="notification-overlay" role="dialog" aria-modal="true" aria-label={selectedBadge.name}>
+          <section className="confirm-remove-panel">
+            <h2>{selectedBadge.icon} {selectedBadge.name}</h2>
+            <p>{selectedBadge.description}</p>
+            <p>{selectedBadge.requirement}</p>
+            <p>{selectedBadge.unlocked ? 'Unlocked' : selectedBadge.progress}</p>
+            <button className="primary-button" type="button" onClick={() => setSelectedBadge(null)}>Got it</button>
+          </section>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function RecentDiscoveries({ cats, onSelectCat, onOpenCollection }) {
+  const recentCats = cats.slice(0, 5);
+  return (
+    <section className="profile-section">
+      <div className="section-title-row">
+        <h2>Recent discoveries</h2>
+        <button className="mini-text-button" type="button" onClick={onOpenCollection}>See all →</button>
+      </div>
+      {recentCats.length > 0 ? (
+        <div className="recent-cat-row">
+          {recentCats.map((cat) => (
+            <button key={cat.id} type="button" onClick={() => onSelectCat(cat.id)}>
+              <img src={cat.cropped_image_url} alt={cat.name || 'Cat'} />
+              <strong>{cat.name || 'Unnamed Cat'}</strong>
+              <span>{formatPostTime(cat.discovered_at)}</span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="profile-empty-line">No recent discoveries yet.</p>
+      )}
+    </section>
+  );
+}
+
+function ProfilePostGrid({ posts, onOpenPost }) {
+  const photoPosts = posts.filter((post) => getPostThumbnail(post));
+  return (
+    <section className="profile-section">
+      <h2>Posts</h2>
+      {photoPosts.length > 0 ? (
+        <div className="profile-post-grid">
+          {photoPosts.map((post) => (
+            <button key={post.id} type="button" onClick={() => onOpenPost?.(post.id)}>
+              <img src={getPostThumbnail(post)} alt="Community post" />
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="profile-empty-line">No photo posts yet.</p>
+      )}
     </section>
   );
 }

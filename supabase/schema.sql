@@ -87,6 +87,19 @@ create table if not exists public.user_cats (
   unique (user_id, cat_id)
 );
 
+create table if not exists public.user_favorite_cats (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  cat_id uuid not null references public.cats(id) on delete cascade,
+  position integer not null default 0,
+  created_at timestamptz not null default now(),
+  primary key (user_id, cat_id),
+  unique (user_id, position),
+  check (position >= 0 and position < 3)
+);
+
+grant select on public.user_favorite_cats to anon, authenticated;
+grant insert, update, delete on public.user_favorite_cats to authenticated;
+
 alter table public.cats
 add column if not exists behavior text,
 add column if not exists gender text;
@@ -245,6 +258,7 @@ grant select on public.public_user_cat_map to anon, authenticated;
 alter table public.cats enable row level security;
 alter table public.profiles enable row level security;
 alter table public.user_follows enable row level security;
+alter table public.user_favorite_cats enable row level security;
 alter table public.user_cats enable row level security;
 alter table public.cat_sightings enable row level security;
 alter table public.community_posts enable row level security;
@@ -283,6 +297,52 @@ drop policy if exists "Users can unfollow profiles" on public.user_follows;
 create policy "Users can unfollow profiles"
 on public.user_follows for delete
 using (auth.uid() = follower_id);
+
+drop policy if exists "Public can read favourite cats" on public.user_favorite_cats;
+create policy "Public can read favourite cats"
+on public.user_favorite_cats for select
+using (
+  exists (
+    select 1
+    from public.profiles
+    where profiles.id = user_favorite_cats.user_id
+      and (profiles.public_profile = true or profiles.id = (select auth.uid()))
+  )
+);
+
+drop policy if exists "Users can favourite own unlocked cats" on public.user_favorite_cats;
+create policy "Users can favourite own unlocked cats"
+on public.user_favorite_cats for insert
+with check (
+  (select auth.uid()) = user_id
+  and exists (
+    select 1
+    from public.user_cats
+    where user_cats.user_id = user_favorite_cats.user_id
+      and user_cats.cat_id = user_favorite_cats.cat_id
+      and user_cats.is_unlocked = true
+  )
+);
+
+drop policy if exists "Users can update own favourite cats" on public.user_favorite_cats;
+create policy "Users can update own favourite cats"
+on public.user_favorite_cats for update
+using ((select auth.uid()) = user_id)
+with check (
+  (select auth.uid()) = user_id
+  and exists (
+    select 1
+    from public.user_cats
+    where user_cats.user_id = user_favorite_cats.user_id
+      and user_cats.cat_id = user_favorite_cats.cat_id
+      and user_cats.is_unlocked = true
+  )
+);
+
+drop policy if exists "Users can remove own favourite cats" on public.user_favorite_cats;
+create policy "Users can remove own favourite cats"
+on public.user_favorite_cats for delete
+using ((select auth.uid()) = user_id);
 
 drop policy if exists "Public can read approximate cat map" on public.cats;
 drop policy if exists "Creators and catchers can read exact cat records" on public.cats;
@@ -476,6 +536,9 @@ create index if not exists user_follows_follower_id_idx
 
 create index if not exists user_follows_following_id_idx
   on public.user_follows (following_id);
+
+create index if not exists user_favorite_cats_user_position_idx
+  on public.user_favorite_cats (user_id, position);
 
 create index if not exists user_cats_user_id_idx
   on public.user_cats (user_id);
