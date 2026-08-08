@@ -17,6 +17,7 @@ import {
   Map as MapIcon,
   MapPin,
   MessageCircle,
+  MoreHorizontal,
   PawPrint,
   Pencil,
   Plus,
@@ -2889,8 +2890,10 @@ function CatDetailsForm({
   onSave,
   onBack,
 }) {
+  const replacementInputRef = useRef(null);
   const [replacementPhoto, setReplacementPhoto] = useState(null);
   const [croppingReplacement, setCroppingReplacement] = useState(false);
+  const [confirmPictureChange, setConfirmPictureChange] = useState(false);
   const [form, setForm] = useState({
     name: cat?.name || '',
     color: cat?.color || '',
@@ -2994,15 +2997,56 @@ function CatDetailsForm({
         }}
       >
         <div className="edit-cat-photo-block">
-          <img className="form-photo" src={replacementPhoto?.croppedImage || cat?.cropped_image_url} alt="Selected cat" />
+          <div className="edit-cat-photo-preview">
+            <img className="form-photo" src={replacementPhoto?.croppedImage || cat?.cropped_image_url} alt="Selected cat" />
+            {mode === 'edit' && (
+              <>
+                <button
+                  className="edit-cat-photo-menu"
+                  type="button"
+                  onClick={() => setConfirmPictureChange(true)}
+                  aria-label="Change cat picture"
+                >
+                  <MoreHorizontal size={18} />
+                </button>
+                <input
+                  ref={replacementInputRef}
+                  className="visually-hidden-file"
+                  type="file"
+                  accept="image/*"
+                  disabled={saving || croppingReplacement}
+                  onChange={handleReplacementPhotoSelect}
+                />
+              </>
+            )}
+          </div>
           {mode === 'edit' && (
-            <label className="edit-cat-photo-upload">
-              <ImageIcon size={16} />
-              <span>{replacementPhoto?.croppedImage ? 'Choose another photo' : 'Change cat picture'}</span>
-              <input type="file" accept="image/*" disabled={saving || croppingReplacement} onChange={handleReplacementPhotoSelect} />
-            </label>
+            <p className="field-helper">Tap the three dots to change this cat picture.</p>
           )}
         </div>
+        {confirmPictureChange && (
+          <div className="notification-overlay" role="dialog" aria-modal="true" aria-label="Change cat picture">
+            <section className="confirm-remove-panel">
+              <h2>Change picture?</h2>
+              <p>Choose a new photo and crop it before saving this cat.</p>
+              <div className="confirm-remove-actions">
+                <button
+                  className="text-button danger-text-button"
+                  type="button"
+                  onClick={() => {
+                    setConfirmPictureChange(false);
+                    replacementInputRef.current?.click();
+                  }}
+                >
+                  Yes
+                </button>
+                <button className="text-button" type="button" onClick={() => setConfirmPictureChange(false)}>
+                  Oop- no
+                </button>
+              </div>
+            </section>
+          </div>
+        )}
         {mode === 'edit' && replacementPhoto?.originalImage && !replacementPhoto.croppedImage && (
           <div className="edit-cat-crop-panel">
             <SquareCropEditor
@@ -4658,7 +4702,7 @@ function ScreenHeader({ title, subtitle, icon: Icon }) {
 }
 
 function BackButton({ onBack }) {
-  return <button className="back-button" onClick={onBack}><ChevronLeft size={18} /> Back</button>;
+  return <button className="back-button" onClick={onBack} aria-label="Back"><ChevronLeft size={20} /></button>;
 }
 
 function SuggestionChips({ label, suggestions, onSelect }) {
