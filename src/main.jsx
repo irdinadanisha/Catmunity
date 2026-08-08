@@ -7,6 +7,7 @@ import {
   Cat,
   Check,
   ChevronLeft,
+  ChevronRight,
   Compass,
   EyeOff,
   Heart,
@@ -1512,6 +1513,16 @@ function getCatmunityIdentity(uniqueCatCount) {
   if (uniqueCatCount >= 10) return 'Cat Spotter';
   if (uniqueCatCount >= 1) return 'New Paw';
   return 'New to Catmunity';
+}
+
+function getNextCatmunityIdentityTier(uniqueCatCount) {
+  const tiers = [
+    { name: 'New Paw', min: 1 },
+    { name: 'Cat Spotter', min: 10 },
+    { name: 'Cat Detective', min: 25 },
+    { name: 'Cat Mayor', min: 50 },
+  ];
+  return tiers.find((tier) => uniqueCatCount < tier.min) ?? null;
 }
 
 function getDiscoveryHour(value) {
@@ -3619,15 +3630,23 @@ function ProfileOverview({
 
 function ProfileIdentity({ cats, user }) {
   const [showIdentityGuide, setShowIdentityGuide] = useState(false);
-  const count = cats.length;
+  const count = new Set(cats.map((cat) => cat.id)).size;
   const identity = getCatmunityIdentity(count);
+  const nextTier = getNextCatmunityIdentityTier(count);
+  const progressTarget = nextTier?.min ?? count;
   return (
     <section className="profile-section profile-identity-section">
-      <p className="eyebrow"><PawPrint size={14} /> Catmunity identity</p>
+      <p className="eyebrow"><PawPrint size={14} /> CATMUNITY IDENTITY</p>
       <button className="identity-current-card" type="button" onClick={() => setShowIdentityGuide(true)}>
-        <strong>{identity}</strong>
-        <span>Member since {formatMemberSince(user.created_at)}</span>
+        <span className="identity-current-icon"><PawPrint size={20} /></span>
+        <span className="identity-current-copy">
+          <strong>{identity}</strong>
+          <span>{count} / {progressTarget} cats</span>
+          <em>{nextTier ? `Next: ${nextTier.name}` : 'Highest identity unlocked'}</em>
+        </span>
+        <ChevronRight className="identity-current-chevron" size={22} aria-hidden="true" />
       </button>
+      <span className="identity-member-since">Member since {formatMemberSince(user.created_at)}</span>
       {showIdentityGuide && (
         <IdentityGuideModal currentCount={count} currentIdentity={identity} onClose={() => setShowIdentityGuide(false)} />
       )}
@@ -3637,10 +3656,10 @@ function ProfileIdentity({ cats, user }) {
 
 function IdentityGuideModal({ currentCount, currentIdentity, onClose }) {
   const identities = [
-    { range: '1-9 cats', name: 'New Paw', min: 1, max: 9 },
-    { range: '10-24 cats', name: 'Cat Spotter', min: 10, max: 24 },
-    { range: '25-49 cats', name: 'Cat Detective', min: 25, max: 49 },
-    { range: '50+ cats', name: 'Cat Mayor', min: 50, max: Infinity },
+    { range: '1-9 cats', name: 'New Paw', min: 1 },
+    { range: '10-24 cats', name: 'Cat Spotter', min: 10 },
+    { range: '25-49 cats', name: 'Cat Detective', min: 25 },
+    { range: '50+ cats', name: 'Cat Mayor', min: 50 },
   ];
 
   return (
@@ -3657,15 +3676,14 @@ function IdentityGuideModal({ currentCount, currentIdentity, onClose }) {
           {identities.map((tier) => {
             const unlocked = currentCount >= tier.min;
             const active = tier.name === currentIdentity;
-            const progress = tier.max === Infinity
-              ? `${Math.min(currentCount, tier.min)} / ${tier.min} cats`
-              : `${Math.min(Math.max(currentCount, 0), tier.max)} / ${tier.max} cats`;
+            const progress = `${Math.min(currentCount, tier.min)} / ${tier.min} toward ${tier.name}`;
+            const remaining = `${tier.min - currentCount} more ${tier.min - currentCount === 1 ? 'cat' : 'cats'} to unlock`;
             return (
               <article className={active ? 'identity-tier active' : unlocked ? 'identity-tier unlocked' : 'identity-tier locked'} key={tier.name}>
                 <span>{unlocked ? '🐾' : '🔒'}</span>
                 <strong>{tier.name}</strong>
                 <small>{tier.range}</small>
-                {!unlocked && <em>{progress}</em>}
+                {!unlocked && <em>{tier.name === 'Cat Spotter' ? remaining : progress}</em>}
               </article>
             );
           })}

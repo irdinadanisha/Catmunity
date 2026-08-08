@@ -2991,7 +2991,7 @@ button:disabled {
 }
 
 .profile-identity-section {
-  gap: 6px;
+  gap: 8px;
   padding-top: 4px;
 }
 
@@ -3002,35 +3002,71 @@ button:disabled {
   margin: 0;
 }
 
-.profile-identity-section > div,
 .identity-current-card {
   display: grid;
-  gap: 2px;
 }
 
 .identity-current-card {
-  justify-items: start;
-  width: fit-content;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
   max-width: 100%;
-  padding: 0;
-  border: 0;
+  padding: 14px 16px;
+  border: 1px solid rgba(93, 65, 45, 0.1);
+  border-radius: 22px;
   color: inherit;
-  background: transparent;
+  background: rgba(255, 255, 255, 0.74);
+  box-shadow: 0 12px 34px rgba(95, 68, 45, 0.08);
   text-align: left;
 }
 
-.profile-identity-section strong,
+.identity-current-card:hover {
+  border-color: rgba(232, 95, 75, 0.22);
+  background: rgba(255, 248, 239, 0.9);
+}
+
+.identity-current-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  color: #8f5522;
+  background: rgba(255, 236, 181, 0.62);
+}
+
+.identity-current-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
 .identity-current-card strong {
   color: #2b211d;
-  font-size: 1.28rem;
+  font-size: 1.05rem;
   font-weight: 950;
 }
 
-.profile-identity-section span,
+.identity-current-copy span,
+.identity-current-card em,
+.identity-member-since,
 .profile-empty-line {
   color: #806a5e;
   font-size: 0.86rem;
   font-weight: 800;
+}
+
+.identity-current-card em {
+  font-style: normal;
+}
+
+.identity-current-chevron {
+  color: #7b6154;
+}
+
+.identity-member-since {
+  padding-left: 2px;
 }
 
 .mini-text-button {
