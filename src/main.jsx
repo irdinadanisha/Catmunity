@@ -3675,7 +3675,10 @@ function CommunityPostCard({ post, user, currentUser, cat, isFriendPost, onOpenU
               )}
             </span>
           </div>
-          <small className="thread-meta">{post.location_name}</small>
+          <small className="thread-meta">
+            <MapPin size={13} />
+            {post.location_name}
+          </small>
           {displayImages.length > 0 && (
             <div className={displayImages.length > 1 ? 'post-image-gallery' : 'post-image-gallery single'}>
               {displayImages.map((imageUrl, index) => (
