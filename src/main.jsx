@@ -3349,7 +3349,7 @@ function DiscoveredCatCard({
                   onRemoveFromCollection();
                 }}
               >
-                <X size={14} /> Remove
+                <X size={14} /> X Remove
               </button>
             )}
           </div>
