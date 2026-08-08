@@ -3508,12 +3508,12 @@ function CommunityPostCard({ post, user, currentUser, cat, isFriendPost, onOpenU
 
   return (
     <article className="post-card thread-card">
+      {post.comments.length > 0 && (
+        <svg className="thread-main-connector" viewBox="0 0 62 100" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+          <path d="M22 0 V100" />
+        </svg>
+      )}
       <div className="thread-item thread-post">
-        {post.comments.length > 0 && (
-          <svg className="thread-parent-connector" viewBox="0 0 62 100" preserveAspectRatio="none" aria-hidden="true" focusable="false">
-            <path d="M22 48 V100" />
-          </svg>
-        )}
         <UserAvatar user={user} className="post-user-avatar thread-avatar" />
         <div className="thread-body">
           <div className="thread-header">
@@ -3565,8 +3565,8 @@ function CommunityPostCard({ post, user, currentUser, cat, isFriendPost, onOpenU
       <div className="comment-list">
         {post.comments.map((comment) => (
           <article className="thread-item comment" key={comment.id}>
-            <svg className="thread-reply-connector" viewBox="0 0 62 92" preserveAspectRatio="none" aria-hidden="true" focusable="false">
-              <path d="M22 0 V50 C22 62 31 70 43 70 H62" />
+            <svg className="thread-reply-connector" viewBox="0 0 62 44" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+              <path d="M22 0 C22 16 30 22 44 22 H62" />
             </svg>
             <UserAvatar user={comment.user} className="comment-avatar thread-avatar" />
             <div className="thread-body comment-body">

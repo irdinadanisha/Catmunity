@@ -3651,6 +3651,7 @@ button:disabled {
   position: relative;
   display: grid;
   gap: 12px;
+  overflow: visible;
 }
 
 .thread-item {
@@ -3665,21 +3666,21 @@ button:disabled {
   display: none;
 }
 
-.thread-parent-connector {
+.thread-main-connector {
   position: absolute;
-  left: 0;
-  top: 0;
+  left: 12px;
+  top: 56px;
   width: 62px;
-  height: calc(100% + 60px);
+  height: calc(100% - 92px);
   overflow: visible;
   pointer-events: none;
-  z-index: 1;
+  z-index: 0;
 }
 
-.thread-parent-connector path {
+.thread-main-connector path {
   fill: none;
-  stroke: rgba(114, 85, 71, 0.22);
-  stroke-width: 3;
+  stroke: rgba(114, 85, 71, 0.2);
+  stroke-width: 2.6;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -3687,9 +3688,9 @@ button:disabled {
 .thread-reply-connector {
   position: absolute;
   left: 0;
-  top: -60px;
+  top: 0;
   width: 62px;
-  height: 108px;
+  height: 44px;
   overflow: visible;
   pointer-events: none;
   z-index: 2;
@@ -3697,8 +3698,8 @@ button:disabled {
 
 .thread-reply-connector path {
   fill: none;
-  stroke: rgba(114, 85, 71, 0.28);
-  stroke-width: 3;
+  stroke: rgba(114, 85, 71, 0.26);
+  stroke-width: 2.6;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -3753,23 +3754,6 @@ button:disabled {
   display: grid;
   gap: 12px;
   margin-left: 0;
-}
-
-.comment-list::before {
-  content: "";
-  position: absolute;
-  left: 21px;
-  top: -60px;
-  bottom: 24px;
-  width: 3px;
-  border-radius: 999px;
-  background: rgba(114, 85, 71, 0.18);
-  pointer-events: none;
-  z-index: 0;
-}
-
-.comment-list:empty::before {
-  display: none;
 }
 
 .comment {
