@@ -149,9 +149,13 @@ create table if not exists public.comments (
   post_id uuid not null references public.community_posts(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
   body text not null,
+  image_urls text[] not null default '{}',
   mentions text[] not null default '{}',
   created_at timestamptz not null default now()
 );
+
+alter table public.comments
+add column if not exists image_urls text[] not null default '{}';
 
 create table if not exists public.notifications (
   id uuid primary key default gen_random_uuid(),

@@ -22,10 +22,12 @@ import {
   Plus,
   RotateCcw,
   Search,
+  Send,
   Settings,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  Trash2,
   UnlockKeyhole,
   User,
   Users,
@@ -885,14 +887,18 @@ function App() {
     await refreshCommunityPosts();
   }
 
-  async function handleCreateComment(postId, body) {
-    const text = body.trim();
-    if (!text) return;
+  async function handleCreateComment(postId, comment) {
+    const text = typeof comment === 'string' ? comment.trim() : (comment.body || '').trim();
+    const localImages = typeof comment === 'string' ? [] : (comment.imageUrls || []);
+    if (!text && localImages.length === 0) return;
+
+    const imageUrls = await persistCommunityPostImages(localImages, currentUserId);
 
     const { error } = await createCommunityComment({
       postId,
       userId: currentUserId,
       body: text,
+      imageUrls,
       mentions: extractMentions(text),
     });
     if (error) {
@@ -906,7 +912,7 @@ function App() {
         actorUserId: currentUserId,
         type: 'comment',
         title: `${me.name} commented on your post`,
-        body: text,
+        body: text || 'Shared a picture',
         relatedPostId: post.id,
         relatedCatId: post.cat_id,
       });
@@ -1362,6 +1368,7 @@ function mapCommunityData(data, currentUserId) {
       post_id: comment.post_id,
       user_id: comment.user_id,
       body: comment.body,
+      image_urls: comment.image_urls || [],
       mentions: comment.mentions || [],
       created_at: formatPostTime(comment.created_at),
       user: author,
@@ -3459,6 +3466,7 @@ function CommunityScreen({
             key={post.id}
             post={post}
             user={user}
+            currentUser={currentUser}
             cat={cat}
             isFriendPost={isFriendPost}
             onOpenUser={onOpenUser}
@@ -3475,70 +3483,124 @@ function CommunityScreen({
   );
 }
 
-function CommunityPostCard({ post, user, cat, isFriendPost, onOpenUser, onToggleLike, onComment, onDelete }) {
+function CommunityPostCard({ post, user, currentUser, cat, isFriendPost, onOpenUser, onToggleLike, onComment, onDelete }) {
   const [commentText, setCommentText] = useState('');
+  const [commentImages, setCommentImages] = useState([]);
   const [imageFailed, setImageFailed] = useState(false);
   const postImageUrls = !imageFailed ? getCommunityPostImages(post, cat) : [];
   const fallbackPostImage = cat?.cropped_image_url;
   const displayImages = postImageUrls.length ? postImageUrls : [fallbackPostImage].filter(Boolean);
 
+  async function handleCommentImages(event) {
+    const files = [...(event.target.files || [])].filter((file) => file.type.startsWith('image/'));
+    if (!files.length) return;
+    const imageUrls = await Promise.all(files.map(readImageFileAsDataUrl));
+    setCommentImages((images) => [...images, ...imageUrls]);
+    event.target.value = '';
+  }
+
   function submitComment(event) {
     event.preventDefault();
-    onComment(commentText);
+    onComment({ body: commentText, imageUrls: commentImages });
     setCommentText('');
+    setCommentImages([]);
   }
 
   return (
-    <article className="post-card">
-      <button className="post-user" onClick={() => onOpenUser(user.id)}>
-        <UserAvatar user={user} className="post-user-avatar" />
-        <span>
-          <strong>{user.name}</strong>
-          <UserHandle user={user} />
-          <small>{isFriendPost ? 'Friend post' : 'Nearby'} · {post.created_at} · {post.location_name}</small>
-        </span>
-      </button>
-      {displayImages.length > 0 && (
-        <div className={displayImages.length > 1 ? 'post-image-gallery' : 'post-image-gallery single'}>
-          {displayImages.map((imageUrl, index) => (
-            <img
-              key={`${imageUrl}-${index}`}
-              className="post-image"
-              src={imageUrl}
-              alt={index === 0 ? 'Community cat sighting' : 'Additional cat sighting'}
-              onError={() => setImageFailed(true)}
-            />
-          ))}
+    <article className="post-card thread-card">
+      <div className="thread-item thread-post">
+        <UserAvatar user={user} className="post-user-avatar thread-avatar" />
+        <div className="thread-body">
+          <div className="thread-header">
+            <button className="post-user thread-user" onClick={() => onOpenUser(user.id)}>
+              <span>
+                <strong>{user.name}</strong>
+                <UserHandle user={user} />
+              </span>
+            </button>
+            <small>{post.created_at}</small>
+          </div>
+          <small className="thread-meta">{isFriendPost ? 'Friend post' : 'Nearby'} · {post.location_name}</small>
+          {displayImages.length > 0 && (
+            <div className={displayImages.length > 1 ? 'post-image-gallery' : 'post-image-gallery single'}>
+              {displayImages.map((imageUrl, index) => (
+                <img
+                  key={`${imageUrl}-${index}`}
+                  className="post-image"
+                  src={imageUrl}
+                  alt={index === 0 ? 'Community cat sighting' : 'Additional cat sighting'}
+                  onError={() => setImageFailed(true)}
+                />
+              ))}
+            </div>
+          )}
+          <p>{renderMentionText(post.body)}</p>
+          <div className="post-actions">
+            <button className={post.likedByMe ? 'post-action-button active' : 'post-action-button'} type="button" onClick={onToggleLike}>
+              <Heart size={16} /> {post.likedByMe ? 'Liked' : 'Like'}
+            </button>
+            <span>{post.likeCount} {post.likeCount === 1 ? 'like' : 'likes'}</span>
+            <span><MessageCircle size={16} /> {post.comments.length}</span>
+          </div>
         </div>
-      )}
-      <p>{renderMentionText(post.body)}</p>
-      <div className="post-actions">
-        <button className={post.likedByMe ? 'post-action-button active' : 'post-action-button'} type="button" onClick={onToggleLike}>
-          <Heart size={16} /> {post.likedByMe ? 'Liked' : 'Like'}
-        </button>
-        <span>{post.likeCount} {post.likeCount === 1 ? 'like' : 'likes'}</span>
-        <span><MessageCircle size={16} /> {post.comments.length}</span>
         {onDelete && (
-          <button className="post-action-button danger" type="button" onClick={onDelete}>
-            <X size={16} /> Delete
+          <button className="post-delete-icon" type="button" onClick={onDelete} aria-label="Delete post">
+            <Trash2 size={16} />
           </button>
         )}
       </div>
       <div className="comment-list">
         {post.comments.map((comment) => (
-          <p className="comment" key={comment.id}>
-            <strong>@{comment.user?.username || 'catmunity'}</strong> {renderMentionText(comment.body)}
-            <small>{comment.created_at}</small>
-          </p>
+          <article className="thread-item comment" key={comment.id}>
+            <UserAvatar user={comment.user} className="comment-avatar thread-avatar" />
+            <div className="thread-body comment-body">
+              <div className="thread-header">
+                <strong>@{comment.user?.username || 'catmunity'}</strong>
+                <small>{comment.created_at}</small>
+              </div>
+              {comment.body && <p>{renderMentionText(comment.body)}</p>}
+              {comment.image_urls?.length > 0 && (
+                <div className={comment.image_urls.length > 1 ? 'comment-image-grid' : 'comment-image-grid single'}>
+                  {comment.image_urls.map((imageUrl, index) => (
+                    <img key={`${comment.id}-${imageUrl}-${index}`} src={imageUrl} alt="Comment attachment" />
+                  ))}
+                </div>
+              )}
+            </div>
+          </article>
         ))}
       </div>
       <form className="comment-form" onSubmit={submitComment}>
-        <input
-          value={commentText}
-          placeholder="Add a comment with @username"
-          onChange={(event) => setCommentText(event.target.value)}
-        />
-        <button type="submit">Post</button>
+        <UserAvatar user={currentUser} className="comment-avatar thread-avatar" />
+        <div className="comment-compose">
+          <div className="comment-input-row">
+            <input
+              value={commentText}
+              placeholder="Reply with words or photos..."
+              onChange={(event) => setCommentText(event.target.value)}
+            />
+            <label className="comment-image-button" aria-label="Add pictures to comment">
+              <ImageIcon size={17} />
+              <input type="file" accept="image/*" multiple onChange={handleCommentImages} />
+            </label>
+            <button type="submit" disabled={!commentText.trim() && commentImages.length === 0} aria-label="Post reply"><Send size={16} /></button>
+          </div>
+          {commentImages.length > 0 && (
+            <div className="post-extra-preview comment-extra-preview">
+              {commentImages.map((imageUrl, index) => (
+                <button
+                  key={`${imageUrl}-${index}`}
+                  type="button"
+                  onClick={() => setCommentImages((images) => images.filter((_, imageIndex) => imageIndex !== index))}
+                  aria-label="Remove comment picture"
+                >
+                  <img src={imageUrl} alt="Comment preview" />
+                  <X size={14} />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </form>
     </article>
   );

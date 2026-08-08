@@ -310,10 +310,7 @@ export async function loadCommunityPosts(currentUserId) {
 
   const [{ data: posts, error: postsError }, { data: comments, error: commentsError }, { data: likes, error: likesError }] = await Promise.all([
     loadPostsWithImages(),
-    supabase
-      .from('comments')
-      .select('id, post_id, user_id, body, mentions, created_at')
-      .order('created_at', { ascending: true }),
+    loadCommentsWithImages(),
     supabase
       .from('post_likes')
       .select('post_id, user_id'),
@@ -340,6 +337,22 @@ export async function loadCommunityPosts(currentUserId) {
     },
     error: profilesError,
   };
+}
+
+async function loadCommentsWithImages() {
+  const result = await supabase
+    .from('comments')
+    .select('id, post_id, user_id, body, image_urls, mentions, created_at')
+    .order('created_at', { ascending: true });
+
+  if (result.error?.code === 'PGRST204' || /image_urls/i.test(result.error?.message || '')) {
+    return supabase
+      .from('comments')
+      .select('id, post_id, user_id, body, mentions, created_at')
+      .order('created_at', { ascending: true });
+  }
+
+  return result;
 }
 
 export async function createCommunityPost({ userId, catId, caption, imageUrl, imageUrls = [], locationName, mentions = [] }) {
@@ -407,19 +420,31 @@ export async function unlikeCommunityPost(postId, userId) {
   return { error };
 }
 
-export async function createCommunityComment({ postId, userId, body, mentions = [] }) {
+export async function createCommunityComment({ postId, userId, body, imageUrls = [], mentions = [] }) {
   if (!isSupabaseConfigured) return { data: null, error: new Error('Supabase is not configured.') };
+
+  const payload = {
+    post_id: postId,
+    user_id: userId,
+    body,
+    image_urls: imageUrls.filter(Boolean),
+    mentions,
+  };
 
   const { data, error } = await supabase
     .from('comments')
-    .insert({
-      post_id: postId,
-      user_id: userId,
-      body,
-      mentions,
-    })
+    .insert(payload)
     .select()
     .single();
+
+  if (error?.code === 'PGRST204' || /image_urls/i.test(error?.message || '')) {
+    const { image_urls: _imageUrls, ...legacyPayload } = payload;
+    return supabase
+      .from('comments')
+      .insert(legacyPayload)
+      .select()
+      .single();
+  }
 
   return { data, error };
 }
