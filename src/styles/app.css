@@ -3565,26 +3565,27 @@ button:disabled {
 }
 
 .post-actions {
+  gap: 14px;
   color: #725547;
   font-weight: 850;
 }
 
 .post-action-button {
-  min-height: 34px;
+  min-height: 28px;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   border: 0;
-  border-radius: 999px;
-  padding: 0 12px;
+  border-radius: 0;
+  padding: 0;
   color: #725547;
-  background: #fff0dc;
+  background: transparent;
   font-weight: 950;
 }
 
 .post-action-button.active {
-  color: #ffffff;
-  background: #e85f4b;
+  color: #e85f4b;
+  background: transparent;
 }
 
 .post-action-button.danger {
@@ -3608,7 +3609,8 @@ button:disabled {
   box-shadow: 0 10px 20px rgba(94, 56, 40, 0.1);
 }
 
-.post-actions span {
+.post-action-count,
+.post-action-button span {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -3647,6 +3649,7 @@ button:disabled {
 }
 
 .thread-card {
+  position: relative;
   display: grid;
   gap: 12px;
 }
@@ -3660,18 +3663,26 @@ button:disabled {
 
 .thread-item::before {
   content: "";
-  position: absolute;
-  left: 21px;
-  top: 48px;
-  bottom: -18px;
-  width: 2px;
-  border-radius: 999px;
-  background: rgba(114, 85, 71, 0.12);
+  display: none;
 }
 
-.thread-item:last-child::before,
-.thread-post::before {
-  bottom: -12px;
+.thread-reply-connector {
+  position: absolute;
+  left: 0;
+  top: -24px;
+  width: 54px;
+  height: 70px;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.thread-reply-connector path {
+  fill: none;
+  stroke: rgba(114, 85, 71, 0.16);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .thread-avatar {
@@ -3692,6 +3703,8 @@ button:disabled {
   display: grid;
   gap: 8px;
   padding-right: 38px;
+  position: relative;
+  z-index: 1;
 }
 
 .thread-header {
@@ -3714,9 +3727,27 @@ button:disabled {
 }
 
 .comment-list {
+  position: relative;
   display: grid;
   gap: 12px;
   margin-left: 0;
+}
+
+.comment-list::before {
+  content: "";
+  position: absolute;
+  left: 21px;
+  top: -14px;
+  bottom: 24px;
+  width: 2.5px;
+  border-radius: 999px;
+  background: rgba(114, 85, 71, 0.12);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.comment-list:empty::before {
+  display: none;
 }
 
 .comment {

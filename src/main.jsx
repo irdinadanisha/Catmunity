@@ -3536,11 +3536,19 @@ function CommunityPostCard({ post, user, currentUser, cat, isFriendPost, onOpenU
           )}
           <p>{renderMentionText(post.body)}</p>
           <div className="post-actions">
-            <button className={post.likedByMe ? 'post-action-button active' : 'post-action-button'} type="button" onClick={onToggleLike}>
-              <Heart size={16} /> {post.likedByMe ? 'Liked' : 'Like'}
+            <button
+              className={post.likedByMe ? 'post-action-button active' : 'post-action-button'}
+              type="button"
+              onClick={onToggleLike}
+              aria-label={post.likedByMe ? 'Unlike post' : 'Like post'}
+            >
+              <Heart size={22} fill={post.likedByMe ? 'currentColor' : 'none'} />
+              <span>{post.likeCount}</span>
             </button>
-            <span>{post.likeCount} {post.likeCount === 1 ? 'like' : 'likes'}</span>
-            <span><MessageCircle size={16} /> {post.comments.length}</span>
+            <span className="post-action-count" aria-label={`${post.comments.length} replies`}>
+              <MessageCircle size={22} />
+              <span>{post.comments.length}</span>
+            </span>
           </div>
         </div>
         {onDelete && (
@@ -3552,6 +3560,9 @@ function CommunityPostCard({ post, user, currentUser, cat, isFriendPost, onOpenU
       <div className="comment-list">
         {post.comments.map((comment) => (
           <article className="thread-item comment" key={comment.id}>
+            <svg className="thread-reply-connector" viewBox="0 0 54 66" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+              <path d="M22 0 V26 C22 36 30 44 40 44 H54" />
+            </svg>
             <UserAvatar user={comment.user} className="comment-avatar thread-avatar" />
             <div className="thread-body comment-body">
               <div className="thread-header">
