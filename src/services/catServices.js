@@ -644,6 +644,31 @@ export async function updateCatDetailsInSupabase(catId, form) {
 
   const user = await getSupabaseUser();
   if (!user) return { data: null, error: new Error('You need to be signed in to edit cat details.') };
+  const [{ data: existingUserCat }, { data: existingCat }] = await Promise.all([
+    supabase
+      .from('user_cats')
+      .select('photo_urls, original_image_url, cropped_image_url')
+      .eq('user_id', user.id)
+      .eq('cat_id', catId)
+      .maybeSingle(),
+    supabase
+      .from('cats')
+      .select('id, created_by, original_image_url, cropped_image_url')
+      .eq('id', catId)
+      .maybeSingle(),
+  ]);
+  const replacementCapture = form.imageCapture
+    ? await persistCaptureImages(form.imageCapture, user.id)
+    : null;
+  const replacementPhotoUrls = replacementCapture
+    ? [
+      replacementCapture.croppedImage,
+      replacementCapture.originalImage,
+      ...(existingUserCat?.photo_urls || []),
+      existingUserCat?.cropped_image_url,
+      existingUserCat?.original_image_url,
+    ].filter(Boolean)
+    : [];
 
   const updates = {
     user_given_name: form.name?.trim() || 'Unnamed Cat',
@@ -657,6 +682,11 @@ export async function updateCatDetailsInSupabase(catId, form) {
     remarks: form.remarks || null,
     updated_at: new Date().toISOString(),
   };
+  if (replacementCapture) {
+    updates.original_image_url = replacementCapture.originalImage;
+    updates.cropped_image_url = replacementCapture.croppedImage;
+    updates.photo_urls = [...new Set(replacementPhotoUrls)];
+  }
   if (form.date_found) {
     updates.discovered_at = new Date(`${form.date_found}T12:00:00`).toISOString();
   }
@@ -668,6 +698,22 @@ export async function updateCatDetailsInSupabase(catId, form) {
     .eq('cat_id', catId)
     .select()
     .maybeSingle();
+
+  if (!error && replacementCapture && existingCat?.created_by === user.id) {
+    const { error: catUpdateError } = await supabase
+      .from('cats')
+      .update({
+        original_image_url: replacementCapture.originalImage,
+        cropped_image_url: replacementCapture.croppedImage,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', catId)
+      .eq('created_by', user.id);
+
+    if (catUpdateError) {
+      return { data, error: catUpdateError };
+    }
+  }
 
   return { data, error };
 }

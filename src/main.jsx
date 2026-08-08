@@ -743,6 +743,7 @@ function App() {
           showToast(error.message || 'Cat details could not be updated.');
           return;
         }
+        const replacementImage = form.imageCapture;
         const liveCats = await loadCatsFromSupabase(currentUserId);
         setCats(liveCats || ((items) => items.map((cat) => (
           cat.id === editingCatId
@@ -758,9 +759,9 @@ function App() {
               fun_info: form.fun_info,
               fun_facts: form.fun_info,
               remarks: form.remarks,
-              cropped_image_url: draftCat?.cropped_image_url || cat.cropped_image_url,
-              original_image_url: draftCat?.original_image_url || cat.original_image_url,
-              photo_urls: [...new Set([...(cat.photo_urls || []), draftCat?.cropped_image_url, draftCat?.original_image_url].filter(Boolean))],
+              cropped_image_url: replacementImage?.croppedImage || draftCat?.cropped_image_url || cat.cropped_image_url,
+              original_image_url: replacementImage?.originalImage || draftCat?.original_image_url || cat.original_image_url,
+              photo_urls: [...new Set([...(cat.photo_urls || []), replacementImage?.croppedImage, replacementImage?.originalImage, draftCat?.cropped_image_url, draftCat?.original_image_url].filter(Boolean))],
               location_name: form.location_name,
               discovered_at: form.date_found ? new Date(`${form.date_found}T12:00:00`).toISOString() : cat.discovered_at,
               updated_at: new Date().toISOString(),
@@ -2448,7 +2449,16 @@ function ConfirmScreen({ capture, detectingLocation = false, onRetryLocation, on
   );
 }
 
-function SquareCropEditor({ imageUrl, disabled = false, onUsePhoto }) {
+function SquareCropEditor({
+  imageUrl,
+  disabled = false,
+  onUsePhoto,
+  formId = 'catch-crop-form',
+  asForm = true,
+  onCancel = null,
+  confirmLabel = 'Use Photo',
+  cancelLabel = 'Cancel',
+}) {
   const frameRef = useRef(null);
   const imageRef = useRef(null);
   const pointerRef = useRef(null);
@@ -2614,15 +2624,23 @@ function SquareCropEditor({ imageUrl, disabled = false, onUsePhoto }) {
     }
   }
 
-  return (
-    <form
-      id="catch-crop-form"
-      className="catch-crop"
-      onSubmit={(event) => {
+  const cropPayload = { ...crop, frameSize, fitScale: imageFitScale };
+  const Wrapper = asForm ? 'form' : 'div';
+  const wrapperProps = asForm
+    ? {
+      id: formId,
+      className: 'catch-crop',
+      onSubmit: (event) => {
         event.preventDefault();
-        if (!disabled) onUsePhoto({ ...crop, frameSize, fitScale: imageFitScale });
-      }}
-    >
+        if (!disabled) onUsePhoto(cropPayload);
+      },
+    }
+    : {
+      className: 'catch-crop',
+    };
+
+  return (
+    <Wrapper {...wrapperProps}>
       <div
         ref={frameRef}
         className="catch-crop-frame"
@@ -2659,7 +2677,19 @@ function SquareCropEditor({ imageUrl, disabled = false, onUsePhoto }) {
         <div className="catch-crop-grid" aria-hidden="true" />
       </div>
       <p className="catch-crop-hint">Drag or pinch to fit the cat inside the square.</p>
-    </form>
+      {!asForm && (
+        <div className="inline-crop-actions">
+          {onCancel && (
+            <button className="secondary-button" type="button" onClick={onCancel} disabled={disabled}>
+              {cancelLabel}
+            </button>
+          )}
+          <button className="primary-button" type="button" onClick={() => onUsePhoto(cropPayload)} disabled={disabled || imageFailed || !imageMeta}>
+            <Check size={16} /> {confirmLabel}
+          </button>
+        </div>
+      )}
+    </Wrapper>
   );
 }
 
@@ -2859,6 +2889,8 @@ function CatDetailsForm({
   onSave,
   onBack,
 }) {
+  const [replacementPhoto, setReplacementPhoto] = useState(null);
+  const [croppingReplacement, setCroppingReplacement] = useState(false);
   const [form, setForm] = useState({
     name: cat?.name || '',
     color: cat?.color || '',
@@ -2872,6 +2904,41 @@ function CatDetailsForm({
     location_name: cat?.location_name || '',
     date_found: cat?.discovered_at ? cat.discovered_at.slice(0, 10) : new Date().toISOString().slice(0, 10),
   });
+
+  async function handleReplacementPhotoSelect(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      return;
+    }
+
+    const originalImage = await readImageFileAsDataUrl(file);
+    setReplacementPhoto({
+      originalImage,
+      originalFileName: file.name,
+      croppedImage: '',
+    });
+  }
+
+  async function handleUseReplacementPhoto(cropSettings) {
+    if (!replacementPhoto?.originalImage) return;
+    setCroppingReplacement(true);
+    try {
+      const croppedImage = await createSquareCatchCrop(
+        replacementPhoto.originalImage,
+        replacementPhoto.originalFileName,
+        cropSettings,
+      );
+      setReplacementPhoto((current) => ({
+        ...current,
+        croppedImage,
+      }));
+    } finally {
+      setCroppingReplacement(false);
+    }
+  }
 
   function update(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -2913,13 +2980,45 @@ function CatDetailsForm({
           if (!locationReady) return;
           onSave({
             ...form,
+            imageCapture: replacementPhoto?.croppedImage
+              ? {
+                originalImage: replacementPhoto.originalImage,
+                croppedImage: replacementPhoto.croppedImage,
+                originalFileName: replacementPhoto.originalFileName,
+              }
+              : null,
             location_name: locationLabel || form.location_name,
             name: form.name.trim() || 'Unnamed Cat',
             tags: form.tags.split(',').map((tag) => tag.trim()).filter(Boolean),
           });
         }}
       >
-        <img className="form-photo" src={cat?.cropped_image_url} alt="Newly caught cat" />
+        <div className="edit-cat-photo-block">
+          <img className="form-photo" src={replacementPhoto?.croppedImage || cat?.cropped_image_url} alt="Selected cat" />
+          {mode === 'edit' && (
+            <label className="edit-cat-photo-upload">
+              <ImageIcon size={16} />
+              <span>{replacementPhoto?.croppedImage ? 'Choose another photo' : 'Change cat picture'}</span>
+              <input type="file" accept="image/*" disabled={saving || croppingReplacement} onChange={handleReplacementPhotoSelect} />
+            </label>
+          )}
+        </div>
+        {mode === 'edit' && replacementPhoto?.originalImage && !replacementPhoto.croppedImage && (
+          <div className="edit-cat-crop-panel">
+            <SquareCropEditor
+              imageUrl={replacementPhoto.originalImage}
+              disabled={croppingReplacement}
+              onUsePhoto={handleUseReplacementPhoto}
+              asForm={false}
+              onCancel={() => setReplacementPhoto(null)}
+              confirmLabel={croppingReplacement ? 'Cropping...' : 'Use Photo'}
+              cancelLabel="Cancel"
+            />
+          </div>
+        )}
+        {mode === 'edit' && replacementPhoto?.croppedImage && (
+          <p className="field-helper">New cat picture ready. Save changes to update it.</p>
+        )}
         <Field label="Cat name" value={form.name} placeholder="Unnamed Cat" onChange={(value) => update('name', value)} />
         <Field label="Color" value={form.color} placeholder="Orange, black, tabby..." onChange={(value) => update('color', value)} />
         <Field label="Breed" value={form.breed} placeholder="Domestic shorthair, Persian..." onChange={(value) => update('breed', value)} />
