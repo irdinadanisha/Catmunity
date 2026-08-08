@@ -3612,22 +3612,66 @@ function ProfileOverview({
       <ProfileStatsSection stats={profileStats} />
       <ProfileBadges badges={badgeSummary} />
       <RecentDiscoveries cats={cats} onSelectCat={onSelectCat} onOpenCollection={onOpenCollection} />
-      <ProfilePostGrid posts={profilePosts} onOpenPost={onOpenPost} />
+      <ProfilePostGrid posts={profilePosts} cats={cats} onOpenPost={onOpenPost} />
     </>
   );
 }
 
 function ProfileIdentity({ cats, user }) {
+  const [showIdentityGuide, setShowIdentityGuide] = useState(false);
   const count = cats.length;
   const identity = getCatmunityIdentity(count);
   return (
     <section className="profile-section profile-identity-section">
       <p className="eyebrow"><PawPrint size={14} /> Catmunity identity</p>
-      <div>
+      <button className="identity-current-card" type="button" onClick={() => setShowIdentityGuide(true)}>
         <strong>{identity}</strong>
         <span>Member since {formatMemberSince(user.created_at)}</span>
-      </div>
+      </button>
+      {showIdentityGuide && (
+        <IdentityGuideModal currentCount={count} currentIdentity={identity} onClose={() => setShowIdentityGuide(false)} />
+      )}
     </section>
+  );
+}
+
+function IdentityGuideModal({ currentCount, currentIdentity, onClose }) {
+  const identities = [
+    { range: '1-9 cats', name: 'New Paw', min: 1, max: 9 },
+    { range: '10-24 cats', name: 'Cat Spotter', min: 10, max: 24 },
+    { range: '25-49 cats', name: 'Cat Detective', min: 25, max: 49 },
+    { range: '50+ cats', name: 'Cat Mayor', min: 50, max: Infinity },
+  ];
+
+  return (
+    <div className="notification-overlay" role="dialog" aria-modal="true" aria-label="Catmunity identities">
+      <section className="identity-guide-panel">
+        <div className="section-title-row">
+          <div>
+            <h2>Catmunity identities</h2>
+            <span className="quiet-label">{currentCount} cats discovered</span>
+          </div>
+          <button className="icon-button" type="button" onClick={onClose} aria-label="Close identities"><X size={18} /></button>
+        </div>
+        <div className="identity-tier-grid">
+          {identities.map((tier) => {
+            const unlocked = currentCount >= tier.min;
+            const active = tier.name === currentIdentity;
+            const progress = tier.max === Infinity
+              ? `${Math.min(currentCount, tier.min)} / ${tier.min} cats`
+              : `${Math.min(Math.max(currentCount, 0), tier.max)} / ${tier.max} cats`;
+            return (
+              <article className={active ? 'identity-tier active' : unlocked ? 'identity-tier unlocked' : 'identity-tier locked'} key={tier.name}>
+                <span>{unlocked ? '🐾' : '🔒'}</span>
+                <strong>{tier.name}</strong>
+                <small>{tier.range}</small>
+                {!unlocked && <em>{progress}</em>}
+              </article>
+            );
+          })}
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -3688,7 +3732,7 @@ function FavouriteCats({ cats, favoriteCatIds, isOwnProfile, onSaveFavorites, on
 function ProfileStatsSection({ stats }) {
   return (
     <section className="profile-section">
-      <h2>Your cat life</h2>
+      <h2>Your cat stats</h2>
       <div className="profile-life-grid">
         <Stat label="cats" value={stats.cats} icon={Cat} />
         <Stat label="areas" value={stats.areas} icon={MapPin} />
@@ -3705,7 +3749,6 @@ function ProfileBadges({ badges }) {
     <section className="profile-section">
       <div className="section-title-row">
         <h2>Badges</h2>
-        <span className="quiet-label">View all</span>
       </div>
       <div className="badge-grid">
         {badges.map((badge) => (
@@ -3761,18 +3804,21 @@ function RecentDiscoveries({ cats, onSelectCat, onOpenCollection }) {
   );
 }
 
-function ProfilePostGrid({ posts, onOpenPost }) {
-  const photoPosts = posts.filter((post) => getPostThumbnail(post));
+function ProfilePostGrid({ posts, cats = [], onOpenPost }) {
   return (
     <section className="profile-section">
       <h2>Posts</h2>
-      {photoPosts.length > 0 ? (
+      {posts.length > 0 ? (
         <div className="profile-post-grid">
-          {photoPosts.map((post) => (
-            <button key={post.id} type="button" onClick={() => onOpenPost?.(post.id)}>
-              <img src={getPostThumbnail(post)} alt="Community post" />
-            </button>
-          ))}
+          {posts.map((post) => {
+            const cat = cats.find((item) => item.id === post.cat_id);
+            const thumbnail = getPostThumbnail(post) || cat?.cropped_image_url || cat?.original_image_url || '';
+            return (
+              <button key={post.id} type="button" onClick={() => onOpenPost?.(post.id)}>
+                {thumbnail ? <img src={thumbnail} alt="Community post" /> : <span>{post.body?.slice(0, 44) || 'Post'}</span>}
+              </button>
+            );
+          })}
         </div>
       ) : (
         <p className="profile-empty-line">No photo posts yet.</p>
