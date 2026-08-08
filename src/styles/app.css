@@ -1399,6 +1399,19 @@ button:disabled {
   background: rgba(226, 235, 239, 0.98);
 }
 
+.status-icon-only {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  justify-content: center;
+  padding: 0;
+}
+
+.status-icon-only svg {
+  width: 14px;
+  height: 14px;
+}
+
 .sheet-expanded-tools {
   display: none;
   grid-template-columns: repeat(3, max-content);
@@ -1602,13 +1615,17 @@ button:disabled {
 
 .discovered-card-actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-  margin-top: 4px;
+  flex-wrap: nowrap;
+  gap: 6px;
+  margin-top: 6px;
 }
 
 .discovered-card-actions .post-cat-button {
-  flex: 1 1 112px;
+  min-width: 0;
+  flex: 1 1 0;
+  min-height: 34px;
+  padding: 7px 8px;
+  font-size: 0.76rem;
 }
 
 .cat-card {
@@ -2665,19 +2682,16 @@ button:disabled {
   grid-template-columns: auto 1fr;
   gap: 12px;
   align-items: center;
-  padding: 14px;
-  border-radius: 24px;
-  background:
-    linear-gradient(135deg, rgba(255, 240, 200, 0.62), rgba(255, 255, 255, 0.82)),
-    rgba(255, 252, 247, 0.78);
-  border: 1px solid rgba(84, 58, 39, 0.07);
-  box-shadow: 0 16px 34px rgba(83, 55, 38, 0.08);
+  padding: 4px 2px 8px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
 }
 
 .collection-title-avatar {
   width: 64px;
   height: 64px;
-  border-radius: 20px;
+  border-radius: 50%;
   object-fit: cover;
   box-shadow: 0 10px 24px rgba(83, 55, 38, 0.13);
 }
@@ -2692,6 +2706,36 @@ button:disabled {
 
 .collection-title-card p {
   margin: 0 0 5px;
+}
+
+.collection-metrics {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 2px 0 8px;
+}
+
+.collection-metrics .stat {
+  width: auto;
+  min-height: auto;
+  grid-template-columns: auto auto;
+  grid-template-areas:
+    "icon value"
+    "icon label";
+  column-gap: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.collection-metrics .stat-icon {
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  color: #8f542b;
+  background: transparent;
 }
 
 .profile-hero {
@@ -2712,7 +2756,7 @@ button:disabled {
 .profile-hero-avatar {
   width: 88px;
   height: 88px;
-  border-radius: 24px;
+  border-radius: 50%;
   object-fit: cover;
   box-shadow: 0 12px 28px rgba(83, 55, 38, 0.14);
 }
@@ -2819,7 +2863,7 @@ button:disabled {
 .profile-readonly-avatar {
   width: 92px;
   height: 92px;
-  border-radius: 26px;
+  border-radius: 50%;
   object-fit: cover;
   box-shadow: 0 12px 28px rgba(83, 55, 38, 0.14);
 }
@@ -3105,7 +3149,7 @@ button:disabled {
 .profile-settings-avatar {
   width: 68px;
   height: 68px;
-  border-radius: 22px;
+  border-radius: 50%;
   object-fit: cover;
   background: #fff0c8;
   box-shadow: 0 12px 28px rgba(83, 55, 38, 0.13);
@@ -3365,7 +3409,7 @@ button:disabled {
 .profile-header-avatar {
   width: 82px;
   height: 82px;
-  border-radius: 24px;
+  border-radius: 50%;
   object-fit: cover;
 }
 

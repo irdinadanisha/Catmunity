@@ -61,6 +61,28 @@ export function subscribeToAuthChanges(callback) {
   return () => data.subscription.unsubscribe();
 }
 
+export function subscribeToUserNotifications(userId, callback) {
+  if (!isSupabaseConfigured || !userId) return () => {};
+
+  const channel = supabase
+    .channel(`notifications:${userId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'notifications',
+        filter: `user_id=eq.${userId}`,
+      },
+      callback,
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
 export async function signUpWithEmail({ username, email, password }) {
   if (!isSupabaseConfigured) {
     return { data: null, error: new Error('Supabase is not configured.') };
@@ -500,7 +522,7 @@ export async function markNotificationsAsRead(userId) {
 export async function createNotification(notificationData) {
   if (!isSupabaseConfigured || !notificationData?.userId) return { data: null, error: null };
 
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from('notifications')
     .insert({
       user_id: notificationData.userId,
@@ -510,11 +532,9 @@ export async function createNotification(notificationData) {
       body: notificationData.body || '',
       related_post_id: notificationData.relatedPostId || null,
       related_cat_id: notificationData.relatedCatId || null,
-    })
-    .select()
-    .single();
+    });
 
-  return { data, error };
+  return { data: null, error };
 }
 
 export async function loadProfilesByUsernames(usernames) {

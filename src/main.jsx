@@ -79,6 +79,7 @@ import {
   signOutUser,
   signUpWithEmail,
   subscribeToAuthChanges,
+  subscribeToUserNotifications,
   unfollowUserById,
   unlikeCommunityPost,
   updateUserProfile,
@@ -300,8 +301,13 @@ function App() {
 
     loadNotifications();
 
+    const unsubscribeNotifications = subscribeToUserNotifications(currentUserId, () => {
+      loadNotifications();
+    });
+
     return () => {
       cancelled = true;
+      unsubscribeNotifications();
     };
   }, [authUser, currentUserId]);
 
@@ -464,6 +470,7 @@ function App() {
 
   async function openNotifications() {
     setNotificationsOpen(true);
+    await refreshNotifications();
     setUnreadNotificationCount(0);
     setNotifications((items) => items.map((item) => ({ ...item, isRead: true })));
     await markNotificationsAsRead(currentUserId);
@@ -1647,7 +1654,7 @@ function AuthScreen({ onSubmit }) {
   );
 }
 
-function TopBar({ user, stats, notificationCount = 0, onOpenNotifications }) {
+function TopBar({ user, notificationCount = 0, onOpenNotifications }) {
   return (
     <header className="top-bar">
       <div>
@@ -1655,7 +1662,6 @@ function TopBar({ user, stats, notificationCount = 0, onOpenNotifications }) {
         <h1>Hi, {user.name}</h1>
       </div>
       <div className="top-actions">
-        <span className="pill"><Cat size={15} />{stats.caught}</span>
         <button className="icon-button notification-button" aria-label="Notifications" onClick={onOpenNotifications}>
           <Bell size={20} />
           {notificationCount > 0 && <span>{notificationCount}</span>}
@@ -3006,10 +3012,10 @@ function CollectionScreen({
         <UserAvatar user={user} className="collection-title-avatar" />
         <div>
           <p className="eyebrow">Collection</p>
-          <h1>{user.name || 'Catmunity Friend'}'s collection</h1>
+          <h1>{user.name || 'Catmunity Friend'}'s cats</h1>
         </div>
       </div>
-      <div className="metric-tabs" aria-label="Collection stats">
+      <div className="metric-tabs collection-metrics" aria-label="Collection stats">
         <Stat label="Caught" value={stats.caught} icon={Cat} />
         <Stat label="Areas" value={stats.areas} icon={MapPin} />
       </div>
@@ -3290,7 +3296,7 @@ function DiscoveredCatCard({
       <div className="discovered-cat-body">
         <div className="card-title-row">
           <h3>{cat.name || 'Unknown Cat'}</h3>
-          {!locked && <CatStatusBadge locked={false} />}
+          {!isOwnProfile && <CatStatusBadge locked={locked} iconOnly />}
         </div>
         {!locked && (
           <>
@@ -3317,7 +3323,7 @@ function DiscoveredCatCard({
                   onPostToCommunity();
                 }}
               >
-                <Plus size={14} /> Post to Community
+                <Plus size={14} /> Post
               </button>
             )}
             {isOwnProfile && onEdit && (
@@ -3341,7 +3347,7 @@ function DiscoveredCatCard({
                   onRemoveFromCollection();
                 }}
               >
-                <X size={14} /> Remove from collection
+                <X size={14} /> remove
               </button>
             )}
           </div>
@@ -4154,11 +4160,11 @@ function FriendResult({ user, currentUserId, following, onOpenUser, onToggleFoll
   );
 }
 
-function CatStatusBadge({ locked }) {
+function CatStatusBadge({ locked, iconOnly = false }) {
   return (
-    <span className={locked ? 'status-badge locked' : 'status-badge unlocked'}>
+    <span className={iconOnly ? (locked ? 'status-badge status-icon-only locked' : 'status-badge status-icon-only unlocked') : (locked ? 'status-badge locked' : 'status-badge unlocked')} aria-label={locked ? 'Locked' : 'Unlocked'}>
       {locked ? <Lock size={12} /> : <UnlockKeyhole size={12} />}
-      {locked ? 'Locked' : 'Unlocked'}
+      {!iconOnly && (locked ? 'Locked' : 'Unlocked')}
     </span>
   );
 }
