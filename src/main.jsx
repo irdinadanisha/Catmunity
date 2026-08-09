@@ -1438,11 +1438,14 @@ function mapCommunityData(data, currentUserId) {
   const users = (data.profiles || []).map(mapCommunityProfile);
   const commentsByPost = new Map();
   const likesByPost = new Map();
-  const capturesByPostOwnerAndCat = new Map();
+  const sightingsByPostOwnerAndCat = new Map();
 
   (data.captures || []).forEach((capture) => {
     if (capture.user_id && capture.cat_id) {
-      capturesByPostOwnerAndCat.set(`${capture.user_id}:${capture.cat_id}`, capture.discovered_at);
+      const key = `${capture.user_id}:${capture.cat_id}`;
+      const captures = sightingsByPostOwnerAndCat.get(key) || [];
+      captures.push(capture.discovered_at);
+      sightingsByPostOwnerAndCat.set(key, captures);
     }
   });
 
@@ -1470,6 +1473,9 @@ function mapCommunityData(data, currentUserId) {
 
   const posts = (data.posts || []).map((post) => {
     const likeUsers = likesByPost.get(post.id) || [];
+    const postTime = new Date(post.created_at).getTime();
+    const sightingTimes = sightingsByPostOwnerAndCat.get(`${post.user_id}:${post.cat_id}`) || [];
+    const captureDiscoveredAt = getClosestSightingTimeForPost(sightingTimes, postTime);
     return {
       id: post.id,
       user_id: post.user_id,
@@ -1478,7 +1484,7 @@ function mapCommunityData(data, currentUserId) {
       image_urls: post.image_urls || [],
       body: post.caption,
       location_name: post.location_name || 'Catmunity',
-      capture_discovered_at: capturesByPostOwnerAndCat.get(`${post.user_id}:${post.cat_id}`) || '',
+      capture_discovered_at: captureDiscoveredAt,
       mentions: post.mentions || [],
       raw_created_at: post.created_at,
       created_at: formatPostTime(post.created_at),
@@ -1489,6 +1495,21 @@ function mapCommunityData(data, currentUserId) {
   });
 
   return { posts, users };
+}
+
+function getClosestSightingTimeForPost(sightingTimes = [], postTime = Date.now()) {
+  const validSightings = sightingTimes
+    .map((value) => ({ value, time: new Date(value).getTime() }))
+    .filter((item) => Number.isFinite(item.time));
+  if (!validSightings.length) return '';
+
+  const beforePost = validSightings
+    .filter((item) => item.time <= postTime)
+    .sort((first, second) => second.time - first.time);
+  if (beforePost[0]) return beforePost[0].value;
+
+  return validSightings
+    .sort((first, second) => Math.abs(first.time - postTime) - Math.abs(second.time - postTime))[0]?.value || '';
 }
 
 function extractMentions(text = '') {
@@ -1510,6 +1531,7 @@ function formatCaptureClockTime(value) {
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
+    timeZone: 'Asia/Kuala_Lumpur',
   });
 }
 

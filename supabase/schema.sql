@@ -415,9 +415,10 @@ on public.user_cats for delete
 using (auth.uid() = user_id);
 
 drop policy if exists "Users can read own sightings" on public.cat_sightings;
-create policy "Users can read own sightings"
+drop policy if exists "Anyone can read approximate sightings" on public.cat_sightings;
+create policy "Anyone can read approximate sightings"
 on public.cat_sightings for select
-using (auth.uid() = user_id);
+using (true);
 
 drop policy if exists "Users can create approximate sightings" on public.cat_sightings;
 create policy "Users can create approximate sightings"

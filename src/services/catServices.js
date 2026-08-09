@@ -320,9 +320,17 @@ export async function fetchCatsForMap(uiUserId) {
   }
 
   const catcherIdsByCatId = await fetchCatcherIdsByCatId((publicCats || []).map((cat) => cat.id));
+  const sightingTimesByCatId = await fetchLatestSightingTimesByCatId(user.id, (publicCats || []).map((cat) => cat.id));
   const userCatsByCatId = new Map((userCats || []).map((item) => [item.cat_id, item]));
   return (publicCats || []).map((cat) =>
-    mapSupabaseCat(cat, uiUserId, userCatsByCatId.has(cat.id), userCatsByCatId.get(cat.id), catcherIdsByCatId.get(cat.id)),
+    mapSupabaseCat(
+      cat,
+      uiUserId,
+      userCatsByCatId.has(cat.id),
+      userCatsByCatId.get(cat.id),
+      catcherIdsByCatId.get(cat.id),
+      sightingTimesByCatId.get(cat.id),
+    ),
   );
 }
 
@@ -372,10 +380,33 @@ export async function fetchPublicUserCollection(profileUserId, viewerUserId) {
   }
 
   const catcherIdsByCatId = await fetchCatcherIdsByCatId((profileCats || []).map((cat) => cat.id));
+  const sightingTimesByCatId = await fetchLatestSightingTimesByCatId(profileUserId, (profileCats || []).map((cat) => cat.id));
   const viewerCatsByCatId = new Map((viewerCats || []).map((item) => [item.cat_id, item]));
   return (profileCats || []).map((cat) =>
-    mapSupabaseCat(cat, viewerUserId, viewerCatsByCatId.has(cat.id), null, catcherIdsByCatId.get(cat.id)),
+    mapSupabaseCat(cat, viewerUserId, viewerCatsByCatId.has(cat.id), null, catcherIdsByCatId.get(cat.id), sightingTimesByCatId.get(cat.id)),
   );
+}
+
+async function fetchLatestSightingTimesByCatId(userId, catIds = []) {
+  const uniqueCatIds = [...new Set(catIds.filter(Boolean))];
+  if (!userId || !uniqueCatIds.length) return new Map();
+
+  const { data, error } = await supabase
+    .from('cat_sightings')
+    .select('cat_id, discovered_at')
+    .eq('user_id', userId)
+    .in('cat_id', uniqueCatIds)
+    .order('discovered_at', { ascending: false });
+
+  if (error) {
+    console.warn('Supabase latest sighting time load failed', error);
+    return new Map();
+  }
+
+  return (data || []).reduce((map, item) => {
+    if (item.cat_id && !map.has(item.cat_id)) map.set(item.cat_id, item.discovered_at);
+    return map;
+  }, new Map());
 }
 
 async function fetchCatcherIdsByCatId(catIds = []) {
@@ -869,6 +900,9 @@ async function createSupabaseSighting({ userId, catId, capture, photoUrl = null,
       approximate_latitude: approximate.latitude,
       approximate_longitude: approximate.longitude,
       area_name: approximate.areaName,
+      discovered_at: getDiscoveryTimestamp({
+        capturedAt: capture?.capturedAt,
+      }),
       photo_url: photoUrl,
       remarks: remarks || null,
     });
@@ -878,7 +912,7 @@ async function createSupabaseSighting({ userId, catId, capture, photoUrl = null,
   }
 }
 
-function mapSupabaseCat(cat, uiUserId, caught, userCat = null, catcherUserIds = []) {
+function mapSupabaseCat(cat, uiUserId, caught, userCat = null, catcherUserIds = [], latestSightingTime = '') {
   const limitedInfo = !caught;
   const personalOriginalImageUrl = isPersistentImageUrl(userCat?.original_image_url) ? userCat.original_image_url : '';
   const personalCroppedImageUrl = isPersistentImageUrl(userCat?.cropped_image_url) ? userCat.cropped_image_url : '';
@@ -922,7 +956,7 @@ function mapSupabaseCat(cat, uiUserId, caught, userCat = null, catcherUserIds = 
     city: cat.city || '',
     country: cat.country || '',
     sighting_count: cat.sighting_count || 0,
-    discovered_at: userCat?.discovered_at || cat.discovered_at || cat.created_at,
+    discovered_at: latestSightingTime || userCat?.discovered_at || cat.discovered_at || cat.created_at,
     created_at: cat.created_at,
     updated_at: cat.updated_at,
     map: { x: 52, y: 48 },

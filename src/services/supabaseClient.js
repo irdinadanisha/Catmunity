@@ -386,16 +386,17 @@ export async function loadCommunityPosts(currentUserId) {
   const postingUserIds = [...new Set((posts || []).map((post) => post.user_id).filter(Boolean))];
   let captureRows = [];
   if (postedCatIds.length && postingUserIds.length) {
-    const { data: userCatRows, error: userCatRowsError } = await supabase
-      .from('user_cats')
+    const { data: sightingRows, error: sightingRowsError } = await supabase
+      .from('cat_sightings')
       .select('user_id, cat_id, discovered_at')
       .in('cat_id', postedCatIds)
-      .in('user_id', postingUserIds);
+      .in('user_id', postingUserIds)
+      .order('discovered_at', { ascending: false });
 
-    if (userCatRowsError) {
-      console.warn('Supabase community post capture time load failed', userCatRowsError);
+    if (sightingRowsError) {
+      console.warn('Supabase community post sighting time load failed', sightingRowsError);
     } else {
-      captureRows = userCatRows || [];
+      captureRows = sightingRows || [];
     }
   }
 
