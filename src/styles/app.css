@@ -3061,9 +3061,10 @@ button:disabled {
   color: #2b211d;
   font-size: 1.85rem;
   letter-spacing: 0;
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 7px;
+  width: fit-content;
 }
 
 .profile-name-lock {
@@ -3138,14 +3139,13 @@ button:disabled {
 }
 
 .identity-current-icon {
-  width: 42px;
-  height: 42px;
-  display: grid;
-  place-items: center;
-  border-radius: 16px;
+  width: auto;
+  height: auto;
+  display: inline;
   color: #8f5522;
-  background: rgba(255, 236, 181, 0.62);
-  font-size: 1.2rem;
+  background: transparent;
+  font-size: 1.35rem;
+  line-height: 1;
 }
 
 .identity-current-copy {
@@ -3239,7 +3239,7 @@ button:disabled {
 
 .favorite-cat-row span,
 .recent-cat-row strong {
-  font-weight: 800;
+  font-weight: 700;
   text-align: center;
 }
 
@@ -4119,8 +4119,13 @@ button:disabled {
 }
 
 .username-line {
+  display: block;
   color: #b34d3e;
   font-weight: 900;
+}
+
+.profile-readonly-hero .username-line {
+  margin-top: 2px;
 }
 
 .empty-community-copy {
