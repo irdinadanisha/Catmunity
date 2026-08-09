@@ -1596,9 +1596,9 @@ function getProfileStats(cats = [], posts = []) {
   const uniqueAreas = new Set(cats.map((cat) => cat.location_name || cat.area_name).filter(Boolean)).size;
   const totalLikes = posts.reduce((sum, post) => sum + (post.likeCount || 0), 0);
   const nightCats = getUniqueCatsInHourRange(cats, (hour) => hour >= 20 || hour < 5);
-  const earlyCats = getUniqueCatsInHourRange(cats, (hour) => hour >= 5 && hour < 8);
-  const timeIcon = nightCats > earlyCats ? '🌙' : earlyCats > 0 ? '🌅' : '☀️';
-  const timeLabel = nightCats > earlyCats ? 'night owl' : earlyCats > 0 ? 'early paws' : 'daylight';
+  const daylightCats = getUniqueCatsInHourRange(cats, (hour) => hour >= 5 && hour < 20);
+  const timeIcon = nightCats > daylightCats ? '🌙' : '☀️';
+  const timeLabel = nightCats > daylightCats ? 'night owl' : 'daylight';
 
   return {
     cats: uniqueCats,
@@ -3743,20 +3743,22 @@ function ProfileOverview({
         <UserAvatar user={user} className="profile-readonly-avatar" />
         <div>
           <p className="eyebrow">Profile</p>
-          <h1>{user.name || 'Catmunity Friend'}</h1>
+          <h1>
+            {user.name || 'Catmunity Friend'}
+            {!user.public_profile && <Lock className="profile-name-lock" size={18} aria-label="Private account" />}
+          </h1>
           <UserHandle user={user} />
           <p>{user.bio || 'No bio yet.'}</p>
           <FollowCounts user={user} counts={followCounts} onOpen={onOpenFollowList} />
           <span className="profile-member-since">Member since {formatMemberSince(user.created_at)}</span>
         </div>
-        <div className="profile-status-actions">
-          <span className="profile-status"><ShieldCheck size={14} /> {user.public_profile ? 'Public' : 'Private'}</span>
-          {isOwnProfile && (
+        {isOwnProfile && (
+          <div className="profile-status-actions">
             <button className="profile-settings-icon-button" type="button" onClick={onOpenSettings} aria-label="Profile settings">
               <Settings size={17} />
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       <ProfileIdentity cats={cats} user={user} />
@@ -3783,9 +3785,9 @@ function ProfileIdentity({ cats, user }) {
   const progressTarget = nextTier?.min ?? count;
   return (
     <section className="profile-section profile-identity-section">
-      <p className="eyebrow"><PawPrint size={14} /> Identity</p>
+      <h2 className="identity-section-title"><PawPrint size={18} /> Identity</h2>
       <button className="identity-current-card" type="button" onClick={() => setShowIdentityGuide(true)}>
-        <span className="identity-current-icon"><PawPrint size={20} /></span>
+        <span className="identity-current-icon">{count >= 50 ? '👑' : count >= 25 ? '🕵️' : count >= 10 ? '🔎' : '🐾'}</span>
         <span className="identity-current-copy">
           <strong>{identity}</strong>
           <span>{count} / {progressTarget} cats</span>
@@ -3853,7 +3855,7 @@ function FavouriteCats({ cats, favoriteCatIds, isOwnProfile, onSaveFavorites, on
   return (
     <section className="profile-section">
       <div className="section-title-row">
-        <h2>Favourite cats</h2>
+        <h2>Favourite Cats</h2>
         {isOwnProfile && cats.length > 0 && (
           <button className="mini-text-button" type="button" onClick={() => setEditing((value) => !value)}>
             {editing ? 'Done' : 'Edit'}
@@ -3895,7 +3897,7 @@ function FavouriteCats({ cats, favoriteCatIds, isOwnProfile, onSaveFavorites, on
 function ProfileStatsSection({ stats }) {
   return (
     <section className="profile-section">
-      <h2>Your cat stats</h2>
+      <h2>Cat Stats</h2>
       <div className="profile-life-grid">
         <Stat label="cats" value={stats.cats} icon={Cat} />
         <Stat label="areas" value={stats.areas} icon={MapPin} />
@@ -3947,7 +3949,7 @@ function RecentDiscoveries({ cats, onSelectCat, onOpenCollection }) {
   return (
     <section className="profile-section">
       <div className="section-title-row">
-        <h2>Recent discoveries</h2>
+        <h2>Recent Discoveries</h2>
         <button className="mini-text-button" type="button" onClick={onOpenCollection}>See all →</button>
       </div>
       {recentCats.length > 0 ? (

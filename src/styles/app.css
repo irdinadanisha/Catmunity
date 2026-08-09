@@ -1641,6 +1641,12 @@ button:disabled {
   justify-content: center;
   border-radius: 14px;
   font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.post-cat-button svg {
+  flex: 0 0 auto;
+  min-width: 14px;
 }
 
 .gallery-grid {
@@ -1733,8 +1739,12 @@ button:disabled {
   min-width: 0;
   flex: 1 1 0;
   min-height: 34px;
-  padding: 7px 8px;
+  padding: 7px 6px;
   font-size: 0.76rem;
+}
+
+.discovered-card-actions .danger-text-button {
+  flex-grow: 1.12;
 }
 
 .cat-card {
@@ -3006,19 +3016,6 @@ button:disabled {
   gap: 6px;
 }
 
-.profile-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 28px;
-  padding: 6px 9px;
-  border-radius: 999px;
-  background: rgba(217, 242, 232, 0.92);
-  color: #295a4b;
-  font-size: 0.74rem;
-  font-weight: 900;
-}
-
 .profile-settings-icon-button {
   width: 34px;
   height: 34px;
@@ -3064,6 +3061,14 @@ button:disabled {
   color: #2b211d;
   font-size: 1.85rem;
   letter-spacing: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.profile-name-lock {
+  color: #6b4a39;
+  flex: 0 0 auto;
 }
 
 .profile-readonly-hero p:not(.eyebrow) {
@@ -3098,11 +3103,14 @@ button:disabled {
   padding-top: 4px;
 }
 
-.profile-identity-section .eyebrow {
+.identity-section-title {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   margin: 0;
+  font-size: 1.05rem;
+  color: #2b211d;
+  font-weight: 950;
 }
 
 .identity-current-card {
@@ -3137,6 +3145,7 @@ button:disabled {
   border-radius: 16px;
   color: #8f5522;
   background: rgba(255, 236, 181, 0.62);
+  font-size: 1.2rem;
 }
 
 .identity-current-copy {
@@ -3208,7 +3217,7 @@ button:disabled {
   border: 0;
   color: #2b211d;
   background: transparent;
-  text-align: left;
+  text-align: center;
 }
 
 .favorite-cat-row img,
@@ -3230,7 +3239,8 @@ button:disabled {
 
 .favorite-cat-row span,
 .recent-cat-row strong {
-  font-weight: 950;
+  font-weight: 800;
+  text-align: center;
 }
 
 .recent-cat-row span {
@@ -3533,9 +3543,12 @@ button:disabled {
   height: 50px;
   padding: 0;
   border: 0;
+  appearance: none;
+  -webkit-appearance: none;
   background: transparent;
   overflow: visible;
-  box-shadow: 0 12px 24px rgba(95, 55, 31, 0.18);
+  box-shadow: none;
+  line-height: 0;
 }
 
 .mini-cat-head {
