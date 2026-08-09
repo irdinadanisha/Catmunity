@@ -197,7 +197,6 @@ function App() {
   const [notifications, setNotifications] = useState([]);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [communitySearchOpen, setCommunitySearchOpen] = useState(false);
   const [toast, setToast] = useState('');
 
   useEffect(() => {
@@ -1128,7 +1127,13 @@ function App() {
           stats={stats}
           notificationCount={unreadNotificationCount}
           onOpenNotifications={openNotifications}
-          onOpenCommunitySearch={screen === 'community' ? () => setCommunitySearchOpen(true) : null}
+          communitySearch={screen === 'community' ? {
+            currentUserId,
+            followingIds,
+            onSearchFriends: handleSearchFriends,
+            onToggleFollow: handleToggleFollow,
+            onOpenUser: openPublicProfile,
+          } : null}
         />
       )}
       {notificationsOpen && (
@@ -1280,14 +1285,6 @@ function App() {
             currentUser={me}
             currentUserId={currentUserId}
             followingIds={followingIds}
-            followingProfiles={followingProfiles}
-            followerProfiles={followerProfiles}
-            followCounts={followCountsByUserId[currentUserId] || { following: followingProfiles.length, followers: followerProfiles.length }}
-            searchOpen={communitySearchOpen}
-            onSearchFriends={handleSearchFriends}
-            onCloseSearch={() => setCommunitySearchOpen(false)}
-            onToggleFollow={handleToggleFollow}
-            onOpenFollowList={openFollowList}
             onCreate={() => {
               if (!caughtCats.length) {
                 showToast('Catch your first cat to get started!');
@@ -1880,7 +1877,34 @@ function AuthScreen({ onSubmit }) {
   );
 }
 
-function TopBar({ user, notificationCount = 0, onOpenNotifications, onOpenCommunitySearch = null }) {
+function TopBar({ user, notificationCount = 0, onOpenNotifications, communitySearch = null }) {
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const hasCommunitySearch = Boolean(communitySearch);
+
+  useEffect(() => {
+    if (!hasCommunitySearch) {
+      setSearchOpen(false);
+      setQuery('');
+      setResults([]);
+      setSearching(false);
+      setSubmitted(false);
+    }
+  }, [hasCommunitySearch]);
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    if (!communitySearch || !query.trim()) return;
+    setSubmitted(true);
+    setSearching(true);
+    const data = await communitySearch.onSearchFriends(query);
+    setResults(data);
+    setSearching(false);
+  }
+
   return (
     <header className="top-bar">
       <div>
@@ -1888,10 +1912,53 @@ function TopBar({ user, notificationCount = 0, onOpenNotifications, onOpenCommun
         <h1>Hi, {user.name}</h1>
       </div>
       <div className="top-actions">
-        {onOpenCommunitySearch && (
-          <button className="icon-button" aria-label="Find your purrpals" onClick={onOpenCommunitySearch}>
-            <Search size={20} />
-          </button>
+        {communitySearch && (
+          <div className="top-search-wrap">
+            {searchOpen ? (
+              <>
+                <form className="top-community-search" onSubmit={handleSubmit}>
+                  <input
+                    value={query}
+                    placeholder="Find @purrpals"
+                    autoFocus
+                    onChange={(event) => {
+                      setQuery(event.target.value);
+                      setSubmitted(false);
+                      setResults([]);
+                    }}
+                  />
+                  <button type="submit" aria-label="Search purrpals">
+                    <Search size={17} />
+                  </button>
+                </form>
+                {(searching || submitted) && (
+                  <div className="top-search-results">
+                    {searching && <p className="empty-community-copy">Searching...</p>}
+                    {!searching && results.map((profile) => (
+                      <FriendResult
+                        key={profile.id}
+                        user={profile}
+                        currentUserId={communitySearch.currentUserId}
+                        following={communitySearch.followingIds.includes(profile.id)}
+                        onToggleFollow={communitySearch.onToggleFollow}
+                        onOpenUser={(id) => {
+                          setSearchOpen(false);
+                          communitySearch.onOpenUser(id);
+                        }}
+                      />
+                    ))}
+                    {!searching && submitted && results.length === 0 && (
+                      <p className="empty-community-copy">No public users found yet.</p>
+                    )}
+                  </div>
+                )}
+              </>
+            ) : (
+              <button className="icon-button" aria-label="Find purrpals" onClick={() => setSearchOpen(true)}>
+                <Search size={20} />
+              </button>
+            )}
+          </div>
         )}
         <button className="icon-button notification-button" aria-label="Notifications" onClick={onOpenNotifications}>
           <Bell size={20} />
@@ -4048,14 +4115,6 @@ function CommunityScreen({
   currentUser,
   currentUserId,
   followingIds,
-  followingProfiles,
-  followerProfiles,
-  followCounts,
-  searchOpen,
-  onSearchFriends,
-  onCloseSearch,
-  onToggleFollow,
-  onOpenFollowList,
   onCreate,
   onToggleLike,
   onComment,
@@ -4064,10 +4123,6 @@ function CommunityScreen({
   onOpenUser,
 }) {
   const [currentArea, setCurrentArea] = useState('Finding your area...');
-  const [friendQuery, setFriendQuery] = useState('');
-  const [friendResults, setFriendResults] = useState([]);
-  const [searchingFriends, setSearchingFriends] = useState(false);
-  const [friendSearchSubmitted, setFriendSearchSubmitted] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -4085,20 +4140,9 @@ function CommunityScreen({
     };
   }, []);
 
-  async function handleFriendSearch(event) {
-    event.preventDefault();
-    setFriendSearchSubmitted(true);
-    setSearchingFriends(true);
-    const results = await onSearchFriends(friendQuery);
-    setFriendResults(results);
-    setSearchingFriends(false);
-  }
-
   const visibleUsers = useMemo(() => {
-    const byId = new Map(users.map((user) => [user.id, user]));
-    friendResults.forEach((user) => byId.set(user.id, user));
-    return [...byId.values()];
-  }, [users, friendResults]);
+    return users;
+  }, [users]);
 
   const localPosts = posts.filter((post) => post.location_name === currentArea);
   const friendPosts = posts.filter((post) => followingIds.includes(post.user_id) || post.user_id === currentUserId);
@@ -4106,32 +4150,7 @@ function CommunityScreen({
 
   return (
     <section className="screen">
-      <ScreenHeader title="Commeownity" subtitle="Follow friends and see cats near your current place." icon={Users} />
-      <div className="community-follow-summary">
-        <FollowCounts user={currentUser} counts={followCounts} onOpen={onOpenFollowList} compact />
-      </div>
-      {searchOpen && (
-        <FriendSearchOverlay
-          query={friendQuery}
-          results={friendResults}
-          searching={searchingFriends}
-          currentUserId={currentUserId}
-          followingIds={followingIds}
-          hasSearched={friendSearchSubmitted}
-          onChangeQuery={(value) => {
-            setFriendQuery(value);
-            setFriendSearchSubmitted(false);
-            setFriendResults([]);
-          }}
-          onSubmit={handleFriendSearch}
-          onClose={onCloseSearch}
-          onOpenUser={(id) => {
-            onCloseSearch();
-            onOpenUser(id);
-          }}
-          onToggleFollow={onToggleFollow}
-        />
-      )}
+      <ScreenHeader title="Commeownity" subtitle="Follow friends and see cats near your current place." icon={Users} plainIcon />
       <div className="safety-strip"><ShieldCheck size={17} /> This app is for memories and sightings. Give every cat space and kindness.</div>
       <div className="section-title-row">
         <div>
@@ -4989,62 +5008,6 @@ function FollowListModal({ modal, currentUserId, followingIds, onClose, onOpenUs
   );
 }
 
-function FriendSearchOverlay({
-  query,
-  results,
-  searching,
-  currentUserId,
-  followingIds,
-  hasSearched,
-  onChangeQuery,
-  onSubmit,
-  onClose,
-  onOpenUser,
-  onToggleFollow,
-}) {
-  const showSearchState = hasSearched && query.trim().length > 0 && !searching;
-
-  return (
-    <div className="notification-overlay" role="dialog" aria-modal="true" aria-label="Find your purrpals">
-      <section className="friend-search-panel">
-        <div className="section-title-row">
-          <div>
-            <h2>Find purrpals</h2>
-            <span className="quiet-label">Search by username</span>
-          </div>
-          <button className="icon-button" type="button" onClick={onClose} aria-label="Close friend search"><X size={18} /></button>
-        </div>
-        <form className="friend-search-row" onSubmit={onSubmit}>
-          <Search size={18} />
-          <input
-            value={query}
-            placeholder="Find your @purrpals!"
-            autoFocus
-            onChange={(event) => onChangeQuery(event.target.value)}
-          />
-          <button type="submit">{searching ? '...' : 'Search'}</button>
-        </form>
-        <div className="friend-result-list">
-          {searching && <p className="empty-community-copy">Looking for purrpals...</p>}
-          {results.map((user) => (
-            <FriendResult
-              key={user.id}
-              user={user}
-              currentUserId={currentUserId}
-              following={followingIds.includes(user.id)}
-              onOpenUser={onOpenUser}
-              onToggleFollow={onToggleFollow}
-            />
-          ))}
-          {showSearchState && results.length === 0 && (
-            <p className="empty-community-copy">No public users found with that username yet.</p>
-          )}
-        </div>
-      </section>
-    </div>
-  );
-}
-
 function FriendResult({ user, currentUserId, following, onOpenUser, onToggleFollow }) {
   const isSelf = user.id === currentUserId;
   return (
@@ -5450,10 +5413,10 @@ function CatCard({ cat, locked, onOpen, action }) {
   );
 }
 
-function ScreenHeader({ title, subtitle, icon: Icon }) {
+function ScreenHeader({ title, subtitle, icon: Icon, plainIcon = false }) {
   return (
     <div className="screen-header">
-      <span className="header-icon"><Icon size={21} /></span>
+      <span className={plainIcon ? 'header-icon header-icon--plain' : 'header-icon'}><Icon size={plainIcon ? 38 : 21} /></span>
       <div>
         <h1>{title}</h1>
         <p>{subtitle}</p>
