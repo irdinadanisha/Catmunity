@@ -61,7 +61,7 @@ button:disabled {
 
 .main {
   min-height: 100vh;
-  padding: 92px 18px calc(var(--bottom-nav-height) + 24px + env(safe-area-inset-bottom));
+  padding: 82px 18px calc(var(--bottom-nav-height) + 24px + env(safe-area-inset-bottom));
 }
 
 .main--welcome {
@@ -117,6 +117,20 @@ button:disabled {
 
 .top-bar h1 {
   font-size: 1.24rem;
+}
+
+.top-back-button {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  margin-top: 1px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: #6b4a39;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 8px 18px rgba(83, 55, 38, 0.08);
 }
 
 .eyebrow {

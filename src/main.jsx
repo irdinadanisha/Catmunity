@@ -1127,6 +1127,10 @@ function App() {
           stats={stats}
           notificationCount={unreadNotificationCount}
           onOpenNotifications={openNotifications}
+          headerBack={screen === 'publicProfile' ? {
+            label: selectedUser?.name || 'Profile',
+            onBack: () => navigate('collection'),
+          } : null}
           communitySearch={screen === 'community' ? {
             currentUserId,
             followingIds,
@@ -1877,7 +1881,7 @@ function AuthScreen({ onSubmit }) {
   );
 }
 
-function TopBar({ user, notificationCount = 0, onOpenNotifications, communitySearch = null }) {
+function TopBar({ user, notificationCount = 0, onOpenNotifications, communitySearch = null, headerBack = null }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
@@ -1909,7 +1913,13 @@ function TopBar({ user, notificationCount = 0, onOpenNotifications, communitySea
     <header className="top-bar">
       <div>
         <p className="eyebrow top-brand"><PawPrint size={13} /> Catmunity</p>
-        <h1>Hi, {user.name}</h1>
+        {headerBack ? (
+          <button className="top-back-button" type="button" onClick={headerBack.onBack} aria-label={`Back from ${headerBack.label}`}>
+            <ChevronLeft size={24} />
+          </button>
+        ) : (
+          <h1>Hi, {user.name}</h1>
+        )}
       </div>
       <div className="top-actions">
         {communitySearch && (
@@ -3682,14 +3692,12 @@ function PublicProfileScreen({
   favoriteCatIds,
   followCounts,
   onOpenFollowList,
-  onBack,
   onSelectCat,
   onOpenCollection,
   onOpenPost,
 }) {
   return (
     <section className="screen">
-      <BackButton onBack={onBack} />
       <ProfileOverview
         user={user}
         cats={cats}
@@ -3872,7 +3880,7 @@ function FavouriteCats({ cats, favoriteCatIds, isOwnProfile, onSaveFavorites, on
           ))}
         </div>
       ) : (
-        <p className="profile-empty-line">Pick up to 3 of your favourite cats.</p>
+        <p className="profile-empty-line">{isOwnProfile ? 'Pick up to 3 of your favourite cats.' : 'No favourite cats yet.'}</p>
       )}
       {editing && (
         <div className="favorite-editor">
