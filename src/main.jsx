@@ -4121,6 +4121,7 @@ function CommunityPostCard({ post, user, currentUser, cat, isFriendPost, onOpenU
   const [commentText, setCommentText] = useState('');
   const [commentImages, setCommentImages] = useState([]);
   const [imageFailed, setImageFailed] = useState(false);
+  const [photoViewer, setPhotoViewer] = useState(null);
   const postImageUrls = !imageFailed ? getCommunityPostImages(post, cat) : [];
   const fallbackPostImage = cat?.cropped_image_url;
   const displayImages = postImageUrls.length ? postImageUrls : [fallbackPostImage].filter(Boolean);
@@ -4171,13 +4172,24 @@ function CommunityPostCard({ post, user, currentUser, cat, isFriendPost, onOpenU
           {displayImages.length > 0 && (
             <div className={displayImages.length > 1 ? 'post-image-gallery' : 'post-image-gallery single'}>
               {displayImages.map((imageUrl, index) => (
-                <img
+                <button
                   key={`${imageUrl}-${index}`}
-                  className="post-image"
-                  src={imageUrl}
-                  alt={index === 0 ? 'Community cat sighting' : 'Additional cat sighting'}
-                  onError={() => setImageFailed(true)}
-                />
+                  className="post-image-button"
+                  type="button"
+                  onClick={() => setPhotoViewer({
+                    images: displayImages,
+                    index,
+                    alt: index === 0 ? 'Community cat sighting' : 'Additional cat sighting',
+                  })}
+                  aria-label="Open picture"
+                >
+                  <img
+                    className="post-image"
+                    src={imageUrl}
+                    alt={index === 0 ? 'Community cat sighting' : 'Additional cat sighting'}
+                    onError={() => setImageFailed(true)}
+                  />
+                </button>
               ))}
             </div>
           )}
@@ -4224,7 +4236,19 @@ function CommunityPostCard({ post, user, currentUser, cat, isFriendPost, onOpenU
               {comment.image_urls?.length > 0 && (
                 <div className={comment.image_urls.length > 1 ? 'comment-image-grid' : 'comment-image-grid single'}>
                   {comment.image_urls.map((imageUrl, index) => (
-                    <img key={`${comment.id}-${imageUrl}-${index}`} src={imageUrl} alt="Comment attachment" />
+                    <button
+                      key={`${comment.id}-${imageUrl}-${index}`}
+                      className="comment-image-button-preview"
+                      type="button"
+                      onClick={() => setPhotoViewer({
+                        images: comment.image_urls,
+                        index,
+                        alt: 'Comment attachment',
+                      })}
+                      aria-label="Open reply picture"
+                    >
+                      <img src={imageUrl} alt="Comment attachment" />
+                    </button>
                   ))}
                 </div>
               )}
@@ -4264,7 +4288,189 @@ function CommunityPostCard({ post, user, currentUser, cat, isFriendPost, onOpenU
           )}
         </div>
       </form>
+      {photoViewer && (
+        <PhotoViewer
+          images={photoViewer.images}
+          initialIndex={photoViewer.index}
+          alt={photoViewer.alt}
+          onClose={() => setPhotoViewer(null)}
+        />
+      )}
     </article>
+  );
+}
+
+function PhotoViewer({ images, initialIndex = 0, alt = 'Expanded picture', onClose }) {
+  const safeImages = images.filter(Boolean);
+  const [index, setIndex] = useState(Math.min(initialIndex, Math.max(safeImages.length - 1, 0)));
+  const [scale, setScale] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const pointersRef = useRef(new Map());
+  const gestureRef = useRef(null);
+  const lastTapRef = useRef(0);
+
+  const canGoPrevious = index > 0;
+  const canGoNext = index < safeImages.length - 1;
+
+  useEffect(() => {
+    setScale(1);
+    setOffset({ x: 0, y: 0 });
+    pointersRef.current.clear();
+    gestureRef.current = null;
+  }, [index]);
+
+  useEffect(() => {
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') onClose();
+      if (event.key === 'ArrowLeft' && canGoPrevious) setIndex((value) => value - 1);
+      if (event.key === 'ArrowRight' && canGoNext) setIndex((value) => value + 1);
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [canGoNext, canGoPrevious, onClose]);
+
+  if (!safeImages.length) return null;
+
+  function getDistance(first, second) {
+    return Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
+  }
+
+  function getMidpoint(first, second) {
+    return {
+      x: (first.clientX + second.clientX) / 2,
+      y: (first.clientY + second.clientY) / 2,
+    };
+  }
+
+  function clampScale(value) {
+    return Math.min(4, Math.max(1, value));
+  }
+
+  function handlePointerDown(event) {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    pointersRef.current.set(event.pointerId, event);
+    const pointers = [...pointersRef.current.values()];
+    if (pointers.length === 1) {
+      gestureRef.current = {
+        mode: 'pan',
+        startX: pointers[0].clientX,
+        startY: pointers[0].clientY,
+        offset,
+      };
+    }
+    if (pointers.length === 2) {
+      gestureRef.current = {
+        mode: 'pinch',
+        startDistance: getDistance(pointers[0], pointers[1]),
+        startMidpoint: getMidpoint(pointers[0], pointers[1]),
+        startScale: scale,
+        offset,
+      };
+    }
+  }
+
+  function handlePointerMove(event) {
+    if (!pointersRef.current.has(event.pointerId)) return;
+    pointersRef.current.set(event.pointerId, event);
+    const pointers = [...pointersRef.current.values()];
+    const gesture = gestureRef.current;
+
+    if (pointers.length === 1 && gesture?.mode === 'pan' && scale > 1) {
+      setOffset({
+        x: gesture.offset.x + pointers[0].clientX - gesture.startX,
+        y: gesture.offset.y + pointers[0].clientY - gesture.startY,
+      });
+    }
+
+    if (pointers.length === 2 && gesture?.mode === 'pinch') {
+      const distance = getDistance(pointers[0], pointers[1]);
+      const midpoint = getMidpoint(pointers[0], pointers[1]);
+      const nextScale = clampScale(gesture.startScale * (distance / Math.max(gesture.startDistance, 1)));
+      setScale(nextScale);
+      setOffset({
+        x: gesture.offset.x + midpoint.x - gesture.startMidpoint.x,
+        y: gesture.offset.y + midpoint.y - gesture.startMidpoint.y,
+      });
+    }
+  }
+
+  function handlePointerEnd(event) {
+    pointersRef.current.delete(event.pointerId);
+    const pointers = [...pointersRef.current.values()];
+    if (pointers.length === 0) {
+      if (scale <= 1.02) {
+        setScale(1);
+        setOffset({ x: 0, y: 0 });
+      }
+      gestureRef.current = null;
+      return;
+    }
+    if (pointers.length === 1) {
+      gestureRef.current = {
+        mode: 'pan',
+        startX: pointers[0].clientX,
+        startY: pointers[0].clientY,
+        offset,
+      };
+    }
+  }
+
+  function handleWheel(event) {
+    event.preventDefault();
+    const nextScale = clampScale(scale + (event.deltaY < 0 ? 0.2 : -0.2));
+    setScale(nextScale);
+    if (nextScale === 1) setOffset({ x: 0, y: 0 });
+  }
+
+  function handleDoubleTap() {
+    const now = Date.now();
+    if (now - lastTapRef.current < 280) {
+      const nextScale = scale > 1 ? 1 : 2;
+      setScale(nextScale);
+      if (nextScale === 1) setOffset({ x: 0, y: 0 });
+    }
+    lastTapRef.current = now;
+  }
+
+  return (
+    <div className="photo-viewer" role="dialog" aria-modal="true" aria-label="Expanded picture viewer">
+      <button className="photo-viewer-backdrop" type="button" onClick={onClose} aria-label="Close picture viewer" />
+      <div className="photo-viewer-stage">
+        <button className="photo-viewer-close" type="button" onClick={onClose} aria-label="Close picture viewer">
+          <X size={24} />
+        </button>
+        {canGoPrevious && (
+          <button className="photo-viewer-nav previous" type="button" onClick={() => setIndex((value) => value - 1)} aria-label="Previous picture">
+            <ChevronLeft size={28} />
+          </button>
+        )}
+        <div
+          className="photo-viewer-image-wrap"
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerEnd}
+          onPointerCancel={handlePointerEnd}
+          onWheel={handleWheel}
+          onClick={handleDoubleTap}
+        >
+          <img
+            src={safeImages[index]}
+            alt={alt}
+            draggable="false"
+            style={{ transform: `translate3d(${offset.x}px, ${offset.y}px, 0) scale(${scale})` }}
+          />
+        </div>
+        {canGoNext && (
+          <button className="photo-viewer-nav next" type="button" onClick={() => setIndex((value) => value + 1)} aria-label="Next picture">
+            <ChevronRight size={28} />
+          </button>
+        )}
+        {safeImages.length > 1 && (
+          <div className="photo-viewer-count">{index + 1} / {safeImages.length}</div>
+        )}
+      </div>
+    </div>
   );
 }
 

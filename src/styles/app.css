@@ -4091,6 +4091,22 @@ button:disabled {
   display: block;
 }
 
+.post-image-button,
+.comment-image-button-preview {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 18px;
+  background: transparent;
+  cursor: zoom-in;
+  text-align: left;
+}
+
+.comment-image-button-preview {
+  border-radius: 14px;
+}
+
 .post-image {
   width: 100%;
   max-height: 520px;
@@ -4345,6 +4361,104 @@ button:disabled {
   border-radius: 14px;
   object-fit: cover;
   background: rgba(255, 245, 232, 0.82);
+}
+
+.photo-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: max(16px, env(safe-area-inset-top)) 16px max(18px, env(safe-area-inset-bottom));
+}
+
+.photo-viewer-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(15, 12, 11, 0.92);
+  backdrop-filter: blur(14px);
+}
+
+.photo-viewer-stage {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 780px);
+  height: min(82dvh, 780px);
+  display: grid;
+  place-items: center;
+}
+
+.photo-viewer-image-wrap {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 24px;
+  touch-action: none;
+  user-select: none;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.photo-viewer-image-wrap img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  will-change: transform;
+  transition: transform 120ms ease-out;
+  transform-origin: center;
+}
+
+.photo-viewer-close,
+.photo-viewer-nav {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  border: 0;
+  color: #fffaf2;
+  background: rgba(255, 255, 255, 0.13);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.22);
+}
+
+.photo-viewer-close {
+  top: 10px;
+  right: 10px;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+}
+
+.photo-viewer-nav {
+  top: 50%;
+  width: 42px;
+  height: 54px;
+  border-radius: 999px;
+  transform: translateY(-50%);
+}
+
+.photo-viewer-nav.previous {
+  left: 10px;
+}
+
+.photo-viewer-nav.next {
+  right: 10px;
+}
+
+.photo-viewer-count {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  z-index: 2;
+  padding: 7px 12px;
+  border-radius: 999px;
+  color: #fffaf2;
+  background: rgba(0, 0, 0, 0.42);
+  font-size: 0.78rem;
+  font-weight: 900;
+  transform: translateX(-50%);
 }
 
 .comment-form {
