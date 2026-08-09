@@ -1068,12 +1068,12 @@ function getImageExtension(contentType = '', filename = '') {
 
 const missingCatImageUrl = `data:image/svg+xml,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
-  <rect width="400" height="400" rx="56" fill="#fff0e4"/>
-  <path d="M116 154 88 102a16 16 0 0 1 24-19l48 34a116 116 0 0 1 80 0l48-34a16 16 0 0 1 24 19l-28 52a116 116 0 1 1-168 0Z" fill="#f6cdbd"/>
-  <circle cx="154" cy="210" r="16" fill="#705247"/>
-  <circle cx="246" cy="210" r="16" fill="#705247"/>
-  <path d="M200 232c14 0 26 7 26 16s-12 16-26 16-26-7-26-16 12-16 26-16Z" fill="#e85f4b"/>
-  <path d="M168 284c18 16 46 16 64 0" fill="none" stroke="#705247" stroke-width="14" stroke-linecap="round"/>
+  <rect width="400" height="400" rx="56" fill="#ffffff"/>
+  <path d="M116 154 88 102a16 16 0 0 1 24-19l48 34a116 116 0 0 1 80 0l48-34a16 16 0 0 1 24 19l-28 52a116 116 0 1 1-168 0Z" fill="#E8D1A7"/>
+  <circle cx="154" cy="210" r="16" fill="#743014"/>
+  <circle cx="246" cy="210" r="16" fill="#743014"/>
+  <path d="M200 232c14 0 26 7 26 16s-12 16-26 16-26-7-26-16 12-16 26-16Z" fill="#743014"/>
+  <path d="M168 284c18 16 46 16 64 0" fill="none" stroke="#743014" stroke-width="14" stroke-linecap="round"/>
 </svg>
 `)}`;
 
