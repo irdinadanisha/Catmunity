@@ -5283,7 +5283,7 @@ function CatHeadMarker({ image, locked = false, count }) {
 const catHeadPath =
   'M50 15 C43 15 38 17 34 21 L19 8 C16 6 13 8 14 13 L18 34 C12 42 10 53 12 64 C15 83 31 94 50 94 C69 94 85 83 88 64 C90 53 88 42 82 34 L86 13 C87 8 84 6 81 8 L66 21 C62 17 57 15 50 15 Z';
 
-function CatHeadShape({ image, fill = 'rgba(116, 48, 20, 0.95)', className = '', children }) {
+function CatHeadShape({ image, fill = 'rgba(232, 95, 75, 0.95)', className = '', children }) {
   const patternId = `cat-head-pattern-${useId().replaceAll(':', '')}`;
   const gradientId = `cat-head-gradient-${useId().replaceAll(':', '')}`;
   const shapeFill = fill === 'action' ? `url(#${gradientId})` : fill;
@@ -5303,8 +5303,8 @@ function CatHeadShape({ image, fill = 'rgba(116, 48, 20, 0.95)', className = '',
             </pattern>
           )}
           <linearGradient id={gradientId} x1="15" y1="14" x2="88" y2="90" gradientUnits="userSpaceOnUse">
-            <stop stopColor="#743014" />
-            <stop offset="1" stopColor="#743014" />
+            <stop stopColor="#e85f4b" />
+            <stop offset="1" stopColor="#f08a59" />
           </linearGradient>
         </defs>
         <path d={catHeadPath} fill={image ? `url(#${patternId})` : shapeFill} />
@@ -5494,7 +5494,7 @@ async function createCroppedProfilePhoto(imageUrl, filename, settings) {
   const offsetX = maxOffsetX * (settings.x / 100);
   const offsetY = maxOffsetY * (settings.y / 100);
 
-  context.fillStyle = '#E8D1A7';
+  context.fillStyle = '#fff0c8';
   context.fillRect(0, 0, outputSize, outputSize);
   context.drawImage(image, offsetX, offsetY, drawnWidth, drawnHeight);
 
@@ -5537,7 +5537,7 @@ async function createSquareCatchCrop(imageUrl, filename, settings) {
   const offsetX = (outputSize - drawnWidth) / 2 + (settings.x || 0) * outputRatio;
   const offsetY = (outputSize - drawnHeight) / 2 + (settings.y || 0) * outputRatio;
 
-  context.fillStyle = '#E8D1A7';
+  context.fillStyle = '#fff0c8';
   context.fillRect(0, 0, outputSize, outputSize);
   context.drawImage(image, offsetX, offsetY, drawnWidth, drawnHeight);
 
