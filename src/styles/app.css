@@ -2919,6 +2919,7 @@ button:disabled {
 
 .collection-title-copy {
   min-width: 0;
+  transform: translateY(-6px);
 }
 
 .collection-title-main {
@@ -2936,6 +2937,7 @@ button:disabled {
   display: grid;
   gap: 4px;
   flex: 0 0 auto;
+  transform: translateY(-6px);
 }
 
 .collection-title-stats span {
@@ -3043,8 +3045,10 @@ button:disabled {
   box-shadow: 0 10px 22px rgba(83, 55, 38, 0.08);
 }
 
-.own-profile-screen {
+.own-profile-screen,
+.public-profile-screen {
   gap: 14px;
+  padding-top: 8px;
 }
 
 .profile-readonly-hero {
@@ -3150,6 +3154,15 @@ button:disabled {
 .identity-current-card:hover {
   border-color: rgba(232, 95, 75, 0.22);
   background: rgba(255, 248, 239, 0.9);
+}
+
+.identity-current-card--static {
+  cursor: default;
+}
+
+.identity-current-card--static:hover {
+  border-color: rgba(93, 65, 45, 0.1);
+  background: rgba(255, 255, 255, 0.74);
 }
 
 .identity-current-icon {

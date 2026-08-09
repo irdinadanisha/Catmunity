@@ -3697,7 +3697,7 @@ function PublicProfileScreen({
   onOpenPost,
 }) {
   return (
-    <section className="screen">
+    <section className="screen public-profile-screen">
       <ProfileOverview
         user={user}
         cats={cats}
@@ -3769,7 +3769,7 @@ function ProfileOverview({
         )}
       </div>
 
-      <ProfileIdentity cats={cats} user={user} />
+      <ProfileIdentity cats={cats} user={user} isOwnProfile={isOwnProfile} />
       <FavouriteCats
         cats={cats}
         favoriteCatIds={favoriteCatIds}
@@ -3785,25 +3785,29 @@ function ProfileOverview({
   );
 }
 
-function ProfileIdentity({ cats, user }) {
+function ProfileIdentity({ cats, user, isOwnProfile = false }) {
   const [showIdentityGuide, setShowIdentityGuide] = useState(false);
   const count = new Set(cats.map((cat) => cat.id)).size;
   const identity = getCatmunityIdentity(count);
   const nextTier = getNextCatmunityIdentityTier(count);
   const progressTarget = nextTier?.min ?? count;
+  const CardTag = isOwnProfile ? 'button' : 'div';
   return (
     <section className="profile-section profile-identity-section">
       <h2 className="identity-section-title"><PawPrint size={18} /> Identity</h2>
-      <button className="identity-current-card" type="button" onClick={() => setShowIdentityGuide(true)}>
+      <CardTag
+        className={`identity-current-card${isOwnProfile ? '' : ' identity-current-card--static'}`}
+        {...(isOwnProfile ? { type: 'button', onClick: () => setShowIdentityGuide(true) } : {})}
+      >
         <span className="identity-current-icon">{count >= 50 ? '👑' : count >= 25 ? '🕵️' : count >= 10 ? '🔎' : '🐾'}</span>
         <span className="identity-current-copy">
           <strong>{identity}</strong>
           <span>{count} / {progressTarget} cats</span>
           <em>{nextTier ? `Next: ${nextTier.name}` : 'Highest identity unlocked'}</em>
         </span>
-        <ChevronRight className="identity-current-chevron" size={22} aria-hidden="true" />
-      </button>
-      {showIdentityGuide && (
+        {isOwnProfile && <ChevronRight className="identity-current-chevron" size={22} aria-hidden="true" />}
+      </CardTag>
+      {isOwnProfile && showIdentityGuide && (
         <IdentityGuideModal currentCount={count} currentIdentity={identity} onClose={() => setShowIdentityGuide(false)} />
       )}
     </section>
@@ -3958,7 +3962,9 @@ function RecentDiscoveries({ cats, onSelectCat, onOpenCollection }) {
     <section className="profile-section">
       <div className="section-title-row">
         <h2>Recent Discoveries</h2>
-        <button className="mini-text-button" type="button" onClick={onOpenCollection}>See all →</button>
+        {cats.length >= 5 && (
+          <button className="mini-text-button" type="button" onClick={onOpenCollection}>See all →</button>
+        )}
       </div>
       {recentCats.length > 0 ? (
         <div className="recent-cat-row">
