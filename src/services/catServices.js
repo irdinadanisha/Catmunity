@@ -31,7 +31,7 @@ export async function getCurrentAccurateLocation() {
         });
       },
       () => resolve(defaultAccurateLocation),
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
     );
   });
 }

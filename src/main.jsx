@@ -1515,6 +1515,12 @@ function getCatmunityIdentity(uniqueCatCount) {
   return 'New to Catmunity';
 }
 
+function formatCatDistance(distanceMeters) {
+  if (!Number.isFinite(distanceMeters)) return '';
+  if (distanceMeters < 1000) return `${Math.max(1, Math.round(distanceMeters))} m`;
+  return `${(distanceMeters / 1000).toFixed(distanceMeters < 10000 ? 2 : 1)} km`;
+}
+
 function getNextCatmunityIdentityTier(uniqueCatCount) {
   const tiers = [
     { name: 'New Paw', min: 1 },
@@ -1903,30 +1909,46 @@ function ExploreScreen({ cats, currentUser, currentUserId, navigate, setSelected
   const [hideCaught, setHideCaught] = useState(false);
   const [sortMode, setSortMode] = useState('Recent');
   const [sheetFocusSignal, setSheetFocusSignal] = useState(0);
+  const [userMapPosition, setUserMapPosition] = useState(null);
   const filters = ['All', 'Nearby', 'Unlocked', 'Locked', 'Friendly', 'Sleepy', 'Food Spots'];
   const normalizedQuery = normalizeSearchText(query);
   const detectedKeywords = catKeywordSuggestions.filter((keyword) => normalizedQuery.includes(normalizeSearchText(keyword)));
-  const nearbyCats = cats.filter((cat) => {
-    const caught = (cat.caught_by_users || []).includes(currentUserId);
-    const searchableText = getCatSearchText(cat, caught);
-    const matchesTextQuery =
-      !normalizedQuery ||
-      normalizedQuery
-        .split(/\s+/u)
-        .filter(Boolean)
-        .every((word) => searchableText.includes(word));
-    const matchesKeywordQuery =
-      detectedKeywords.length === 0 ||
-      detectedKeywords.some((keyword) => searchableText.includes(normalizeSearchText(keyword)));
-    const matchesCaught = !hideCaught || !caught;
-    const matchesFilter =
-      activeFilter === 'All' ||
-      activeFilter === 'Nearby' ||
-      (activeFilter === 'Unlocked' && caught) ||
-      (activeFilter === 'Locked' && !caught) ||
-      searchableText.includes(normalizeSearchText(activeFilter.replace(' spots', '')));
-    return (detectedKeywords.length ? matchesKeywordQuery : matchesTextQuery) && matchesCaught && matchesFilter;
-  });
+  const nearbyCats = cats
+    .map((cat) => {
+      const distanceMeters = userMapPosition
+        ? getDistanceMeters(userMapPosition, getCatMapPosition(cat))
+        : Number.POSITIVE_INFINITY;
+      return {
+        ...cat,
+        distanceMeters,
+        distance: formatCatDistance(distanceMeters),
+      };
+    })
+    .filter((cat) => {
+      const caught = (cat.caught_by_users || []).includes(currentUserId);
+      const searchableText = getCatSearchText(cat, caught);
+      const matchesTextQuery =
+        !normalizedQuery ||
+        normalizedQuery
+          .split(/\s+/u)
+          .filter(Boolean)
+          .every((word) => searchableText.includes(word));
+      const matchesKeywordQuery =
+        detectedKeywords.length === 0 ||
+        detectedKeywords.some((keyword) => searchableText.includes(normalizeSearchText(keyword)));
+      const matchesCaught = !hideCaught || !caught;
+      const matchesFilter =
+        activeFilter === 'All' ||
+        (activeFilter === 'Nearby' && (!userMapPosition || cat.distanceMeters <= 2000)) ||
+        (activeFilter === 'Unlocked' && caught) ||
+        (activeFilter === 'Locked' && !caught) ||
+        searchableText.includes(normalizeSearchText(activeFilter.replace(' spots', '')));
+      return (detectedKeywords.length ? matchesKeywordQuery : matchesTextQuery) && matchesCaught && matchesFilter;
+    })
+    .sort((first, second) => {
+      if (sortMode === 'Nearest' || activeFilter === 'Nearby') return first.distanceMeters - second.distanceMeters;
+      return new Date(second.updated_at || second.discovered_at || second.created_at || 0) - new Date(first.updated_at || first.discovered_at || first.created_at || 0);
+    });
 
   function openCat(cat) {
     setDetailCatOverride(null);
@@ -1953,6 +1975,7 @@ function ExploreScreen({ cats, currentUser, currentUserId, navigate, setSelected
           currentUser={currentUser}
           currentUserId={currentUserId}
           activeCatId={activeCatId}
+          onUserPositionChange={setUserMapPosition}
           onSelect={selectCatOnMap}
         />
       </div>
@@ -2002,7 +2025,7 @@ function ExploreScreen({ cats, currentUser, currentUserId, navigate, setSelected
           {nearbyCats.map((cat, index) => (
             <CatCard
               key={cat.id}
-              cat={{ ...cat, distance: `${(index * 0.16 + 0.08).toFixed(2)} km` }}
+              cat={cat}
               locked={!(cat.caught_by_users || []).includes(currentUserId)}
               onOpen={() => {
                 setDetailCatOverride(null);
@@ -4775,7 +4798,7 @@ function useGoogleMapsAuthFailure() {
   return authFailed;
 }
 
-function GoogleCatMap({ cats, currentUser, currentUserId, activeCatId, centerSignal, onSelect }) {
+function GoogleCatMap({ cats, currentUser, currentUserId, activeCatId, centerSignal, onSelect, onUserPositionChange }) {
   if (!googleMapsApiKey) {
     return (
       <div className="mock-map immersive-map google-map-missing" role="img" aria-label="Google Maps API key missing">
@@ -4796,11 +4819,12 @@ function GoogleCatMap({ cats, currentUser, currentUserId, activeCatId, centerSig
       activeCatId={activeCatId}
       centerSignal={centerSignal}
       onSelect={onSelect}
+      onUserPositionChange={onUserPositionChange}
     />
   );
 }
 
-function RealGoogleMap({ cats, currentUser, currentUserId, activeCatId, centerSignal, onSelect }) {
+function RealGoogleMap({ cats, currentUser, currentUserId, activeCatId, centerSignal, onSelect, onUserPositionChange }) {
   const [userPosition, setUserPosition] = useState(null);
   const [mapCenter, setMapCenter] = useState(defaultMapCenter);
   const [locationStatus, setLocationStatus] = useState('locating');
@@ -4823,6 +4847,7 @@ function RealGoogleMap({ cats, currentUser, currentUserId, activeCatId, centerSi
       ({ coords }) => {
         const nextPosition = { lat: coords.latitude, lng: coords.longitude };
         setUserPosition(nextPosition);
+        onUserPositionChange?.(nextPosition);
         setMapCenter(nextPosition);
         mapRef.current?.panTo(nextPosition);
         mapRef.current?.setZoom(16);
@@ -4830,9 +4855,10 @@ function RealGoogleMap({ cats, currentUser, currentUserId, activeCatId, centerSi
       },
       () => {
         setMapCenter(defaultMapCenter);
+        onUserPositionChange?.(null);
         setLocationStatus('denied');
       },
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
     );
   }
 
