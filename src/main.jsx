@@ -99,6 +99,68 @@ const tabs = [
   { id: 'profile', label: 'Profile', icon: User },
 ];
 
+function ActiveNavIcon({ id, size = 22 }) {
+  const commonProps = {
+    className: 'active-nav-svg',
+    width: size,
+    height: size,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    xmlns: 'http://www.w3.org/2000/svg',
+    'aria-hidden': 'true',
+  };
+
+  if (id === 'collection') {
+    return (
+      <svg {...commonProps}>
+        <path className="active-nav-fill" d="M12 21s6-5.68 6-11a6 6 0 0 0-12 0c0 5.32 6 11 6 11Z" />
+        <path className="active-nav-stroke" d="M12 21s6-5.68 6-11a6 6 0 0 0-12 0c0 5.32 6 11 6 11Z" />
+        <circle className="active-nav-cutout" cx="12" cy="10" r="2.35" />
+      </svg>
+    );
+  }
+
+  if (id === 'catch') {
+    return (
+      <svg {...commonProps}>
+        <path className="active-nav-fill" d="M5.2 20c-1.1-1.05-1.7-2.45-1.7-4.1V8.15L7.6 10l2.08-.52a9.2 9.2 0 0 1 4.64 0L16.4 10l4.1-1.85v7.75c0 1.65-.6 3.05-1.7 4.1-1.34 1.28-3.55 1.9-6.8 1.9s-5.46-.62-6.8-1.9Z" />
+        <path className="active-nav-stroke" d="M5.2 20c-1.1-1.05-1.7-2.45-1.7-4.1V8.15L7.6 10l2.08-.52a9.2 9.2 0 0 1 4.64 0L16.4 10l4.1-1.85v7.75c0 1.65-.6 3.05-1.7 4.1-1.34 1.28-3.55 1.9-6.8 1.9s-5.46-.62-6.8-1.9Z" />
+        <circle className="active-nav-detail-fill" cx="8.6" cy="14.15" r="0.8" />
+        <circle className="active-nav-detail-fill" cx="15.4" cy="14.15" r="0.8" />
+        <path className="active-nav-detail-stroke" d="M10.25 17.15c.48.45 1.03.68 1.75.68s1.27-.23 1.75-.68M12 15.35v1.12" />
+      </svg>
+    );
+  }
+
+  if (id === 'community') {
+    return (
+      <svg {...commonProps}>
+        <circle className="active-nav-fill" cx="9" cy="8.4" r="3" />
+        <path className="active-nav-fill" d="M3.9 20.2c.35-3.35 2.35-5.15 5.1-5.15s4.75 1.8 5.1 5.15H3.9Z" />
+        <circle className="active-nav-fill-soft" cx="16.45" cy="9.1" r="2.45" />
+        <path className="active-nav-fill-soft" d="M14.55 20.2c.35-2.95 2.3-4.57 5.25-4.75v4.75h-5.25Z" />
+        <circle className="active-nav-stroke" cx="9" cy="8.4" r="3" />
+        <path className="active-nav-stroke" d="M3.9 20.2c.35-3.35 2.35-5.15 5.1-5.15s4.75 1.8 5.1 5.15" />
+        <circle className="active-nav-stroke" cx="16.45" cy="9.1" r="2.45" />
+        <path className="active-nav-stroke" d="M14.55 15.45c2.95.18 4.9 1.8 5.25 4.75" />
+      </svg>
+    );
+  }
+
+  if (id === 'profile') {
+    return (
+      <svg {...commonProps}>
+        <circle className="active-nav-fill" cx="12" cy="7.8" r="3.25" />
+        <path className="active-nav-fill" d="M5.2 20.25c.48-4.15 3-6.25 6.8-6.25s6.32 2.1 6.8 6.25H5.2Z" />
+        <circle className="active-nav-stroke" cx="12" cy="7.8" r="3.25" />
+        <path className="active-nav-stroke" d="M5.2 20.25c.48-4.15 3-6.25 6.8-6.25s6.32 2.1 6.8 6.25" />
+      </svg>
+    );
+  }
+
+  return null;
+}
+
 const fallbackUserId = 'local-user';
 const catKeywordSuggestions = [
   'sleepy',
@@ -1322,7 +1384,7 @@ function App() {
               (tab.id === 'profile' && screen === 'settings');
             return (
               <button className={active ? 'nav-item active' : 'nav-item'} data-tab={tab.id} key={tab.id} onClick={() => navigate(tab.id)}>
-                <Icon size={20} />
+                {active && tab.id !== 'explore' ? <ActiveNavIcon id={tab.id} size={20} /> : <Icon size={20} />}
                 <span>{tab.label}</span>
               </button>
             );
