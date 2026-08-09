@@ -1593,7 +1593,7 @@ function getProfileBadges({ cats = [], posts = [], mutualFriendCount = 0 }) {
       unlocked: uniqueCatsUnlocked >= 20 && previouslyLockedCatsUnlocked >= 10,
       description: 'For personally unlocking cats that were already part of Catmunity.',
       requirement: 'Unlock 20 unique cats and 10 previously locked cats.',
-      progress: `${Math.min(uniqueCatsUnlocked, 20)} / 20 cats · ${Math.min(previouslyLockedCatsUnlocked, 10)} / 10 locked cats`,
+      progress: `${Math.min(uniqueCatsUnlocked, 20)} / 20 cats`,
     },
     {
       icon: '🌅',
@@ -3601,6 +3601,7 @@ function ProfileOverview({
           <UserHandle user={user} />
           <p>{user.bio || 'No bio yet.'}</p>
           <FollowCounts user={user} counts={followCounts} onOpen={onOpenFollowList} />
+          <span className="profile-member-since">Member since {formatMemberSince(user.created_at)}</span>
         </div>
         <div className="profile-status-actions">
           <span className="profile-status"><ShieldCheck size={14} /> {user.public_profile ? 'Public' : 'Private'}</span>
@@ -3636,7 +3637,7 @@ function ProfileIdentity({ cats, user }) {
   const progressTarget = nextTier?.min ?? count;
   return (
     <section className="profile-section profile-identity-section">
-      <p className="eyebrow"><PawPrint size={14} /> CATMUNITY IDENTITY</p>
+      <p className="eyebrow"><PawPrint size={14} /> Identity</p>
       <button className="identity-current-card" type="button" onClick={() => setShowIdentityGuide(true)}>
         <span className="identity-current-icon"><PawPrint size={20} /></span>
         <span className="identity-current-copy">
@@ -3646,7 +3647,6 @@ function ProfileIdentity({ cats, user }) {
         </span>
         <ChevronRight className="identity-current-chevron" size={22} aria-hidden="true" />
       </button>
-      <span className="identity-member-since">Member since {formatMemberSince(user.created_at)}</span>
       {showIdentityGuide && (
         <IdentityGuideModal currentCount={count} currentIdentity={identity} onClose={() => setShowIdentityGuide(false)} />
       )}
@@ -3676,14 +3676,13 @@ function IdentityGuideModal({ currentCount, currentIdentity, onClose }) {
           {identities.map((tier) => {
             const unlocked = currentCount >= tier.min;
             const active = tier.name === currentIdentity;
-            const progress = `${Math.min(currentCount, tier.min)} / ${tier.min} toward ${tier.name}`;
             const remaining = `${tier.min - currentCount} more ${tier.min - currentCount === 1 ? 'cat' : 'cats'} to unlock`;
             return (
               <article className={active ? 'identity-tier active' : unlocked ? 'identity-tier unlocked' : 'identity-tier locked'} key={tier.name}>
                 <span>{unlocked ? '🐾' : '🔒'}</span>
                 <strong>{tier.name}</strong>
                 <small>{tier.range}</small>
-                {!unlocked && <em>{tier.name === 'Cat Spotter' ? remaining : progress}</em>}
+                {!unlocked && <em>{remaining}</em>}
               </article>
             );
           })}

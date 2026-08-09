@@ -2977,6 +2977,14 @@ button:disabled {
   line-height: 1.35;
 }
 
+.profile-member-since {
+  display: block;
+  margin-top: 7px;
+  color: #8a766c;
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
 .profile-section {
   display: grid;
   gap: 12px;
@@ -3050,7 +3058,6 @@ button:disabled {
 
 .identity-current-copy span,
 .identity-current-card em,
-.identity-member-since,
 .profile-empty-line {
   color: #806a5e;
   font-size: 0.86rem;
@@ -3063,10 +3070,6 @@ button:disabled {
 
 .identity-current-chevron {
   color: #7b6154;
-}
-
-.identity-member-since {
-  padding-left: 2px;
 }
 
 .mini-text-button {
@@ -3181,16 +3184,43 @@ button:disabled {
 .profile-life-grid,
 .badge-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
+.profile-life-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
 .profile-life-grid .stat {
-  min-height: 68px;
-  padding: 10px;
-  border-radius: 18px;
+  min-height: 76px;
+  grid-template-columns: 1fr;
+  grid-template-areas:
+    "icon"
+    "value"
+    "label";
+  justify-items: center;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 5px;
+  border-radius: 16px;
   background: rgba(255, 249, 240, 0.76);
   border: 1px solid rgba(80, 55, 40, 0.06);
+  text-align: center;
+}
+
+.profile-life-grid .stat svg {
+  width: 23px;
+  height: 23px;
+}
+
+.profile-life-grid .stat strong {
+  font-size: 1.14rem;
+}
+
+.profile-life-grid .stat span {
+  font-size: 0.68rem;
+  line-height: 1.05;
 }
 
 .badge-grid {
