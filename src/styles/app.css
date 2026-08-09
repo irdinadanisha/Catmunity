@@ -455,7 +455,8 @@ button:disabled {
 }
 
 .notification-panel,
-.follow-list-panel {
+.follow-list-panel,
+.friend-search-panel {
   width: min(440px, 100%);
   max-height: min(66vh, 620px);
   display: grid;
@@ -470,6 +471,10 @@ button:disabled {
 
 .follow-list-panel {
   max-height: min(72vh, 660px);
+}
+
+.friend-search-panel {
+  max-height: min(72vh, 620px);
 }
 
 .notification-list {
@@ -3928,6 +3933,12 @@ button:disabled {
   background: rgba(255, 255, 255, 0.82);
   border: 1px solid rgba(80, 55, 40, 0.06);
   box-shadow: 0 12px 30px rgba(83, 55, 38, 0.07);
+}
+
+.community-follow-summary {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -10px;
 }
 
 .friend-search-row {

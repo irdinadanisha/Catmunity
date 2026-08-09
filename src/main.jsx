@@ -197,6 +197,7 @@ function App() {
   const [notifications, setNotifications] = useState([]);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [communitySearchOpen, setCommunitySearchOpen] = useState(false);
   const [toast, setToast] = useState('');
 
   useEffect(() => {
@@ -1127,6 +1128,7 @@ function App() {
           stats={stats}
           notificationCount={unreadNotificationCount}
           onOpenNotifications={openNotifications}
+          onOpenCommunitySearch={screen === 'community' ? () => setCommunitySearchOpen(true) : null}
         />
       )}
       {notificationsOpen && (
@@ -1281,7 +1283,9 @@ function App() {
             followingProfiles={followingProfiles}
             followerProfiles={followerProfiles}
             followCounts={followCountsByUserId[currentUserId] || { following: followingProfiles.length, followers: followerProfiles.length }}
+            searchOpen={communitySearchOpen}
             onSearchFriends={handleSearchFriends}
+            onCloseSearch={() => setCommunitySearchOpen(false)}
             onToggleFollow={handleToggleFollow}
             onOpenFollowList={openFollowList}
             onCreate={() => {
@@ -1876,7 +1880,7 @@ function AuthScreen({ onSubmit }) {
   );
 }
 
-function TopBar({ user, notificationCount = 0, onOpenNotifications }) {
+function TopBar({ user, notificationCount = 0, onOpenNotifications, onOpenCommunitySearch = null }) {
   return (
     <header className="top-bar">
       <div>
@@ -1884,6 +1888,11 @@ function TopBar({ user, notificationCount = 0, onOpenNotifications }) {
         <h1>Hi, {user.name}</h1>
       </div>
       <div className="top-actions">
+        {onOpenCommunitySearch && (
+          <button className="icon-button" aria-label="Find your purrpals" onClick={onOpenCommunitySearch}>
+            <Search size={20} />
+          </button>
+        )}
         <button className="icon-button notification-button" aria-label="Notifications" onClick={onOpenNotifications}>
           <Bell size={20} />
           {notificationCount > 0 && <span>{notificationCount}</span>}
@@ -4042,7 +4051,9 @@ function CommunityScreen({
   followingProfiles,
   followerProfiles,
   followCounts,
+  searchOpen,
   onSearchFriends,
+  onCloseSearch,
   onToggleFollow,
   onOpenFollowList,
   onCreate,
@@ -4056,6 +4067,7 @@ function CommunityScreen({
   const [friendQuery, setFriendQuery] = useState('');
   const [friendResults, setFriendResults] = useState([]);
   const [searchingFriends, setSearchingFriends] = useState(false);
+  const [friendSearchSubmitted, setFriendSearchSubmitted] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -4075,6 +4087,7 @@ function CommunityScreen({
 
   async function handleFriendSearch(event) {
     event.preventDefault();
+    setFriendSearchSubmitted(true);
     setSearchingFriends(true);
     const results = await onSearchFriends(friendQuery);
     setFriendResults(results);
@@ -4094,39 +4107,31 @@ function CommunityScreen({
   return (
     <section className="screen">
       <ScreenHeader title="Commeownity" subtitle="Follow friends and see cats near your current place." icon={Users} />
-      <section className="friend-finder">
-        <div className="section-title-row">
-          <h2>Find meow lovers</h2>
-          <FollowCounts user={currentUser} counts={followCounts} onOpen={onOpenFollowList} compact />
-        </div>
-        <form className="friend-search-row" onSubmit={handleFriendSearch}>
-          <Search size={18} />
-          <input
-            value={friendQuery}
-            placeholder="Search by username"
-            onChange={(event) => setFriendQuery(event.target.value)}
-          />
-          <button type="submit">{searchingFriends ? '...' : 'Search'}</button>
-        </form>
-        <div className="friend-result-list">
-          {friendResults.map((user) => {
-            const following = followingIds.includes(user.id);
-            return (
-              <FriendResult
-                key={user.id}
-                user={user}
-                currentUserId={currentUserId}
-                following={following}
-                onOpenUser={onOpenUser}
-                onToggleFollow={onToggleFollow}
-              />
-            );
-          })}
-          {friendQuery && !searchingFriends && friendResults.length === 0 && (
-            <p className="empty-community-copy">No public users found with that username yet.</p>
-          )}
-        </div>
-      </section>
+      <div className="community-follow-summary">
+        <FollowCounts user={currentUser} counts={followCounts} onOpen={onOpenFollowList} compact />
+      </div>
+      {searchOpen && (
+        <FriendSearchOverlay
+          query={friendQuery}
+          results={friendResults}
+          searching={searchingFriends}
+          currentUserId={currentUserId}
+          followingIds={followingIds}
+          hasSearched={friendSearchSubmitted}
+          onChangeQuery={(value) => {
+            setFriendQuery(value);
+            setFriendSearchSubmitted(false);
+            setFriendResults([]);
+          }}
+          onSubmit={handleFriendSearch}
+          onClose={onCloseSearch}
+          onOpenUser={(id) => {
+            onCloseSearch();
+            onOpenUser(id);
+          }}
+          onToggleFollow={onToggleFollow}
+        />
+      )}
       <div className="safety-strip"><ShieldCheck size={17} /> This app is for memories and sightings. Give every cat space and kindness.</div>
       <div className="section-title-row">
         <div>
@@ -4977,6 +4982,62 @@ function FollowListModal({ modal, currentUserId, followingIds, onClose, onOpenUs
             <p className="empty-community-copy">
               {modal.type === 'followers' ? 'No followers yet.' : 'Not following anyone yet.'}
             </p>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function FriendSearchOverlay({
+  query,
+  results,
+  searching,
+  currentUserId,
+  followingIds,
+  hasSearched,
+  onChangeQuery,
+  onSubmit,
+  onClose,
+  onOpenUser,
+  onToggleFollow,
+}) {
+  const showSearchState = hasSearched && query.trim().length > 0 && !searching;
+
+  return (
+    <div className="notification-overlay" role="dialog" aria-modal="true" aria-label="Find your purrpals">
+      <section className="friend-search-panel">
+        <div className="section-title-row">
+          <div>
+            <h2>Find purrpals</h2>
+            <span className="quiet-label">Search by username</span>
+          </div>
+          <button className="icon-button" type="button" onClick={onClose} aria-label="Close friend search"><X size={18} /></button>
+        </div>
+        <form className="friend-search-row" onSubmit={onSubmit}>
+          <Search size={18} />
+          <input
+            value={query}
+            placeholder="Find your @purrpals!"
+            autoFocus
+            onChange={(event) => onChangeQuery(event.target.value)}
+          />
+          <button type="submit">{searching ? '...' : 'Search'}</button>
+        </form>
+        <div className="friend-result-list">
+          {searching && <p className="empty-community-copy">Looking for purrpals...</p>}
+          {results.map((user) => (
+            <FriendResult
+              key={user.id}
+              user={user}
+              currentUserId={currentUserId}
+              following={followingIds.includes(user.id)}
+              onOpenUser={onOpenUser}
+              onToggleFollow={onToggleFollow}
+            />
+          ))}
+          {showSearchState && results.length === 0 && (
+            <p className="empty-community-copy">No public users found with that username yet.</p>
           )}
         </div>
       </section>
