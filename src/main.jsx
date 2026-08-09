@@ -99,12 +99,14 @@ const tabs = [
   { id: 'profile', label: 'Profile', icon: User },
 ];
 
-function ActiveNavIcon({ id, size = 22 }) {
+const NAV_ICON_SIZE = 22;
+
+function ActiveNavIcon({ id, size = NAV_ICON_SIZE }) {
   const commonProps = {
     className: 'active-nav-svg',
     width: size,
     height: size,
-    viewBox: '0 0 24 24',
+    viewBox: '1.5 1.5 21 21',
     fill: 'none',
     xmlns: 'http://www.w3.org/2000/svg',
     'aria-hidden': 'true',
@@ -1384,7 +1386,7 @@ function App() {
               (tab.id === 'profile' && screen === 'settings');
             return (
               <button className={active ? 'nav-item active' : 'nav-item'} data-tab={tab.id} key={tab.id} onClick={() => navigate(tab.id)}>
-                {active && tab.id !== 'explore' ? <ActiveNavIcon id={tab.id} /> : <Icon size={20} />}
+                {active && tab.id !== 'explore' ? <ActiveNavIcon id={tab.id} /> : <Icon size={NAV_ICON_SIZE} />}
                 <span>{tab.label}</span>
               </button>
             );

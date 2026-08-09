@@ -209,6 +209,12 @@ button:disabled {
   font-weight: 800;
 }
 
+.nav-item > svg {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+}
+
 .nav-item.active {
   background: transparent;
   color: var(--nav-active);
