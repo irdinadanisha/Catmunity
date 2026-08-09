@@ -1384,7 +1384,7 @@ function App() {
               (tab.id === 'profile' && screen === 'settings');
             return (
               <button className={active ? 'nav-item active' : 'nav-item'} data-tab={tab.id} key={tab.id} onClick={() => navigate(tab.id)}>
-                {active && tab.id !== 'explore' ? <ActiveNavIcon id={tab.id} size={20} /> : <Icon size={20} />}
+                {active && tab.id !== 'explore' ? <ActiveNavIcon id={tab.id} /> : <Icon size={20} />}
                 <span>{tab.label}</span>
               </button>
             );
