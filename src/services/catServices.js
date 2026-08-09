@@ -145,6 +145,11 @@ export function approximateLocation(latitude, longitude) {
 
 export function createNewCatWithCanonicalLocation({ capture, form = {}, currentUserId }) {
   const now = new Date().toISOString();
+  const discoveredAt = getDiscoveryTimestamp({
+    dateFound: form.date_found,
+    capturedAt: capture?.capturedAt,
+    fallbackTimestamp: now,
+  });
   const catId = form.id || `cat-${Date.now()}`;
   const fallbackApproximate = getApproximateLocation(capture.latitude, capture.longitude);
   const approximate = {
@@ -195,7 +200,7 @@ export function createNewCatWithCanonicalLocation({ capture, form = {}, currentU
     area_name: approximate.areaName,
     city: approximate.city,
     country: approximate.country,
-    discovered_at: form.date_found ? new Date(`${form.date_found}T12:00:00`).toISOString() : now,
+    discovered_at: discoveredAt,
     user_cats: [
       createUserCatRecord({
         userId: currentUserId,
@@ -205,6 +210,7 @@ export function createNewCatWithCanonicalLocation({ capture, form = {}, currentU
         userGivenName: form.name,
         userNotes: form.remarks,
         discoveredAt: form.date_found,
+        capturedAt: capture?.capturedAt,
       }),
     ],
     sighting_count: 1,
@@ -460,6 +466,7 @@ export async function createNewCatInSupabase({ capture, form, uiUserId }) {
     userGivenName: localCat.name,
     userNotes: localCat.remarks,
     discoveredAt: form.date_found,
+    capturedAt: persistentCapture?.capturedAt,
   });
 
   await createSupabaseSighting({
@@ -647,7 +654,7 @@ export async function updateCatDetailsInSupabase(catId, form) {
   const [{ data: existingUserCat }, { data: existingCat }] = await Promise.all([
     supabase
       .from('user_cats')
-      .select('photo_urls, original_image_url, cropped_image_url')
+      .select('photo_urls, original_image_url, cropped_image_url, discovered_at')
       .eq('user_id', user.id)
       .eq('cat_id', catId)
       .maybeSingle(),
@@ -688,7 +695,10 @@ export async function updateCatDetailsInSupabase(catId, form) {
     updates.photo_urls = [...new Set(replacementPhotoUrls)];
   }
   if (form.date_found) {
-    updates.discovered_at = new Date(`${form.date_found}T12:00:00`).toISOString();
+    updates.discovered_at = getDiscoveryTimestamp({
+      dateFound: form.date_found,
+      existingTimestamp: existingUserCat?.discovered_at,
+    });
   }
 
   const { data, error } = await supabase
@@ -718,14 +728,42 @@ export async function updateCatDetailsInSupabase(catId, form) {
   return { data, error };
 }
 
-function createUserCatRecord({ userId, catId, capture, isUnlocked, userGivenName = '', userNotes = '', discoveredAt = '' }) {
+export function getDiscoveryTimestamp({
+  dateFound = '',
+  capturedAt = '',
+  existingTimestamp = '',
+  fallbackTimestamp = '',
+} = {}) {
+  const timeSource = capturedAt || existingTimestamp || fallbackTimestamp || new Date().toISOString();
+  const timeDate = new Date(timeSource);
+
+  if (!dateFound) {
+    return Number.isNaN(timeDate.getTime()) ? new Date().toISOString() : timeDate.toISOString();
+  }
+
+  const [year, month, day] = String(dateFound).split('-').map(Number);
+  if (![year, month, day].every(Number.isFinite)) {
+    return Number.isNaN(timeDate.getTime()) ? new Date().toISOString() : timeDate.toISOString();
+  }
+
+  const hours = Number.isNaN(timeDate.getTime()) ? 12 : timeDate.getHours();
+  const minutes = Number.isNaN(timeDate.getTime()) ? 0 : timeDate.getMinutes();
+  const seconds = Number.isNaN(timeDate.getTime()) ? 0 : timeDate.getSeconds();
+  const milliseconds = Number.isNaN(timeDate.getTime()) ? 0 : timeDate.getMilliseconds();
+  return new Date(year, month - 1, day, hours, minutes, seconds, milliseconds).toISOString();
+}
+
+function createUserCatRecord({ userId, catId, capture, isUnlocked, userGivenName = '', userNotes = '', discoveredAt = '', capturedAt = '' }) {
   const approximate = getCaptureApproximateLocation(capture);
 
   return {
     id: `user-cat-${userId}-${catId}-${Date.now()}`,
     user_id: userId,
     cat_id: catId,
-    discovered_at: discoveredAt ? new Date(`${discoveredAt}T12:00:00`).toISOString() : new Date().toISOString(),
+    discovered_at: getDiscoveryTimestamp({
+      dateFound: discoveredAt,
+      capturedAt: capturedAt || capture?.capturedAt,
+    }),
     user_given_name: userGivenName || null,
     user_notes: userNotes || null,
     colour: capture?.color || null,
@@ -750,7 +788,7 @@ async function getSupabaseUser() {
   return session?.user || null;
 }
 
-async function createSupabaseUserCat({ userId, catId, capture, personalDetails = {}, userGivenName = '', userNotes = '', discoveredAt = '' }) {
+async function createSupabaseUserCat({ userId, catId, capture, personalDetails = {}, userGivenName = '', userNotes = '', discoveredAt = '', capturedAt = '' }) {
   const approximate = getCaptureApproximateLocation(capture);
   const photoUrls = [capture?.croppedImage, capture?.originalImage].filter(Boolean);
   const payload = {
@@ -768,7 +806,10 @@ async function createSupabaseUserCat({ userId, catId, capture, personalDetails =
     original_image_url: capture?.originalImage || null,
     cropped_image_url: capture?.croppedImage || null,
     photo_urls: photoUrls,
-    discovered_at: discoveredAt ? new Date(`${discoveredAt}T12:00:00`).toISOString() : new Date().toISOString(),
+    discovered_at: getDiscoveryTimestamp({
+      dateFound: discoveredAt,
+      capturedAt: capturedAt || capture?.capturedAt,
+    }),
     is_unlocked: true,
     sighting_area_name: approximate.areaName,
     approximate_sighting_latitude: approximate.latitude,

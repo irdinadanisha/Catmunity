@@ -45,6 +45,7 @@ import {
   getDistanceMeters,
   getCurrentAccurateLocation,
   getApproximateLocation,
+  getDiscoveryTimestamp,
   handleDeleteCat,
   findNearbyCats,
   isWithinDuplicateRadius,
@@ -683,6 +684,7 @@ function App() {
         croppedImage: '',
         cropMode: 'manual-square',
         source,
+        capturedAt: new Date().toISOString(),
         locationStatus: 'detecting',
         locationName: '',
         locationError: '',
@@ -751,7 +753,7 @@ function App() {
       cropped_image_url: capture.croppedImage || existingCat?.cropped_image_url,
       original_image_url: capture.originalImage || existingCat?.original_image_url,
       location_name: capture.locationName || existingCat?.location_name,
-      discovered_at: new Date().toISOString(),
+      discovered_at: capture.capturedAt || new Date().toISOString(),
     });
     showToast('Same cat found. Add your own details.');
     navigate('detailsForm');
@@ -788,7 +790,9 @@ function App() {
               original_image_url: replacementImage?.originalImage || draftCat?.original_image_url || cat.original_image_url,
               photo_urls: [...new Set([...(cat.photo_urls || []), replacementImage?.croppedImage, replacementImage?.originalImage, draftCat?.cropped_image_url, draftCat?.original_image_url].filter(Boolean))],
               location_name: form.location_name,
-              discovered_at: form.date_found ? new Date(`${form.date_found}T12:00:00`).toISOString() : cat.discovered_at,
+              discovered_at: form.date_found
+                ? getDiscoveryTimestamp({ dateFound: form.date_found, existingTimestamp: cat.discovered_at })
+                : cat.discovered_at,
               updated_at: new Date().toISOString(),
             }
             : cat
@@ -1434,6 +1438,13 @@ function mapCommunityData(data, currentUserId) {
   const users = (data.profiles || []).map(mapCommunityProfile);
   const commentsByPost = new Map();
   const likesByPost = new Map();
+  const capturesByPostOwnerAndCat = new Map();
+
+  (data.captures || []).forEach((capture) => {
+    if (capture.user_id && capture.cat_id) {
+      capturesByPostOwnerAndCat.set(`${capture.user_id}:${capture.cat_id}`, capture.discovered_at);
+    }
+  });
 
   (data.likes || []).forEach((like) => {
     const likes = likesByPost.get(like.post_id) || [];
@@ -1467,6 +1478,7 @@ function mapCommunityData(data, currentUserId) {
       image_urls: post.image_urls || [],
       body: post.caption,
       location_name: post.location_name || 'Catmunity',
+      capture_discovered_at: capturesByPostOwnerAndCat.get(`${post.user_id}:${post.cat_id}`) || '',
       mentions: post.mentions || [],
       raw_created_at: post.created_at,
       created_at: formatPostTime(post.created_at),
@@ -1488,6 +1500,17 @@ function formatPostTime(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return 'Just now';
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function formatCaptureClockTime(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
 }
 
 function formatDiscoveryDate(value) {
@@ -4125,6 +4148,7 @@ function CommunityPostCard({ post, user, currentUser, cat, isFriendPost, onOpenU
   const postImageUrls = !imageFailed ? getCommunityPostImages(post, cat) : [];
   const fallbackPostImage = cat?.cropped_image_url;
   const displayImages = postImageUrls.length ? postImageUrls : [fallbackPostImage].filter(Boolean);
+  const captureTime = formatCaptureClockTime(post.capture_discovered_at || cat?.discovered_at);
 
   async function handleCommentImages(event) {
     const files = [...(event.target.files || [])].filter((file) => file.type.startsWith('image/'));
@@ -4167,7 +4191,7 @@ function CommunityPostCard({ post, user, currentUser, cat, isFriendPost, onOpenU
           </div>
           <small className="thread-meta">
             <MapPin size={13} />
-            {post.location_name}
+            {post.location_name}{captureTime ? `, ${captureTime}` : ''}
           </small>
           {displayImages.length > 0 && (
             <div className={displayImages.length > 1 ? 'post-image-gallery' : 'post-image-gallery single'}>

@@ -382,6 +382,23 @@ export async function loadCommunityPosts(currentUserId) {
   const error = postsError || commentsError || likesError;
   if (error) return { data: { posts: [], comments: [], likes: [], profiles: [] }, error };
 
+  const postedCatIds = [...new Set((posts || []).map((post) => post.cat_id).filter(Boolean))];
+  const postingUserIds = [...new Set((posts || []).map((post) => post.user_id).filter(Boolean))];
+  let captureRows = [];
+  if (postedCatIds.length && postingUserIds.length) {
+    const { data: userCatRows, error: userCatRowsError } = await supabase
+      .from('user_cats')
+      .select('user_id, cat_id, discovered_at')
+      .in('cat_id', postedCatIds)
+      .in('user_id', postingUserIds);
+
+    if (userCatRowsError) {
+      console.warn('Supabase community post capture time load failed', userCatRowsError);
+    } else {
+      captureRows = userCatRows || [];
+    }
+  }
+
   const profileIds = [
     ...new Set([
       ...(posts || []).map((post) => post.user_id),
@@ -395,6 +412,7 @@ export async function loadCommunityPosts(currentUserId) {
       posts: posts || [],
       comments: comments || [],
       likes: likes || [],
+      captures: captureRows,
       profiles: profiles || [],
       currentUserId,
     },
