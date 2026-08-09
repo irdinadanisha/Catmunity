@@ -1321,7 +1321,7 @@ function App() {
               (tab.id === 'collection' && ['detail', 'publicProfile'].includes(screen)) ||
               (tab.id === 'profile' && screen === 'settings');
             return (
-              <button className={active ? 'nav-item active' : 'nav-item'} key={tab.id} onClick={() => navigate(tab.id)}>
+              <button className={active ? 'nav-item active' : 'nav-item'} data-tab={tab.id} key={tab.id} onClick={() => navigate(tab.id)}>
                 <Icon size={20} />
                 <span>{tab.label}</span>
               </button>
