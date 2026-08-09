@@ -222,7 +222,8 @@ button:disabled {
 }
 
 .nav-item.active svg {
-  stroke: currentColor;
+  fill: color-mix(in srgb, var(--nav-active) 24%, transparent);
+  stroke: var(--nav-active);
   stroke-width: 2.75;
 }
 
@@ -231,48 +232,8 @@ button:disabled {
   stroke: var(--nav-active);
 }
 
-.nav-item .active-nav-svg {
-  overflow: visible;
-  color: var(--nav-active);
-}
-
-.active-nav-fill,
-.active-nav-fill-soft,
-.active-nav-cutout,
-.active-nav-detail-fill {
-  stroke: none;
-}
-
-.active-nav-fill {
-  fill: var(--nav-active-fill);
-}
-
-.active-nav-fill-soft {
-  fill: var(--nav-active-fill-soft);
-}
-
-.active-nav-cutout {
+.nav-item[data-tab="collection"].active svg circle {
   fill: rgba(255, 252, 247, 0.94);
-}
-
-.active-nav-detail-fill {
-  fill: var(--nav-active);
-}
-
-.active-nav-stroke,
-.active-nav-detail-stroke {
-  fill: none;
-  stroke: var(--nav-active);
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.active-nav-stroke {
-  stroke-width: 2.35;
-}
-
-.active-nav-detail-stroke {
-  stroke-width: 1.7;
 }
 
 .screen {
