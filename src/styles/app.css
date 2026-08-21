@@ -3587,6 +3587,10 @@ button:disabled {
   min-height: 260px;
 }
 
+.detail-location-panel .mini-map {
+  min-height: 220px;
+}
+
 .detail-photo-strip {
   display: grid;
   grid-auto-flow: column;

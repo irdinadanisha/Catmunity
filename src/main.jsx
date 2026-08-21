@@ -3630,6 +3630,15 @@ function CatDetailScreen({ selectedCat, currentUserId, users = [], onOpenUser = 
         </div>
       )}
       {!locked && (
+        <div className="detail-location-panel">
+          <MiniMap
+            cats={[selectedCat]}
+            labelTitle="Cat location"
+            labelSubtitle={selectedCat.location_name || selectedCat.area_name || 'Original pin'}
+          />
+        </div>
+      )}
+      {!locked && (
         <div className="detail-panel">
           <InfoRow label="Color" value={selectedCat.color} />
           <InfoRow label="Breed" value={selectedCat.breed} />
@@ -5345,7 +5354,7 @@ function CatHeadShape({ image, fill = 'rgba(232, 95, 75, 0.95)', className = '',
   );
 }
 
-function MiniMap({ cats, onSelect = () => {}, approximate = false }) {
+function MiniMap({ cats, onSelect = () => {}, approximate = false, labelTitle = '', labelSubtitle = '', className = '' }) {
   const firstCatPosition = cats[0] ? getCatMapPosition(cats[0]) : defaultMapCenter;
   const googleAuthFailed = useGoogleMapsAuthFailure();
   const { isLoaded, loadError } = useJsApiLoader({
@@ -5375,7 +5384,7 @@ function MiniMap({ cats, onSelect = () => {}, approximate = false }) {
   }
 
   return (
-    <div className="mini-map google-mini-map">
+    <div className={`mini-map google-mini-map${className ? ` ${className}` : ''}`}>
       <GoogleMap
         mapContainerClassName="google-map-canvas"
         mapContainerStyle={{ width: '100%', height: '100%' }}
@@ -5412,8 +5421,8 @@ function MiniMap({ cats, onSelect = () => {}, approximate = false }) {
         })}
       </GoogleMap>
       <div className="mini-map-label">
-        <strong>{approximate ? 'Public area map' : 'My caught map'}</strong>
-        <small>{approximate ? 'Original cat pins' : 'Tap a pin to view a cat'}</small>
+        <strong>{labelTitle || (approximate ? 'Public area map' : 'My caught map')}</strong>
+        <small>{labelSubtitle || (approximate ? 'Original cat pins' : 'Tap a pin to view a cat')}</small>
       </div>
     </div>
   );
