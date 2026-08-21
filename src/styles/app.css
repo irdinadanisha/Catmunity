@@ -3608,20 +3608,14 @@ button:disabled {
 .detail-photo-slide {
   position: relative;
   margin: 0;
-  display: grid;
-  place-items: center;
-  padding: 18px;
   scroll-snap-align: start;
 }
 
 .detail-photo-slide img {
   display: block;
-  width: min(40%, 360px);
-  min-width: 180px;
-  max-height: 420px;
-  aspect-ratio: auto;
-  object-fit: contain;
-  border-radius: 22px;
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
 }
 
 .detail-owner-badge {
