@@ -3635,7 +3635,7 @@ function CatDetailScreen({ selectedCat, currentUserId, users = [], onOpenUser = 
             cats={[selectedCat]}
             labelTitle="Cat location"
             labelSubtitle={selectedCat.location_name || selectedCat.area_name || 'Original pin'}
-            zoom={16}
+            zoom={18}
           />
         </div>
       )}
