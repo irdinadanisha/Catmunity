@@ -404,7 +404,12 @@ function App() {
     };
   }, [authUser, currentUserId]);
 
-  const caughtCats = cats.filter((cat) => (cat.caught_by_users || []).includes(currentUserId));
+  const caughtCats = useMemo(
+    () => cats
+      .filter((cat) => (cat.caught_by_users || []).includes(currentUserId))
+      .sort(compareCatsByDiscoveryTime),
+    [cats, currentUserId],
+  );
   const selectedCat = detailCatOverride || cats.find((cat) => cat.id === selectedCatId) || cats[0] || null;
   const communityUsers = useMemo(
     () => mergeUsers([me, ...socialUsers]),
@@ -1540,6 +1545,15 @@ function formatCaptureClockTime(value) {
   });
 }
 
+function getCatDiscoveryTime(cat = {}) {
+  const date = new Date(cat.discovered_at || cat.created_at || 0);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+}
+
+function compareCatsByDiscoveryTime(first, second) {
+  return getCatDiscoveryTime(second) - getCatDiscoveryTime(first);
+}
+
 function formatDiscoveryDate(value) {
   if (!value) return 'Not recorded';
   const date = new Date(value);
@@ -2080,7 +2094,7 @@ function ExploreScreen({ cats, currentUser, currentUserId, navigate, setSelected
     })
     .sort((first, second) => {
       if (sortMode === 'Nearest' || activeFilter === 'Nearby') return first.distanceMeters - second.distanceMeters;
-      return new Date(second.updated_at || second.discovered_at || second.created_at || 0) - new Date(first.updated_at || first.discovered_at || first.created_at || 0);
+      return compareCatsByDiscoveryTime(first, second);
     });
 
   function openCat(cat) {
