@@ -184,6 +184,226 @@ create table if not exists public.notifications (
   read_at timestamptz
 );
 
+create table if not exists public.cat_streaks (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  current_streak integer not null default 0 check (current_streak >= 0),
+  best_streak integer not null default 0 check (best_streak >= 0),
+  last_qualified_date date,
+  last_qualified_cat_id uuid references public.cats(id) on delete set null,
+  streak_started_on date,
+  paw_passes_used_this_month integer not null default 0 check (paw_passes_used_this_month >= 0 and paw_passes_used_this_month <= 5),
+  paw_pass_month date,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.cat_streak_events (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  cat_id uuid not null references public.cats(id) on delete cascade,
+  sighting_id uuid not null references public.cat_sightings(id) on delete cascade,
+  local_date date not null,
+  timezone text not null default 'Asia/Kuala_Lumpur',
+  event_type text not null default 'qualified',
+  previous_streak integer not null default 0,
+  streak_after integer not null,
+  paw_passes_used integer not null default 0,
+  created_at timestamptz not null default now(),
+  unique (sighting_id),
+  unique (user_id, local_date)
+);
+
+create or replace view public.cat_streak_public as
+select
+  cat_streaks.user_id,
+  cat_streaks.current_streak,
+  cat_streaks.best_streak,
+  cat_streaks.last_qualified_date,
+  cat_streaks.updated_at
+from public.cat_streaks
+join public.profiles on profiles.id = cat_streaks.user_id
+where profiles.public_profile = true;
+
+grant select on public.cat_streak_public to anon, authenticated;
+grant select on public.cat_streaks to authenticated;
+grant select on public.cat_streak_events to authenticated;
+
+create or replace function public.process_cat_streak(
+  p_sighting_id uuid,
+  p_timezone text default 'Asia/Kuala_Lumpur'
+)
+returns table (
+  advanced boolean,
+  current_streak integer,
+  best_streak integer,
+  previous_streak integer,
+  paw_passes_remaining integer,
+  paw_passes_used integer,
+  streak_broken boolean,
+  local_date date,
+  reason text
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := (select auth.uid());
+  v_cat_id uuid;
+  v_sighting_user_id uuid;
+  v_discovered_at timestamptz;
+  v_local_date date;
+  v_month date;
+  v_streak public.cat_streaks%rowtype;
+  v_days_since integer;
+  v_missing_days integer := 0;
+  v_previous_streak integer := 0;
+  v_current integer := 0;
+  v_best integer := 0;
+  v_used_month integer := 0;
+  v_paw_used integer := 0;
+  v_broken boolean := false;
+  v_inserted_event_id uuid;
+begin
+  if v_user_id is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select user_id, cat_id, discovered_at
+  into v_sighting_user_id, v_cat_id, v_discovered_at
+  from public.cat_sightings
+  where id = p_sighting_id;
+
+  if v_sighting_user_id is distinct from v_user_id then
+    raise exception 'Sighting does not belong to current user';
+  end if;
+
+  v_local_date := (v_discovered_at at time zone coalesce(nullif(p_timezone, ''), 'Asia/Kuala_Lumpur'))::date;
+  v_month := date_trunc('month', v_local_date)::date;
+
+  insert into public.cat_streaks (user_id, paw_pass_month)
+  values (v_user_id, v_month)
+  on conflict (user_id) do nothing;
+
+  select *
+  into v_streak
+  from public.cat_streaks
+  where user_id = v_user_id
+  for update;
+
+  if v_streak.paw_pass_month is distinct from v_month then
+    v_streak.paw_pass_month := v_month;
+    v_streak.paw_passes_used_this_month := 0;
+  end if;
+
+  v_previous_streak := coalesce(v_streak.current_streak, 0);
+  v_current := v_previous_streak;
+  v_best := coalesce(v_streak.best_streak, 0);
+  v_used_month := coalesce(v_streak.paw_passes_used_this_month, 0);
+
+  if exists (
+    select 1
+    from public.cat_streak_events
+    where user_id = v_user_id
+      and local_date = v_local_date
+  ) then
+    update public.cat_streaks
+    set paw_pass_month = v_month,
+        paw_passes_used_this_month = v_used_month,
+        updated_at = now()
+    where user_id = v_user_id;
+
+    return query select false, v_current, v_best, v_previous_streak, 5 - v_used_month, 0, false, v_local_date, 'already_counted_today';
+    return;
+  end if;
+
+  if v_streak.last_qualified_cat_id is not null
+    and v_streak.last_qualified_cat_id = v_cat_id
+  then
+    update public.cat_streaks
+    set paw_pass_month = v_month,
+        paw_passes_used_this_month = v_used_month,
+        updated_at = now()
+    where user_id = v_user_id;
+
+    return query select false, v_current, v_best, v_previous_streak, 5 - v_used_month, 0, false, v_local_date, 'same_cat_as_previous_streak_day';
+    return;
+  end if;
+
+  if v_streak.last_qualified_date is null or v_previous_streak = 0 then
+    v_current := 1;
+    v_broken := false;
+    v_streak.streak_started_on := v_local_date;
+  else
+    v_days_since := v_local_date - v_streak.last_qualified_date;
+
+    if v_days_since <= 0 then
+      return query select false, v_current, v_best, v_previous_streak, 5 - v_used_month, 0, false, v_local_date, 'older_than_last_streak_day';
+      return;
+    elsif v_days_since = 1 then
+      v_current := v_previous_streak + 1;
+    else
+      v_missing_days := v_days_since - 1;
+      if v_missing_days <= (5 - v_used_month) then
+        v_paw_used := v_missing_days;
+        v_used_month := v_used_month + v_paw_used;
+        v_current := v_previous_streak + 1;
+      else
+        v_broken := true;
+        v_current := 1;
+        v_streak.streak_started_on := v_local_date;
+      end if;
+    end if;
+  end if;
+
+  v_best := greatest(v_best, v_current);
+
+  insert into public.cat_streak_events (
+    user_id,
+    cat_id,
+    sighting_id,
+    local_date,
+    timezone,
+    previous_streak,
+    streak_after,
+    paw_passes_used
+  )
+  values (
+    v_user_id,
+    v_cat_id,
+    p_sighting_id,
+    v_local_date,
+    coalesce(nullif(p_timezone, ''), 'Asia/Kuala_Lumpur'),
+    v_previous_streak,
+    v_current,
+    v_paw_used
+  )
+  on conflict (user_id, local_date) do nothing
+  returning id into v_inserted_event_id;
+
+  if v_inserted_event_id is null then
+    return query select false, v_previous_streak, v_best, v_previous_streak, 5 - v_used_month, 0, false, v_local_date, 'already_counted_today';
+    return;
+  end if;
+
+  update public.cat_streaks
+  set current_streak = v_current,
+      best_streak = v_best,
+      last_qualified_date = v_local_date,
+      last_qualified_cat_id = v_cat_id,
+      streak_started_on = coalesce(v_streak.streak_started_on, v_local_date),
+      paw_passes_used_this_month = v_used_month,
+      paw_pass_month = v_month,
+      updated_at = now()
+  where user_id = v_user_id;
+
+  return query select true, v_current, v_best, v_previous_streak, 5 - v_used_month, v_paw_used, v_broken, v_local_date, 'advanced';
+end;
+$$;
+
+revoke all on function public.process_cat_streak(uuid, text) from public;
+revoke all on function public.process_cat_streak(uuid, text) from anon;
+grant execute on function public.process_cat_streak(uuid, text) to authenticated;
+
 drop view if exists public.public_user_cat_map;
 drop view if exists public.cat_public_map;
 
@@ -265,6 +485,8 @@ alter table public.community_posts enable row level security;
 alter table public.post_likes enable row level security;
 alter table public.comments enable row level security;
 alter table public.notifications enable row level security;
+alter table public.cat_streaks enable row level security;
+alter table public.cat_streak_events enable row level security;
 
 drop policy if exists "Users can read public profiles" on public.profiles;
 create policy "Users can read public profiles"
@@ -519,6 +741,32 @@ create policy "Authenticated users can create notifications"
 on public.notifications for insert
 with check (auth.uid() = actor_user_id);
 
+drop policy if exists "Users can read own cat streak details" on public.cat_streaks;
+create policy "Users can read own cat streak details"
+on public.cat_streaks for select
+using ((select auth.uid()) = user_id);
+
+drop policy if exists "Users can update own cat streak through RPC" on public.cat_streaks;
+create policy "Users can update own cat streak through RPC"
+on public.cat_streaks for update
+using ((select auth.uid()) = user_id)
+with check ((select auth.uid()) = user_id);
+
+drop policy if exists "Users can create own cat streak through RPC" on public.cat_streaks;
+create policy "Users can create own cat streak through RPC"
+on public.cat_streaks for insert
+with check ((select auth.uid()) = user_id);
+
+drop policy if exists "Users can read own cat streak events" on public.cat_streak_events;
+create policy "Users can read own cat streak events"
+on public.cat_streak_events for select
+using ((select auth.uid()) = user_id);
+
+drop policy if exists "Users can create own cat streak events through RPC" on public.cat_streak_events;
+create policy "Users can create own cat streak events through RPC"
+on public.cat_streak_events for insert
+with check ((select auth.uid()) = user_id);
+
 create index if not exists cats_approximate_location_idx
   on public.cats (approximate_latitude, approximate_longitude);
 
@@ -561,6 +809,9 @@ create index if not exists comments_post_id_idx
 
 create index if not exists notifications_user_unread_idx
   on public.notifications (user_id, is_read, created_at desc);
+
+create index if not exists cat_streak_events_user_date_idx
+  on public.cat_streak_events (user_id, local_date desc);
 
 drop policy if exists "Public can read profile photos" on storage.objects;
 create policy "Public can read profile photos"

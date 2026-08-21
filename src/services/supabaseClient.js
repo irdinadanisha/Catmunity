@@ -327,6 +327,38 @@ export async function fetchFavoriteCatIds(userId) {
   return { data: (data || []).map((item) => item.cat_id).filter(Boolean), error };
 }
 
+export async function fetchPublicCatStreaks(userIds = []) {
+  const cleanIds = [...new Set(userIds.filter(Boolean))];
+  if (!isSupabaseConfigured || !cleanIds.length) return { data: [], error: null };
+
+  const { data, error } = await supabase
+    .from('cat_streak_public')
+    .select('user_id, current_streak, best_streak, last_qualified_date, updated_at')
+    .in('user_id', cleanIds);
+
+  if (error?.code === '42P01' || /cat_streak/i.test(error?.message || '')) {
+    return { data: [], error: null };
+  }
+
+  return { data: data || [], error };
+}
+
+export async function fetchOwnCatStreak(userId) {
+  if (!isSupabaseConfigured || !userId) return { data: null, error: null };
+
+  const { data, error } = await supabase
+    .from('cat_streaks')
+    .select('user_id, current_streak, best_streak, last_qualified_date, paw_passes_used_this_month, paw_pass_month, updated_at')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error?.code === '42P01' || /cat_streak/i.test(error?.message || '')) {
+    return { data: null, error: null };
+  }
+
+  return { data, error };
+}
+
 export async function saveFavoriteCatIds(userId, catIds = []) {
   if (!isSupabaseConfigured || !userId) return { data: [], error: null };
 

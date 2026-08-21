@@ -64,6 +64,8 @@ import {
   fetchFollowersList,
   fetchFollowingList,
   fetchNotifications,
+  fetchOwnCatStreak,
+  fetchPublicCatStreaks,
   fetchUnreadNotificationCount,
   followUserById,
   getCurrentSession,
@@ -197,6 +199,8 @@ function App() {
   const [notifications, setNotifications] = useState([]);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [catStreaksByUserId, setCatStreaksByUserId] = useState({});
+  const [streakCelebration, setStreakCelebration] = useState(null);
   const [toast, setToast] = useState('');
 
   useEffect(() => {
@@ -306,6 +310,7 @@ function App() {
     if (!authUser) {
       setNotifications([]);
       setUnreadNotificationCount(0);
+      setCatStreaksByUserId({});
       return undefined;
     }
 
@@ -334,6 +339,27 @@ function App() {
     return () => {
       cancelled = true;
       unsubscribeNotifications();
+    };
+  }, [authUser, currentUserId]);
+
+  useEffect(() => {
+    if (!authUser) return undefined;
+
+    let cancelled = false;
+
+    async function loadOwnStreak() {
+      const { data } = await fetchOwnCatStreak(currentUserId);
+      if (cancelled) return;
+      setCatStreaksByUserId((items) => ({
+        ...items,
+        [currentUserId]: mapCatStreak(data, true),
+      }));
+    }
+
+    loadOwnStreak();
+
+    return () => {
+      cancelled = true;
     };
   }, [authUser, currentUserId]);
 
@@ -379,6 +405,36 @@ function App() {
       cancelled = true;
     };
   }, [authUser, cats]);
+
+  useEffect(() => {
+    const userIds = [
+      ...new Set([
+        currentUserId,
+        ...socialUsers.map((user) => user.id),
+        ...posts.map((post) => post.user_id),
+      ].filter(Boolean)),
+    ];
+    if (!userIds.length) return undefined;
+
+    let cancelled = false;
+
+    async function loadPublicStreaks() {
+      const { data = [] } = await fetchPublicCatStreaks(userIds);
+      if (cancelled) return;
+      setCatStreaksByUserId((items) => ({
+        ...items,
+        ...Object.fromEntries(data
+          .filter((row) => row.user_id !== currentUserId)
+          .map((row) => [row.user_id, mapCatStreak(row, false)])),
+      }));
+    }
+
+    loadPublicStreaks();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUserId, posts, socialUsers]);
 
   useEffect(() => {
     if (isSupabaseConfigured && !authUser) return undefined;
@@ -748,7 +804,8 @@ function App() {
       return;
     }
 
-    await addExistingCatToSupabase({ catId, capture });
+    const result = await addExistingCatToSupabase({ catId, capture });
+    handleStreakResult(result?.streak);
     const liveCats = await loadCatsFromSupabase(currentUserId);
     setCats(liveCats || ((items) => addExistingCatToUserCollection(items, catId, currentUserId, capture)));
     setSelectedCatId(catId);
@@ -837,6 +894,7 @@ function App() {
         return;
       }
 
+      handleStreakResult(saved.streak);
       setCats((items) => [saved, ...items]);
       setSelectedCatId(saved.id);
       setSuccessCat(saved);
@@ -1061,6 +1119,26 @@ function App() {
     showToast('Favourite cats updated.');
   }
 
+  function handleStreakResult(streak) {
+    if (!streak) return;
+    setCatStreaksByUserId((items) => ({
+      ...items,
+      [currentUserId]: {
+        ...mapCatStreak({
+          user_id: currentUserId,
+          current_streak: streak.currentStreak,
+          best_streak: streak.bestStreak,
+          last_qualified_date: streak.localDate,
+          paw_passes_used_this_month: 5 - streak.pawPassesRemaining,
+        }, true),
+        pawPassesRemaining: streak.pawPassesRemaining,
+      },
+    }));
+    if (streak.advanced) {
+      setStreakCelebration(streak);
+    }
+  }
+
   async function notifyMentionedUsers({ text, type, title, body, relatedPostId, relatedCatId }) {
     const mentions = extractMentions(text);
     if (!mentions.length) return;
@@ -1182,6 +1260,12 @@ function App() {
           onToggleFollow={handleToggleFollow}
         />
       )}
+      {streakCelebration && (
+        <CatStreakCelebrationModal
+          streak={streakCelebration}
+          onClose={() => setStreakCelebration(null)}
+        />
+      )}
 
       <motion.main
         key={screen}
@@ -1253,6 +1337,7 @@ function App() {
             posts={posts}
             favoriteCatIds={favoriteCatIdsByUserId[currentUserId] || []}
             followCounts={followCountsByUserId[currentUserId] || { following: followingProfiles.length, followers: followerProfiles.length }}
+            streak={catStreaksByUserId[currentUserId]}
             mutualFriendCount={followingIds.filter((id) => followerProfiles.some((profile) => profile.id === id)).length}
             onOpenFollowList={openFollowList}
             onOpenSettings={() => navigate('settings')}
@@ -1274,6 +1359,7 @@ function App() {
             currentUserId={currentUserId}
             favoriteCatIds={favoriteCatIdsByUserId[selectedUser.id] || []}
             followCounts={followCountsByUserId[selectedUser.id] || { following: 0, followers: 0 }}
+            streak={catStreaksByUserId[selectedUser.id]}
             onOpenFollowList={openFollowList}
             onBack={() => navigate('collection')}
             onPostCat={startCommunityPost}
@@ -1424,6 +1510,38 @@ function mapCommunityProfile(profile) {
   };
 }
 
+function mapCatStreak(row, isOwn = false) {
+  if (!row) {
+    return {
+      currentStreak: 0,
+      bestStreak: 0,
+      pawPassesRemaining: isOwn ? 5 : null,
+      isOwn,
+    };
+  }
+
+  const usedThisMonth = isSameYearMonth(row.paw_pass_month, new Date())
+    ? row.paw_passes_used_this_month || 0
+    : 0;
+  return {
+    userId: row.user_id,
+    currentStreak: row.current_streak || 0,
+    bestStreak: row.best_streak || 0,
+    lastQualifiedDate: row.last_qualified_date || '',
+    pawPassesRemaining: isOwn ? Math.max(0, 5 - usedThisMonth) : null,
+    pawPassMonth: row.paw_pass_month || '',
+    updatedAt: row.updated_at || '',
+    isOwn,
+  };
+}
+
+function isSameYearMonth(value, date) {
+  if (!value) return false;
+  const source = new Date(value);
+  if (Number.isNaN(source.getTime())) return false;
+  return source.getFullYear() === date.getFullYear() && source.getMonth() === date.getMonth();
+}
+
 function mapNotification(notification, actors = []) {
   const actor = actors.find((user) => user.id === notification.actor_user_id);
   return {
@@ -1571,6 +1689,85 @@ function formatMemberSince(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return 'recently';
   return date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+}
+
+function pluralizeDay(count) {
+  return `${count} ${count === 1 ? 'day' : 'days'}`;
+}
+
+function pluralizePawPass(count) {
+  return `${count} Paw ${count === 1 ? 'Pass' : 'Passes'}`;
+}
+
+function getNextPawPassResetLabel() {
+  const now = new Date();
+  const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  return nextMonth.toLocaleDateString(undefined, { day: 'numeric', month: 'long' });
+}
+
+function getStreakCelebrationCopy(streak = {}) {
+  const day = streak.currentStreak || 1;
+  const milestoneMessages = {
+    1: {
+      eyebrow: 'Cat Streak started!',
+      title: 'Day 1',
+      body: 'The cat hunt begins. Come back tomorrow.',
+    },
+    2: {
+      eyebrow: '2 day Cat Streak!',
+      title: 'Two days, two cats.',
+      body: "You're onto something...",
+    },
+    3: {
+      eyebrow: '3 day Cat Streak!',
+      title: 'Three days of cat spotting',
+      body: 'Keep prowling.',
+    },
+    7: {
+      eyebrow: '7 day Cat Streak!',
+      title: 'A whole week of cats!',
+      body: 'Certified neighbourhood cat watcher behaviour.',
+    },
+    14: {
+      eyebrow: '14 day Cat Streak!',
+      title: 'Two weeks?!',
+      body: 'The cats might know you at this point.',
+    },
+    30: {
+      eyebrow: '30 day Cat Streak!',
+      title: '30 days of cats.',
+      body: 'You basically live here now.',
+    },
+    50: {
+      eyebrow: '50 day Cat Streak!',
+      title: 'Fifty cat days.',
+      body: 'That is serious Catmunity lore.',
+    },
+    100: {
+      eyebrow: '100 day Cat Streak!',
+      title: 'One hundred days!',
+      body: 'The neighbourhood has entered your era.',
+    },
+    365: {
+      eyebrow: '365 day Cat Streak!',
+      title: 'A full year of cats.',
+      body: 'Legendary Catmunity behaviour.',
+    },
+  };
+
+  if (streak.streakBroken && day === 1) {
+    return {
+      eyebrow: 'A new Cat Streak begins',
+      title: 'Day 1',
+      body: `Your previous best was ${pluralizeDay(streak.bestStreak || streak.previousStreak || 0)}. Let's see where this one goes.`,
+    };
+  }
+
+  return milestoneMessages[day] || {
+    eyebrow: 'Cat Streak',
+    title: `${day} days!`,
+    body: ['Another day, another cat.', 'Keep prowling.', 'Tiny paws, big routine.'][day % 3],
+  };
 }
 
 function getCatmunityIdentity(uniqueCatCount) {
@@ -3544,6 +3741,7 @@ function OwnProfileScreen({
   posts,
   favoriteCatIds,
   followCounts,
+  streak,
   mutualFriendCount = 0,
   onOpenFollowList,
   onOpenSettings,
@@ -3561,6 +3759,7 @@ function OwnProfileScreen({
         stats={stats}
         favoriteCatIds={favoriteCatIds}
         followCounts={followCounts}
+        streak={streak}
         mutualFriendCount={mutualFriendCount}
         isOwnProfile
         onOpenFollowList={onOpenFollowList}
@@ -3715,6 +3914,7 @@ function PublicProfileScreen({
   currentUserId,
   favoriteCatIds,
   followCounts,
+  streak,
   onOpenFollowList,
   onSelectCat,
   onOpenCollection,
@@ -3728,6 +3928,7 @@ function PublicProfileScreen({
         posts={posts}
         favoriteCatIds={favoriteCatIds}
         followCounts={followCounts}
+        streak={streak}
         currentUserId={currentUserId}
         onOpenFollowList={onOpenFollowList}
         onOpenCollection={onOpenCollection}
@@ -3748,6 +3949,7 @@ function ProfileOverview({
   stats,
   favoriteCatIds = [],
   followCounts,
+  streak,
   mutualFriendCount = 0,
   isOwnProfile = false,
   currentUserId = '',
@@ -3782,6 +3984,7 @@ function ProfileOverview({
           <UserHandle user={user} />
           <p>{user.bio || 'No bio yet.'}</p>
           <FollowCounts user={user} counts={followCounts} onOpen={onOpenFollowList} />
+          <CatStreakPill user={user} streak={streak} isOwnProfile={isOwnProfile} />
           <span className="profile-member-since">Member since {formatMemberSince(user.created_at)}</span>
         </div>
         {isOwnProfile && (
@@ -3806,6 +4009,93 @@ function ProfileOverview({
       <RecentDiscoveries cats={cats} onSelectCat={onSelectCat} onOpenCollection={onOpenCollection} />
       <ProfilePostGrid posts={profilePosts} cats={cats} onOpenPost={onOpenPost} />
     </>
+  );
+}
+
+function CatStreakPill({ user, streak, isOwnProfile = false }) {
+  const [open, setOpen] = useState(false);
+  const current = streak?.currentStreak || 0;
+  const best = streak?.bestStreak || 0;
+
+  if (current <= 0 && best <= 0) return null;
+
+  return (
+    <>
+      <button className="cat-streak-pill" type="button" onClick={() => setOpen(true)}>
+        <span aria-hidden="true">🔥🐾</span>
+        <strong>{current}</strong>
+        <em>{current === 1 ? 'day' : 'day'} Cat Streak</em>
+      </button>
+      {open && (
+        <CatStreakDetailsModal
+          user={user}
+          streak={streak}
+          isOwnProfile={isOwnProfile}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </>
+  );
+}
+
+function CatStreakDetailsModal({ user, streak, isOwnProfile, onClose }) {
+  const current = streak?.currentStreak || 0;
+  const best = streak?.bestStreak || 0;
+  const pawPassesRemaining = streak?.pawPassesRemaining ?? 5;
+
+  return (
+    <div className="notification-overlay" role="dialog" aria-modal="true" aria-label="Cat Streak details">
+      <section className="cat-streak-panel">
+        <div className="section-title-row">
+          <div>
+            <h2>{isOwnProfile ? '🔥 Your Cat Streak' : `🔥 ${user.name || user.username || 'Catmunity friend'}'s Cat Streak`}</h2>
+            <span className="quiet-label">Soft little cat-hunting rhythm</span>
+          </div>
+          <button className="icon-button" type="button" onClick={onClose} aria-label="Close Cat Streak"><X size={18} /></button>
+        </div>
+        <div className="cat-streak-detail-grid">
+          <div>
+            <span>Current streak</span>
+            <strong>{pluralizeDay(current)}</strong>
+          </div>
+          <div>
+            <span>Best streak</span>
+            <strong>{pluralizeDay(best)}</strong>
+          </div>
+        </div>
+        {isOwnProfile && (
+          <div className="paw-pass-card">
+            <span>🐾 Paw Passes</span>
+            <strong>{pawPassesRemaining} / 5 remaining</strong>
+            <em>Next reset · {getNextPawPassResetLabel()}</em>
+          </div>
+        )}
+        <button className="primary-button" type="button" onClick={onClose}>Nice!</button>
+      </section>
+    </div>
+  );
+}
+
+function CatStreakCelebrationModal({ streak, onClose }) {
+  const copy = getStreakCelebrationCopy(streak);
+  const pawUsed = streak.pawPassesUsed || 0;
+
+  return (
+    <div className="notification-overlay" role="dialog" aria-modal="true" aria-label="Cat Streak celebration">
+      <section className="cat-streak-panel cat-streak-panel--celebration">
+        <div className="streak-burst" aria-hidden="true">🔥🐾</div>
+        {pawUsed > 0 && (
+          <div className="paw-pass-used-note">
+            <strong>🐾 Paw Pass used</strong>
+            <span>{pluralizePawPass(pawUsed)} protected your streak. {streak.pawPassesRemaining} left this month.</span>
+          </div>
+        )}
+        <p className="success-eyebrow">{copy.eyebrow}</p>
+        <h2>{copy.title}</h2>
+        <p>{copy.body}</p>
+        <button className="primary-button" type="button" onClick={onClose}>Nice!</button>
+      </section>
+    </div>
   );
 }
 

@@ -500,19 +500,21 @@ export async function createNewCatInSupabase({ capture, form, uiUserId }) {
     capturedAt: persistentCapture?.capturedAt,
   });
 
-  await createSupabaseSighting({
+  const sighting = await createSupabaseSighting({
     userId: user.id,
     catId: createdCat.id,
-    capture,
+    capture: persistentCapture,
     remarks: localCat.remarks,
     photoUrl: localCat.cropped_image_url,
   });
+  const streak = await processCatStreakForSighting(sighting?.id);
 
   return {
     ...localCat,
     id: createdCat.id,
     created_by: user.id,
     discovered_by: uiUserId,
+    streak,
   };
 }
 
@@ -536,13 +538,14 @@ export async function addExistingCatToCollection({ userId: explicitUserId, catId
 
   if (!userCatResult) return false;
 
-  await createSupabaseSighting({
+  const sighting = await createSupabaseSighting({
     userId,
     catId,
     capture: persistentCapture,
   });
+  const streak = await processCatStreakForSighting(sighting?.id);
 
-  return true;
+  return { ok: true, streak };
 }
 
 export async function removeCatFromUserCollection(userId, catId) {
@@ -892,7 +895,7 @@ async function createSupabaseUserCat({ userId, catId, capture, personalDetails =
 async function createSupabaseSighting({ userId, catId, capture, photoUrl = null, remarks = '' }) {
   const approximate = getCaptureApproximateLocation(capture);
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('cat_sightings')
     .insert({
       user_id: userId,
@@ -905,11 +908,53 @@ async function createSupabaseSighting({ userId, catId, capture, photoUrl = null,
       }),
       photo_url: photoUrl,
       remarks: remarks || null,
-    });
+    })
+    .select('id, user_id, cat_id, discovered_at')
+    .single();
 
   if (error) {
     console.warn('Supabase cat_sightings insert failed', error);
+    return null;
   }
+
+  return data;
+}
+
+export async function processCatStreakForSighting(sightingId) {
+  if (!isSupabaseConfigured || !sightingId) return null;
+
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kuala_Lumpur';
+  const { data, error } = await supabase
+    .rpc('process_cat_streak', {
+      p_sighting_id: sightingId,
+      p_timezone: timezone,
+    })
+    .single();
+
+  if (error) {
+    if (error.code === '42883' || /process_cat_streak/i.test(error.message || '')) {
+      console.warn('Cat streak RPC is missing. Run the latest supabase/schema.sql.', error);
+      return null;
+    }
+    console.warn('Cat streak update failed', error);
+    return null;
+  }
+
+  return mapCatStreakResult(data);
+}
+
+function mapCatStreakResult(row = {}) {
+  return {
+    advanced: Boolean(row.advanced),
+    currentStreak: row.current_streak || 0,
+    bestStreak: row.best_streak || 0,
+    previousStreak: row.previous_streak || 0,
+    pawPassesRemaining: row.paw_passes_remaining ?? 5,
+    pawPassesUsed: row.paw_passes_used || 0,
+    streakBroken: Boolean(row.streak_broken),
+    localDate: row.local_date || '',
+    reason: row.reason || '',
+  };
 }
 
 function mapSupabaseCat(cat, uiUserId, caught, userCat = null, catcherUserIds = [], latestSightingTime = '') {
