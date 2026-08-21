@@ -3585,8 +3585,6 @@ button:disabled {
 
 .detail-hero {
   min-height: 260px;
-  width: min(82%, 640px);
-  margin-inline: auto;
 }
 
 .detail-location-panel .mini-map {
@@ -3610,14 +3608,20 @@ button:disabled {
 .detail-photo-slide {
   position: relative;
   margin: 0;
+  display: grid;
+  place-items: center;
+  padding: 18px;
   scroll-snap-align: start;
 }
 
 .detail-photo-slide img {
   display: block;
-  width: 100%;
-  aspect-ratio: 1 / 1;
+  width: min(40%, 360px);
+  min-width: 180px;
+  max-height: 420px;
+  aspect-ratio: auto;
   object-fit: contain;
+  border-radius: 22px;
 }
 
 .detail-owner-badge {
