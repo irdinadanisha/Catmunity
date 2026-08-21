@@ -3635,6 +3635,7 @@ function CatDetailScreen({ selectedCat, currentUserId, users = [], onOpenUser = 
             cats={[selectedCat]}
             labelTitle="Cat location"
             labelSubtitle={selectedCat.location_name || selectedCat.area_name || 'Original pin'}
+            zoom={14}
           />
         </div>
       )}
@@ -5354,7 +5355,7 @@ function CatHeadShape({ image, fill = 'rgba(232, 95, 75, 0.95)', className = '',
   );
 }
 
-function MiniMap({ cats, onSelect = () => {}, approximate = false, labelTitle = '', labelSubtitle = '', className = '' }) {
+function MiniMap({ cats, onSelect = () => {}, approximate = false, labelTitle = '', labelSubtitle = '', className = '', zoom = null }) {
   const firstCatPosition = cats[0] ? getCatMapPosition(cats[0]) : defaultMapCenter;
   const googleAuthFailed = useGoogleMapsAuthFailure();
   const { isLoaded, loadError } = useJsApiLoader({
@@ -5389,7 +5390,7 @@ function MiniMap({ cats, onSelect = () => {}, approximate = false, labelTitle = 
         mapContainerClassName="google-map-canvas"
         mapContainerStyle={{ width: '100%', height: '100%' }}
         center={firstCatPosition}
-        zoom={cats.length > 1 ? 12 : 15}
+        zoom={zoom ?? (cats.length > 1 ? 12 : 15)}
         options={{
           clickableIcons: false,
           disableDefaultUI: true,
