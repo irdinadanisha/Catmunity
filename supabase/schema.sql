@@ -772,6 +772,8 @@ drop policy if exists "Users can read own DM conversations" on public.dm_convers
 create policy "Users can read own DM conversations"
 on public.dm_conversations for select
 using (
+  created_by = auth.uid()
+  or
   exists (
     select 1
     from public.dm_participants
@@ -789,6 +791,8 @@ drop policy if exists "Users can update own DM conversations" on public.dm_conve
 create policy "Users can update own DM conversations"
 on public.dm_conversations for update
 using (
+  created_by = auth.uid()
+  or
   exists (
     select 1
     from public.dm_participants
@@ -797,6 +801,8 @@ using (
   )
 )
 with check (
+  created_by = auth.uid()
+  or
   exists (
     select 1
     from public.dm_participants
