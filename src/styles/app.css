@@ -4427,6 +4427,29 @@ button:disabled {
   gap: 5px;
 }
 
+.related-cat-chip {
+  width: fit-content;
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 6px 6px;
+  border-radius: 999px;
+  color: #6c4c3d;
+  background: rgba(255, 240, 200, 0.55);
+  border: 1px solid rgba(92, 62, 44, 0.07);
+  font-size: 0.84rem;
+  font-weight: 900;
+}
+
+.related-cat-chip img {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #fff0e4;
+}
+
 .confirm-remove-panel {
   width: min(340px, calc(100% - 36px));
   display: grid;
@@ -4803,6 +4826,65 @@ button:disabled {
 .post-preview-card span {
   display: grid;
   gap: 4px;
+}
+
+.related-cat-selector {
+  display: grid;
+  gap: 10px;
+  padding: 2px 0 4px;
+}
+
+.related-cat-selector h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.related-cat-options {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 2px 2px 8px;
+  scrollbar-width: none;
+}
+
+.related-cat-options::-webkit-scrollbar {
+  display: none;
+}
+
+.related-cat-options button {
+  flex: 0 0 74px;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 8px 6px;
+  border-radius: 18px;
+  border: 1px solid rgba(92, 62, 44, 0.08);
+  color: #765b4e;
+  background: rgba(255, 255, 255, 0.76);
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.related-cat-options button.selected {
+  color: #9d3f31;
+  border-color: rgba(232, 95, 75, 0.38);
+  background: rgba(255, 238, 232, 0.92);
+}
+
+.related-cat-options img {
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  object-fit: cover;
+  background: #fff0e4;
+}
+
+.related-cat-options span {
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
 }
 
 .post-extra-upload {
