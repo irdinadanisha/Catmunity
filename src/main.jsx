@@ -4918,9 +4918,16 @@ function CreatePostScreen({ cats = [], initialCatId = '', onBack, onCreate }) {
   }
 
   return (
-    <section className="screen">
-      <BackButton onBack={onBack} />
-      <ScreenHeader title="Create post" subtitle="Share anything with Commeownity." icon={Plus} />
+    <section className="screen create-post-screen">
+      <header className="create-post-header">
+        <button className="create-post-back" type="button" onClick={onBack} aria-label="Back">
+          <ChevronLeft size={26} />
+        </button>
+        <div>
+          <h1>Post!</h1>
+          <p>Share anything with Commeownity.</p>
+        </div>
+      </header>
       <form
         className="details-form"
         onSubmit={(event) => {
