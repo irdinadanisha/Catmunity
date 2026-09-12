@@ -105,6 +105,7 @@ const tabs = [
 const NAV_ICON_SIZE = 22;
 
 const fallbackUserId = 'local-user';
+const freeformCommunityPostsStartedAt = new Date('2026-09-12T00:00:00.000Z').getTime();
 const catKeywordSuggestions = [
   'sleepy',
   'friendly',
@@ -1968,6 +1969,10 @@ function getCommunityPostImages(post, cat) {
 
   uniqueImages = collapseLegacyPostAutoPair(uniqueImages, post);
 
+  if (!uniqueImages.length && isLegacyCollectionPost(post, cat) && personalOriginal) {
+    uniqueImages = [personalOriginal];
+  }
+
   if (cat?.created_by && post?.user_id && post.user_id !== cat.created_by) {
     const personalImages = uniqueImages.filter((url) => !canonicalImages.has(url));
     if (personalImages.length) return personalImages;
@@ -1979,12 +1984,20 @@ function getCommunityPostImages(post, cat) {
 function postIncludesCatPrimaryImage(post, cat) {
   if (!post || !cat) return false;
   const postImages = new Set([...(post.image_urls || []), post.image_url].filter(isPersistentImageUrl));
-  return [
+  const hasCatPhoto = [
     cat.original_image_url,
     cat.cropped_image_url,
     cat.canonical_original_image_url,
     cat.canonical_cropped_image_url,
   ].filter(isPersistentImageUrl).some((url) => postImages.has(url));
+  return hasCatPhoto || isLegacyCollectionPost(post, cat);
+}
+
+function isLegacyCollectionPost(post, cat) {
+  if (!post?.cat_id || !cat) return false;
+  const postTime = new Date(post.raw_created_at || '').getTime();
+  if (!Number.isFinite(postTime)) return false;
+  return postTime < freeformCommunityPostsStartedAt;
 }
 
 function getPostThumbnail(post) {
