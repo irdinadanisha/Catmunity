@@ -15,6 +15,7 @@ import {
   Image as ImageIcon,
   Lock,
   LogOut,
+  Mail,
   Map as MapIcon,
   MapPin,
   MessageCircle,
@@ -59,13 +60,17 @@ import {
   createNotification,
   deleteCommunityComment,
   deleteCommunityPost,
+  fetchConversationMessages,
   fetchFavoriteCatIds,
   fetchFollowCounts,
   fetchFollowersList,
   fetchFollowingList,
+  fetchMessageConversations,
   fetchNotifications,
   fetchOwnCatStreak,
   fetchPublicCatStreaks,
+  fetchSuggestedMessageProfiles,
+  fetchUnreadMessageCount,
   fetchUnreadNotificationCount,
   followUserById,
   getCurrentSession,
@@ -76,15 +81,20 @@ import {
   loadFollowingIds,
   loadProfilesByIds,
   loadProfilesByUsernames,
+  markConversationMessagesAsRead,
   markNotificationsAsRead,
   normalizeUsername,
+  openOrCreateConversation,
   resendSignupConfirmation,
   saveFavoriteCatIds,
+  searchMessageProfiles,
+  sendDirectMessage,
   searchCommunityProfilesByUsername,
   signInWithEmail,
   signOutUser,
   signUpWithEmail,
   subscribeToAuthChanges,
+  subscribeToUserMessages,
   subscribeToUserNotifications,
   unfollowUserById,
   unlikeCommunityPost,
@@ -202,6 +212,8 @@ function App() {
   const [notifications, setNotifications] = useState([]);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [messagesOpen, setMessagesOpen] = useState(false);
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
   const [catStreaksByUserId, setCatStreaksByUserId] = useState({});
   const [streakCelebration, setStreakCelebration] = useState(null);
   const [toast, setToast] = useState('');
@@ -313,6 +325,8 @@ function App() {
     if (!authUser) {
       setNotifications([]);
       setUnreadNotificationCount(0);
+      setUnreadMessageCount(0);
+      setMessagesOpen(false);
       setCatStreaksByUserId({});
       return undefined;
     }
@@ -342,6 +356,29 @@ function App() {
     return () => {
       cancelled = true;
       unsubscribeNotifications();
+    };
+  }, [authUser, currentUserId]);
+
+  useEffect(() => {
+    if (!authUser) return undefined;
+
+    let cancelled = false;
+
+    async function loadUnreadMessages() {
+      const { count = 0 } = await fetchUnreadMessageCount(currentUserId);
+      if (cancelled) return;
+      setUnreadMessageCount(count);
+    }
+
+    loadUnreadMessages();
+
+    const unsubscribeMessages = subscribeToUserMessages(currentUserId, () => {
+      loadUnreadMessages();
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribeMessages();
     };
   }, [authUser, currentUserId]);
 
@@ -577,6 +614,11 @@ function App() {
     setSocialUsers((users) => mergeUsers([...users, ...actors]));
     setNotifications(data.map((item) => mapNotification(item, actors)));
     setUnreadNotificationCount(count);
+  }
+
+  async function refreshUnreadMessages() {
+    const { count = 0 } = await fetchUnreadMessageCount(currentUserId);
+    setUnreadMessageCount(count);
   }
 
   async function handleAuthSubmit({ mode, username, email, password }) {
@@ -1223,7 +1265,9 @@ function App() {
           user={me}
           stats={stats}
           notificationCount={unreadNotificationCount}
+          messageCount={unreadMessageCount}
           onOpenNotifications={openNotifications}
+          onOpenMessages={() => setMessagesOpen(true)}
           headerBack={screen === 'publicProfile' ? {
             label: selectedUser?.name || 'Profile',
             onBack: () => navigate('collection'),
@@ -1235,6 +1279,24 @@ function App() {
             onToggleFollow: handleToggleFollow,
             onOpenUser: openPublicProfile,
           } : null}
+        />
+      )}
+      {messagesOpen && (
+        <MessagesCenter
+          currentUser={me}
+          currentUserId={currentUserId}
+          followingProfiles={followingProfiles}
+          followerProfiles={followerProfiles}
+          onClose={() => {
+            setMessagesOpen(false);
+            refreshUnreadMessages();
+          }}
+          onOpenUser={(id) => {
+            setMessagesOpen(false);
+            openPublicProfile(id);
+          }}
+          onUnreadChange={setUnreadMessageCount}
+          showToast={showToast}
         />
       )}
       {notificationsOpen && (
@@ -1568,6 +1630,29 @@ function mapNotification(notification, actors = []) {
   };
 }
 
+function mapDirectMessage(message = {}) {
+  return {
+    id: message.id,
+    conversation_id: message.conversation_id,
+    sender_id: message.sender_id,
+    body: message.body || '',
+    created_at: message.created_at || '',
+  };
+}
+
+function mapMessageConversation(conversation = {}) {
+  return {
+    id: conversation.id,
+    conversation_key: conversation.conversation_key || '',
+    created_at: conversation.created_at || '',
+    updated_at: conversation.updated_at || '',
+    otherUserId: conversation.otherUserId || '',
+    otherUser: conversation.otherUser ? mapCommunityProfile(conversation.otherUser) : null,
+    latestMessage: conversation.latestMessage ? mapDirectMessage(conversation.latestMessage) : null,
+    unreadCount: conversation.unreadCount || 0,
+  };
+}
+
 function mergeUsers(users) {
   const byId = new Map();
   users.filter(Boolean).forEach((user) => byId.set(user.id, user));
@@ -1661,6 +1746,17 @@ function formatPostTime(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return 'Just now';
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function formatMessageTime(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const now = new Date();
+  const sameDay = date.toDateString() === now.toDateString();
+  return sameDay
+    ? date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+    : date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 function formatCaptureClockTime(value) {
@@ -2145,7 +2241,7 @@ function AuthScreen({ onSubmit }) {
   );
 }
 
-function TopBar({ user, notificationCount = 0, onOpenNotifications, communitySearch = null, headerBack = null }) {
+function TopBar({ user, notificationCount = 0, messageCount = 0, onOpenNotifications, onOpenMessages, communitySearch = null, headerBack = null }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
@@ -2234,6 +2330,10 @@ function TopBar({ user, notificationCount = 0, onOpenNotifications, communitySea
             )}
           </div>
         )}
+        <button className="icon-button notification-button message-button" aria-label="Messages" onClick={onOpenMessages}>
+          <Mail size={20} />
+          {messageCount > 0 && <span>{messageCount}</span>}
+        </button>
         <button className="icon-button notification-button" aria-label="Notifications" onClick={onOpenNotifications}>
           <Bell size={20} />
           {notificationCount > 0 && <span>{notificationCount}</span>}
@@ -2270,6 +2370,266 @@ function NotificationCenter({ notifications, onClose, onOpenUser }) {
             <p className="empty-community-copy">No notifications yet. New follows and post interactions will appear here.</p>
           )}
         </div>
+      </section>
+    </div>
+  );
+}
+
+function MessagesCenter({
+  currentUser,
+  currentUserId,
+  followingProfiles = [],
+  followerProfiles = [],
+  onClose,
+  onOpenUser,
+  onUnreadChange,
+  showToast,
+}) {
+  const [query, setQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [suggestedUsers, setSuggestedUsers] = useState([]);
+  const [conversations, setConversations] = useState([]);
+  const [activeConversation, setActiveConversation] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [draft, setDraft] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const messagesEndRef = useRef(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadInbox() {
+      setLoading(true);
+      const [{ data: inbox = [], error: inboxError }, { data: suggestions = [], error: suggestionsError }] = await Promise.all([
+        fetchMessageConversations(currentUserId),
+        fetchSuggestedMessageProfiles(currentUserId),
+      ]);
+      if (cancelled) return;
+      if (inboxError || suggestionsError) {
+        showToast?.(inboxError?.message || suggestionsError?.message || 'Messages could not load.');
+      }
+      setConversations(inbox.map(mapMessageConversation));
+      setSuggestedUsers(mergeUsers([
+        ...suggestions.map(mapCommunityProfile),
+        ...followingProfiles,
+        ...followerProfiles,
+      ]).filter((user) => user.id !== currentUserId).slice(0, 7));
+      setLoading(false);
+    }
+
+    loadInbox();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUserId, followingProfiles, followerProfiles, showToast]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [messages, activeConversation?.id]);
+
+  async function refreshInbox() {
+    const { data = [], error } = await fetchMessageConversations(currentUserId);
+    if (error) {
+      showToast?.(error.message || 'Messages could not refresh.');
+      return;
+    }
+    setConversations(data.map(mapMessageConversation));
+    const { count = 0 } = await fetchUnreadMessageCount(currentUserId);
+    onUnreadChange?.(count);
+  }
+
+  async function openConversationWithUser(user) {
+    if (!user?.id) return;
+    const { data: conversation, error } = await openOrCreateConversation(currentUserId, user.id);
+    if (error) {
+      showToast?.(error.message || 'Conversation could not open.');
+      return;
+    }
+    const mappedConversation = mapMessageConversation({
+      ...conversation,
+      otherUser: user,
+      otherUserId: user.id,
+      unreadCount: 0,
+    });
+    setActiveConversation(mappedConversation);
+    setQuery('');
+    setSearchResults([]);
+    await loadConversationMessages(mappedConversation);
+    await refreshInbox();
+  }
+
+  async function openExistingConversation(conversation) {
+    setActiveConversation(conversation);
+    await loadConversationMessages(conversation);
+    await refreshInbox();
+  }
+
+  async function loadConversationMessages(conversation) {
+    const { data = [], error } = await fetchConversationMessages(conversation.id);
+    if (error) {
+      showToast?.(error.message || 'Conversation could not load.');
+      return;
+    }
+    setMessages(data.map(mapDirectMessage));
+    await markConversationMessagesAsRead(conversation.id, currentUserId);
+  }
+
+  async function handleSearch(event) {
+    event.preventDefault();
+    if (!query.trim()) return;
+    setSearching(true);
+    const { data = [], error } = await searchMessageProfiles(query, currentUserId);
+    if (error) {
+      showToast?.(error.message || 'User search failed.');
+    }
+    setSearchResults(data.map(mapCommunityProfile));
+    setSearching(false);
+  }
+
+  async function handleSend(event) {
+    event.preventDefault();
+    if (!draft.trim() || !activeConversation || sending) return;
+    setSending(true);
+    const { data, error } = await sendDirectMessage({
+      conversationId: activeConversation.id,
+      senderId: currentUserId,
+      body: draft,
+    });
+    if (error) {
+      showToast?.(error.message || 'Message could not send.');
+      setSending(false);
+      return;
+    }
+    setDraft('');
+    setMessages((items) => [...items, mapDirectMessage(data)]);
+    setSending(false);
+    await refreshInbox();
+  }
+
+  const searchList = searchResults.filter((user) => user.id !== currentUserId);
+
+  return (
+    <div className="notification-overlay" role="dialog" aria-modal="true" aria-label="Messages">
+      <section className="messages-panel">
+        <div className="section-title-row">
+          <div>
+            <h2>{activeConversation ? `@${activeConversation.otherUser?.username || 'catfriend'}` : 'Messages'}</h2>
+            {activeConversation && <span className="quiet-label">{activeConversation.otherUser?.name || 'Catmunity friend'}</span>}
+          </div>
+          <div className="message-header-actions">
+            {activeConversation && (
+              <button className="mini-text-button" type="button" onClick={() => setActiveConversation(null)}>
+                Inbox
+              </button>
+            )}
+            <button className="icon-button" onClick={onClose} aria-label="Close messages"><X size={18} /></button>
+          </div>
+        </div>
+
+        {!activeConversation ? (
+          <>
+            <form className="message-search" onSubmit={handleSearch}>
+              <Search size={18} />
+              <input
+                value={query}
+                placeholder="Search username"
+                onChange={(event) => setQuery(event.target.value)}
+              />
+              <button type="submit" disabled={searching || !query.trim()}>
+                {searching ? '...' : 'Search'}
+              </button>
+            </form>
+
+            {searchList.length > 0 && (
+              <div className="message-search-results">
+                {searchList.map((user) => (
+                  <button key={user.id} type="button" onClick={() => openConversationWithUser(user)}>
+                    <UserAvatar user={user} className="post-user-avatar" />
+                    <span>
+                      <strong>@{user.username || 'catfriend'}</strong>
+                      <small>{user.name || 'Catmunity friend'}</small>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <section className="message-suggestions">
+              <h3>Suggested</h3>
+              {suggestedUsers.length > 0 ? (
+                <div className="message-suggestion-row">
+                  {suggestedUsers.map((user) => (
+                    <button key={user.id} type="button" onClick={() => openConversationWithUser(user)}>
+                      <UserAvatar user={user} className="post-user-avatar" />
+                      <span>@{user.username || 'catfriend'}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="empty-community-copy">Follow purrpals to see message suggestions.</p>
+              )}
+            </section>
+
+            <section className="message-inbox">
+              <h3>Inbox</h3>
+              {loading && <p className="empty-community-copy">Loading messages...</p>}
+              {!loading && conversations.map((conversation) => (
+                <button key={conversation.id} type="button" onClick={() => openExistingConversation(conversation)}>
+                  <UserAvatar user={conversation.otherUser} className="post-user-avatar" />
+                  <span>
+                    <strong>@{conversation.otherUser?.username || 'catfriend'}</strong>
+                    <small>{conversation.latestMessage?.body || 'Start the conversation'}</small>
+                  </span>
+                  <em>
+                    {conversation.latestMessage ? formatMessageTime(conversation.latestMessage.created_at) : ''}
+                    {conversation.unreadCount > 0 && <b>{conversation.unreadCount}</b>}
+                  </em>
+                </button>
+              ))}
+              {!loading && conversations.length === 0 && (
+                <p className="empty-community-copy">No messages yet. Search for a username to start one.</p>
+              )}
+            </section>
+          </>
+        ) : (
+          <>
+            <button className="message-chat-user" type="button" onClick={() => activeConversation.otherUser && onOpenUser(activeConversation.otherUser.id)}>
+              <UserAvatar user={activeConversation.otherUser} className="post-user-avatar" />
+              <span>
+                <strong>@{activeConversation.otherUser?.username || 'catfriend'}</strong>
+                <small>View profile</small>
+              </span>
+            </button>
+            <div className="message-thread">
+              {messages.map((message) => (
+                <div
+                  key={message.id}
+                  className={message.sender_id === currentUserId ? 'message-bubble mine' : 'message-bubble'}
+                >
+                  <p>{message.body}</p>
+                  <small>{formatMessageTime(message.created_at)}</small>
+                </div>
+              ))}
+              {messages.length === 0 && (
+                <p className="empty-community-copy">Say hi to @{activeConversation.otherUser?.username || 'your purrpal'}.</p>
+              )}
+              <span ref={messagesEndRef} />
+            </div>
+            <form className="message-compose" onSubmit={handleSend}>
+              <input
+                value={draft}
+                placeholder="Write a message..."
+                onChange={(event) => setDraft(event.target.value)}
+              />
+              <button type="submit" disabled={sending || !draft.trim()} aria-label="Send message">
+                <Send size={17} />
+              </button>
+            </form>
+          </>
+        )}
       </section>
     </div>
   );

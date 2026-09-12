@@ -540,7 +540,8 @@ button:disabled {
 }
 
 .notification-panel,
-.follow-list-panel {
+.follow-list-panel,
+.messages-panel {
   width: min(440px, 100%);
   max-height: min(66vh, 620px);
   display: grid;
@@ -555,6 +556,240 @@ button:disabled {
 
 .follow-list-panel {
   max-height: min(72vh, 660px);
+}
+
+.messages-panel {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  max-height: min(78vh, 720px);
+}
+
+.message-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.message-search {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 9px;
+  min-height: 48px;
+  padding: 7px 8px 7px 13px;
+  border-radius: 20px;
+  color: #8a4f38;
+  background: rgba(255, 247, 236, 0.88);
+  border: 1px solid rgba(80, 55, 40, 0.08);
+}
+
+.message-search input,
+.message-compose input {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #2b211d;
+  font-size: 0.95rem;
+  font-weight: 750;
+}
+
+.message-search input::placeholder,
+.message-compose input::placeholder {
+  color: #9d9691;
+  opacity: 1;
+}
+
+.message-search button,
+.message-compose button {
+  border: 0;
+  border-radius: 999px;
+  color: #ffffff;
+  background: #e85f4b;
+  font-weight: 900;
+}
+
+.message-search button {
+  min-height: 34px;
+  padding: 0 13px;
+}
+
+.message-search button:disabled,
+.message-compose button:disabled {
+  opacity: 0.52;
+}
+
+.message-search-results,
+.message-suggestions,
+.message-inbox {
+  display: grid;
+  gap: 9px;
+}
+
+.message-suggestions h3,
+.message-inbox h3 {
+  margin: 0;
+  color: #2b211d;
+  font-size: 0.95rem;
+}
+
+.message-search-results button,
+.message-inbox button,
+.message-chat-user {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  padding: 9px;
+  border: 0;
+  border-radius: 18px;
+  color: #2b211d;
+  background: rgba(255, 247, 236, 0.68);
+  text-align: left;
+}
+
+.message-search-results button {
+  grid-template-columns: auto 1fr;
+}
+
+.message-search-results span,
+.message-inbox span,
+.message-chat-user span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.message-search-results strong,
+.message-inbox strong,
+.message-chat-user strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-search-results small,
+.message-inbox small,
+.message-chat-user small,
+.message-bubble small {
+  color: #87756c;
+  font-weight: 800;
+}
+
+.message-inbox em {
+  display: grid;
+  justify-items: end;
+  gap: 5px;
+  color: #9b877c;
+  font-style: normal;
+  font-weight: 900;
+  font-size: 0.75rem;
+}
+
+.message-inbox b {
+  min-width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  padding: 0 6px;
+  border-radius: 999px;
+  color: #ffffff;
+  background: #e85f4b;
+  font-size: 0.68rem;
+}
+
+.message-suggestion-row {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 3px;
+}
+
+.message-suggestion-row button {
+  flex: 0 0 auto;
+  width: 72px;
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  border: 0;
+  background: transparent;
+  color: #6b4a39;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.message-suggestion-row .post-user-avatar {
+  width: 48px;
+  height: 48px;
+}
+
+.message-suggestion-row span {
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-chat-user {
+  grid-template-columns: auto 1fr;
+  background: transparent;
+  padding: 0 2px 2px;
+}
+
+.message-thread {
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  padding: 4px 2px;
+}
+
+.message-bubble {
+  max-width: 82%;
+  align-self: flex-start;
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 18px 18px 18px 6px;
+  color: #2b211d;
+  background: rgba(255, 241, 216, 0.82);
+}
+
+.message-bubble.mine {
+  align-self: flex-end;
+  border-radius: 18px 18px 6px 18px;
+  color: #ffffff;
+  background: #e85f4b;
+}
+
+.message-bubble p {
+  margin: 0;
+  line-height: 1.3;
+}
+
+.message-bubble.mine small {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.message-compose {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 50px;
+  padding: 8px 8px 8px 14px;
+  border-radius: 999px;
+  background: rgba(255, 247, 236, 0.9);
+  border: 1px solid rgba(80, 55, 40, 0.08);
+}
+
+.message-compose button {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
 }
 
 .notification-list {

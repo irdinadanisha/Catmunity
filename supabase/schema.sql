@@ -184,6 +184,30 @@ create table if not exists public.notifications (
   read_at timestamptz
 );
 
+create table if not exists public.dm_conversations (
+  id uuid primary key default gen_random_uuid(),
+  conversation_key text not null unique,
+  created_by uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.dm_participants (
+  conversation_id uuid not null references public.dm_conversations(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  last_read_at timestamptz,
+  created_at timestamptz not null default now(),
+  primary key (conversation_id, user_id)
+);
+
+create table if not exists public.dm_messages (
+  id uuid primary key default gen_random_uuid(),
+  conversation_id uuid not null references public.dm_conversations(id) on delete cascade,
+  sender_id uuid not null references auth.users(id) on delete cascade,
+  body text not null,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.cat_streaks (
   user_id uuid primary key references auth.users(id) on delete cascade,
   current_streak integer not null default 0 check (current_streak >= 0),
@@ -485,6 +509,9 @@ alter table public.community_posts enable row level security;
 alter table public.post_likes enable row level security;
 alter table public.comments enable row level security;
 alter table public.notifications enable row level security;
+alter table public.dm_conversations enable row level security;
+alter table public.dm_participants enable row level security;
+alter table public.dm_messages enable row level security;
 alter table public.cat_streaks enable row level security;
 alter table public.cat_streak_events enable row level security;
 
@@ -741,6 +768,92 @@ create policy "Authenticated users can create notifications"
 on public.notifications for insert
 with check (auth.uid() = actor_user_id);
 
+drop policy if exists "Users can read own DM conversations" on public.dm_conversations;
+create policy "Users can read own DM conversations"
+on public.dm_conversations for select
+using (
+  exists (
+    select 1
+    from public.dm_participants
+    where dm_participants.conversation_id = dm_conversations.id
+      and dm_participants.user_id = auth.uid()
+  )
+);
+
+drop policy if exists "Users can create DM conversations" on public.dm_conversations;
+create policy "Users can create DM conversations"
+on public.dm_conversations for insert
+with check (auth.uid() = created_by);
+
+drop policy if exists "Users can update own DM conversations" on public.dm_conversations;
+create policy "Users can update own DM conversations"
+on public.dm_conversations for update
+using (
+  exists (
+    select 1
+    from public.dm_participants
+    where dm_participants.conversation_id = dm_conversations.id
+      and dm_participants.user_id = auth.uid()
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.dm_participants
+    where dm_participants.conversation_id = dm_conversations.id
+      and dm_participants.user_id = auth.uid()
+  )
+);
+
+drop policy if exists "Users can read own DM participants" on public.dm_participants;
+create policy "Users can read own DM participants"
+on public.dm_participants for select
+using (auth.uid() = user_id);
+
+drop policy if exists "Conversation creator can add DM participants" on public.dm_participants;
+create policy "Conversation creator can add DM participants"
+on public.dm_participants for insert
+with check (
+  user_id = auth.uid()
+  or exists (
+    select 1
+    from public.dm_conversations
+    where dm_conversations.id = dm_participants.conversation_id
+      and dm_conversations.created_by = auth.uid()
+  )
+);
+
+drop policy if exists "Users can update own DM read state" on public.dm_participants;
+create policy "Users can update own DM read state"
+on public.dm_participants for update
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "Users can read own DM messages" on public.dm_messages;
+create policy "Users can read own DM messages"
+on public.dm_messages for select
+using (
+  exists (
+    select 1
+    from public.dm_participants
+    where dm_participants.conversation_id = dm_messages.conversation_id
+      and dm_participants.user_id = auth.uid()
+  )
+);
+
+drop policy if exists "Users can send own DM messages" on public.dm_messages;
+create policy "Users can send own DM messages"
+on public.dm_messages for insert
+with check (
+  auth.uid() = sender_id
+  and exists (
+    select 1
+    from public.dm_participants
+    where dm_participants.conversation_id = dm_messages.conversation_id
+      and dm_participants.user_id = auth.uid()
+  )
+);
+
 drop policy if exists "Users can read own cat streak details" on public.cat_streaks;
 create policy "Users can read own cat streak details"
 on public.cat_streaks for select
@@ -809,6 +922,15 @@ create index if not exists comments_post_id_idx
 
 create index if not exists notifications_user_unread_idx
   on public.notifications (user_id, is_read, created_at desc);
+
+create index if not exists dm_conversations_updated_at_idx
+  on public.dm_conversations (updated_at desc);
+
+create index if not exists dm_participants_user_id_idx
+  on public.dm_participants (user_id);
+
+create index if not exists dm_messages_conversation_created_idx
+  on public.dm_messages (conversation_id, created_at desc);
 
 create index if not exists cat_streak_events_user_date_idx
   on public.cat_streak_events (user_id, local_date desc);

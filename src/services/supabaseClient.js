@@ -83,6 +83,27 @@ export function subscribeToUserNotifications(userId, callback) {
   };
 }
 
+export function subscribeToUserMessages(userId, callback) {
+  if (!isSupabaseConfigured || !userId) return () => {};
+
+  const channel = supabase
+    .channel(`direct-messages:${userId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'dm_messages',
+      },
+      callback,
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
 export async function signUpWithEmail({ username, email, password }) {
   if (!isSupabaseConfigured) {
     return { data: null, error: new Error('Supabase is not configured.') };
@@ -239,6 +260,10 @@ export async function searchCommunityProfilesByUsername(query, currentUserId) {
     .limit(8);
 
   return { data: data || [], error };
+}
+
+export async function searchMessageProfiles(query, currentUserId) {
+  return searchCommunityProfilesByUsername(query, currentUserId);
 }
 
 export async function loadFollowingIds(userId) {
@@ -627,6 +652,223 @@ export async function createNotification(notificationData) {
     });
 
   return { data: null, error };
+}
+
+function getConversationKey(firstUserId, secondUserId) {
+  return [firstUserId, secondUserId].sort().join(':');
+}
+
+function getOtherUserIdFromConversationKey(conversationKey = '', currentUserId = '') {
+  return conversationKey.split(':').find((id) => id && id !== currentUserId) || '';
+}
+
+export async function openOrCreateConversation(currentUserId, otherUserId) {
+  if (!isSupabaseConfigured || !currentUserId || !otherUserId || currentUserId === otherUserId) {
+    return { data: null, error: currentUserId === otherUserId ? new Error('You cannot message yourself.') : null };
+  }
+
+  const conversationKey = getConversationKey(currentUserId, otherUserId);
+  const { data: existing, error: existingError } = await supabase
+    .from('dm_conversations')
+    .select('id, conversation_key, created_by, created_at, updated_at')
+    .eq('conversation_key', conversationKey)
+    .maybeSingle();
+
+  if (existingError) return { data: null, error: existingError };
+  if (existing) return { data: existing, error: null };
+
+  const { data: conversation, error: conversationError } = await supabase
+    .from('dm_conversations')
+    .insert({
+      conversation_key: conversationKey,
+      created_by: currentUserId,
+    })
+    .select('id, conversation_key, created_by, created_at, updated_at')
+    .single();
+
+  if (conversationError) return { data: null, error: conversationError };
+
+  const { error: participantsError } = await supabase
+    .from('dm_participants')
+    .insert([
+      { conversation_id: conversation.id, user_id: currentUserId, last_read_at: new Date().toISOString() },
+      { conversation_id: conversation.id, user_id: otherUserId },
+    ]);
+
+  if (participantsError) return { data: null, error: participantsError };
+  return { data: conversation, error: null };
+}
+
+export async function fetchUnreadMessageCount(currentUserId) {
+  if (!isSupabaseConfigured || !currentUserId) return { count: 0, error: null };
+
+  const { data: participants, error: participantsError } = await supabase
+    .from('dm_participants')
+    .select('conversation_id, last_read_at')
+    .eq('user_id', currentUserId);
+
+  if (participantsError || !participants?.length) {
+    return { count: 0, error: participantsError || null };
+  }
+
+  const conversationIds = participants.map((item) => item.conversation_id);
+  const { data: messages, error: messagesError } = await supabase
+    .from('dm_messages')
+    .select('id, conversation_id, sender_id, created_at')
+    .in('conversation_id', conversationIds)
+    .neq('sender_id', currentUserId);
+
+  if (messagesError) return { count: 0, error: messagesError };
+
+  const readByConversation = new Map(participants.map((item) => [
+    item.conversation_id,
+    item.last_read_at ? new Date(item.last_read_at).getTime() : 0,
+  ]));
+  const count = (messages || []).filter((message) => {
+    const readAt = readByConversation.get(message.conversation_id) || 0;
+    return new Date(message.created_at).getTime() > readAt;
+  }).length;
+
+  return { count, error: null };
+}
+
+export async function fetchMessageConversations(currentUserId) {
+  if (!isSupabaseConfigured || !currentUserId) return { data: [], error: null };
+
+  const { data: participants, error: participantsError } = await supabase
+    .from('dm_participants')
+    .select('conversation_id, last_read_at')
+    .eq('user_id', currentUserId);
+
+  if (participantsError || !participants?.length) {
+    return { data: [], error: participantsError || null };
+  }
+
+  const conversationIds = participants.map((item) => item.conversation_id);
+  const [{ data: conversations, error: conversationsError }, { data: messages, error: messagesError }] = await Promise.all([
+    supabase
+      .from('dm_conversations')
+      .select('id, conversation_key, created_by, created_at, updated_at')
+      .in('id', conversationIds),
+    supabase
+      .from('dm_messages')
+      .select('id, conversation_id, sender_id, body, created_at')
+      .in('conversation_id', conversationIds)
+      .order('created_at', { ascending: false })
+      .limit(300),
+  ]);
+
+  const error = conversationsError || messagesError;
+  if (error) return { data: [], error };
+
+  const participantByConversation = new Map(participants.map((item) => [item.conversation_id, item]));
+  const latestByConversation = new Map();
+  const unreadByConversation = new Map();
+  (messages || []).forEach((message) => {
+    if (!latestByConversation.has(message.conversation_id)) {
+      latestByConversation.set(message.conversation_id, message);
+    }
+    const participant = participantByConversation.get(message.conversation_id);
+    const readAt = participant?.last_read_at ? new Date(participant.last_read_at).getTime() : 0;
+    const isUnread = message.sender_id !== currentUserId && new Date(message.created_at).getTime() > readAt;
+    if (isUnread) {
+      unreadByConversation.set(message.conversation_id, (unreadByConversation.get(message.conversation_id) || 0) + 1);
+    }
+  });
+
+  const otherUserIds = [...new Set((conversations || [])
+    .map((conversation) => getOtherUserIdFromConversationKey(conversation.conversation_key, currentUserId))
+    .filter(Boolean))];
+  const { data: profiles, error: profilesError } = await loadProfilesByIds(otherUserIds);
+  if (profilesError) return { data: [], error: profilesError };
+
+  const rows = (conversations || []).map((conversation) => {
+    const otherUserId = getOtherUserIdFromConversationKey(conversation.conversation_key, currentUserId);
+    const latestMessage = latestByConversation.get(conversation.id);
+    return {
+      ...conversation,
+      otherUserId,
+      otherUser: (profiles || []).find((profile) => profile.id === otherUserId) || null,
+      latestMessage,
+      unreadCount: unreadByConversation.get(conversation.id) || 0,
+    };
+  }).sort((first, second) => {
+    const firstTime = new Date(first.latestMessage?.created_at || first.updated_at || first.created_at).getTime();
+    const secondTime = new Date(second.latestMessage?.created_at || second.updated_at || second.created_at).getTime();
+    return secondTime - firstTime;
+  });
+
+  return { data: rows, error: null };
+}
+
+export async function fetchConversationMessages(conversationId) {
+  if (!isSupabaseConfigured || !conversationId) return { data: [], error: null };
+
+  const { data, error } = await supabase
+    .from('dm_messages')
+    .select('id, conversation_id, sender_id, body, created_at')
+    .eq('conversation_id', conversationId)
+    .order('created_at', { ascending: true });
+
+  return { data: data || [], error };
+}
+
+export async function sendDirectMessage({ conversationId, senderId, body }) {
+  if (!isSupabaseConfigured || !conversationId || !senderId || !body.trim()) {
+    return { data: null, error: null };
+  }
+
+  const { data, error } = await supabase
+    .from('dm_messages')
+    .insert({
+      conversation_id: conversationId,
+      sender_id: senderId,
+      body: body.trim(),
+    })
+    .select('id, conversation_id, sender_id, body, created_at')
+    .single();
+
+  if (!error) {
+    await supabase
+      .from('dm_conversations')
+      .update({ updated_at: new Date().toISOString() })
+      .eq('id', conversationId);
+  }
+
+  return { data, error };
+}
+
+export async function markConversationMessagesAsRead(conversationId, currentUserId) {
+  if (!isSupabaseConfigured || !conversationId || !currentUserId) return { error: null };
+
+  const { error } = await supabase
+    .from('dm_participants')
+    .update({ last_read_at: new Date().toISOString() })
+    .eq('conversation_id', conversationId)
+    .eq('user_id', currentUserId);
+
+  return { error };
+}
+
+export async function fetchSuggestedMessageProfiles(currentUserId, limit = 7) {
+  if (!isSupabaseConfigured || !currentUserId) return { data: [], error: null };
+
+  const [{ data: following = [], error: followingError }, { data: followers = [], error: followersError }] = await Promise.all([
+    loadFollowingIds(currentUserId),
+    loadFollowerIds(currentUserId),
+  ]);
+
+  const error = followingError || followersError;
+  if (error) return { data: [], error };
+
+  const followerSet = new Set(followers);
+  const orderedIds = [
+    ...following.filter((id) => followerSet.has(id)),
+    ...following,
+    ...followers,
+  ].filter((id, index, ids) => id && id !== currentUserId && ids.indexOf(id) === index).slice(0, limit);
+
+  return loadProfilesByIds(orderedIds);
 }
 
 export async function loadProfilesByUsernames(usernames) {
