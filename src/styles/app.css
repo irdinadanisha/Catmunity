@@ -4816,6 +4816,11 @@ button:disabled {
   box-shadow: 0 12px 30px rgba(83, 55, 38, 0.07);
 }
 
+.post-preview-card small {
+  color: #806a5e;
+  font-weight: 800;
+}
+
 .post-preview-card img {
   width: 92px;
   aspect-ratio: 1;
@@ -4924,6 +4929,49 @@ button:disabled {
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: center;
+}
+
+.post-location-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0 4px;
+  border-top: 1px solid rgba(80, 55, 40, 0.08);
+}
+
+.post-location-option div {
+  display: grid;
+  gap: 2px;
+}
+
+.post-location-option strong {
+  color: #3b2a25;
+}
+
+.post-location-option small {
+  color: #8d7f78;
+  font-weight: 800;
+}
+
+.post-location-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: max-content;
+  border: 0;
+  border-radius: 999px;
+  padding: 9px 13px;
+  color: #fff;
+  background: #ef5f4c;
+  box-shadow: 0 12px 26px rgba(239, 95, 76, 0.16);
+  font-size: 0.78rem;
+  font-weight: 950;
+}
+
+.post-location-button:disabled {
+  opacity: 0.72;
 }
 
 .post-extra-upload {
