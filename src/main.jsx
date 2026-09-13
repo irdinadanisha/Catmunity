@@ -830,7 +830,7 @@ function App() {
 
   function startNewCatRegistration() {
     setDraftCat({
-      name: 'Unnamed Cat',
+      name: '',
       color: '',
       weight: '',
       behavior: '',
@@ -3370,24 +3370,14 @@ function ConfirmScreen({ capture, detectingLocation = false, onRetryLocation, on
   }
 
   return (
-    <section className="screen">
+    <section className="screen catch-confirm-screen">
       <BackButton onBack={onBack} />
-      <ScreenHeader title="Catch this cat?" subtitle={locationSubtitle} icon={Sparkles} />
-      <div className={locationReady ? 'confirm-location-card is-ready' : 'confirm-location-card needs-location'}>
-        <MapPin size={17} />
-        <span>
-          {detectingLocation || capture.locationStatus === 'detecting'
-            ? 'Detecting your location...'
-            : locationReady
-              ? capture.locationName
-              : 'Location permission needed'}
-        </span>
-        {onRetryLocation && (
-          <button type="button" onClick={onRetryLocation} disabled={detectingLocation}>
-            {detectingLocation ? 'Detecting...' : 'Retry location'}
-          </button>
-        )}
-      </div>
+      <ScreenHeader title="Catch this cat?" subtitle={locationSubtitle} />
+      {onRetryLocation && (
+        <button className="catch-location-retry" type="button" onClick={onRetryLocation} disabled={detectingLocation}>
+          <RotateCcw size={15} /> {detectingLocation ? 'Detecting...' : 'Retry location'}
+        </button>
+      )}
       <SquareCropEditor
         imageUrl={capture.originalImage}
         disabled={isCropping}
@@ -3697,7 +3687,6 @@ function RegistrationChoiceScreen({ cats, capture, currentUserId, onBack, onNewC
       <ScreenHeader
         title="Is this one of the cats already discovered nearby?"
         subtitle="Choose a nearby cat to avoid duplicate pins, or continue as a new cat."
-        icon={ShieldCheck}
       />
       <button className="new-cat-choice" onClick={onNewCat}>
         <Plus size={20} />
@@ -3923,12 +3912,12 @@ function CatDetailsForm({
   const locationLabel = mode === 'edit' ? cat?.location_name : capture?.locationName;
 
   return (
-    <section className="screen">
+    <section className="screen cat-details-screen">
       <BackButton onBack={onBack} />
       <ScreenHeader
         title={mode === 'edit' ? 'Edit cat details' : 'Add cat details'}
         subtitle={mode === 'edit' ? 'Update anything that needs a little correction.' : 'A few notes make your collection feel personal.'}
-        icon={Cat}
+        icon={mode === 'edit' ? Cat : undefined}
       />
       <form
         className="details-form"
@@ -4016,7 +4005,7 @@ function CatDetailsForm({
         {mode === 'edit' && replacementPhoto?.croppedImage && (
           <p className="field-helper">New cat picture ready. Save changes to update it.</p>
         )}
-        <Field label="Cat name" value={form.name} placeholder="Unnamed Cat" onChange={(value) => update('name', value)} />
+        <Field label="Name" value={form.name} placeholder="Unnamed Cat" onChange={(value) => update('name', value)} />
         <Field label="Color" value={form.color} placeholder="Orange, black, tabby..." onChange={(value) => update('color', value)} />
         <Field label="Breed" value={form.breed} placeholder="Domestic shorthair, Persian..." onChange={(value) => update('breed', value)} />
         <Field label="Weight" value={form.weight} placeholder="PHAT, chonky, 4.5 kg..." onChange={(value) => update('weight', value)} />
@@ -4047,7 +4036,7 @@ function CatDetailsForm({
         <Field label="Date found" type="date" value={form.date_found} onChange={(value) => update('date_found', value)} />
         <button className="primary-button" type="submit" disabled={saving || !locationReady || detectingLocation}>
           <Check size={18} />
-          {saving ? 'Saving...' : detectingLocation ? 'Detecting location...' : mode === 'edit' ? 'Save changes' : 'Save to collection'}
+          {saving ? 'Saving...' : detectingLocation ? 'Detecting location...' : mode === 'edit' ? 'Save changes' : 'Add to collection'}
         </button>
       </form>
     </section>
@@ -6306,7 +6295,7 @@ function CatCard({ cat, locked, onOpen, action }) {
 function ScreenHeader({ title, subtitle, icon: Icon, plainIcon = false }) {
   return (
     <div className="screen-header">
-      <span className={plainIcon ? 'header-icon header-icon--plain' : 'header-icon'}><Icon size={plainIcon ? 38 : 21} /></span>
+      {Icon && <span className={plainIcon ? 'header-icon header-icon--plain' : 'header-icon'}><Icon size={plainIcon ? 38 : 21} /></span>}
       <div>
         <h1>{title}</h1>
         <p>{subtitle}</p>
