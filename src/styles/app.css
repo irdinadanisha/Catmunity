@@ -5075,9 +5075,15 @@ button:disabled {
 
 .create-post-header {
   display: grid;
-  grid-template-columns: auto 1fr;
+  gap: clamp(18px, 3vw, 24px);
+  padding-bottom: 4px;
+}
+
+.create-post-navigation {
+  display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .create-post-back {
@@ -5189,18 +5195,19 @@ button:disabled {
   font-weight: 800;
 }
 
-.post-location-button {
+.post-location-button,
+.post-extra-upload em {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
   min-width: max-content;
-  border: 0;
   border-radius: 999px;
   padding: 9px 13px;
-  color: #fff;
-  background: #ef5f4c;
-  box-shadow: 0 12px 26px rgba(239, 95, 76, 0.16);
+  color: #8f3f2f;
+  background: #fff;
+  border: 1px solid rgba(111, 73, 53, 0.16);
+  box-shadow: 0 2px 6px rgba(111, 73, 53, 0.06);
   font-size: 0.78rem;
   font-weight: 950;
 }
@@ -5233,18 +5240,13 @@ button:disabled {
 }
 
 .post-extra-upload em {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  padding: 9px 13px;
-  font-size: 0.78rem;
-  line-height: normal;
-  border-radius: 999px;
-  color: #8f3f2f;
-  background: rgba(255, 240, 200, 0.78);
   font-style: normal;
-  font-weight: 900;
+}
+
+.post-extra-upload:focus-within em,
+.post-location-button:focus-visible {
+  outline: 2px solid #b96747;
+  outline-offset: 3px;
 }
 
 .post-extra-preview {

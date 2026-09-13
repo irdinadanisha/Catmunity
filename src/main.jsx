@@ -5376,15 +5376,21 @@ function CreatePostScreen({ currentUserId, cats = [], initialCatId = '', started
   return (
     <section className="screen create-post-screen">
       <header className="create-post-header">
-        <button className="create-post-back" type="button" onClick={onBack} aria-label="Back">
-          <ChevronLeft size={26} />
-        </button>
-        <div>
+        <div className="create-post-navigation">
+          <button className="create-post-back" type="button" onClick={onBack} aria-label="Back">
+            <ChevronLeft size={26} />
+          </button>
+          <button className="post-location-button post-submit-button" type="submit" form="create-post-form" disabled={posting || locating || (Boolean(selectedCatId) && catchContext?.catId !== selectedCatId) || (!startedFromCat && !body.trim() && extraImages.length === 0)}>
+            {posting ? 'Posting...' : 'Post'}
+          </button>
+        </div>
+        <div className="create-post-title">
           <h1>Post!</h1>
           <p>Share anything with Commeownity.</p>
         </div>
       </header>
       <form
+        id="create-post-form"
         className="details-form"
         onSubmit={async (event) => {
           event.preventDefault();
@@ -5488,9 +5494,6 @@ function CreatePostScreen({ currentUserId, cats = [], initialCatId = '', started
           </>
         )}
         {postError && <p role="alert">{postError}</p>}
-        <button className="post-location-button post-submit-button" type="submit" disabled={posting || locating || (Boolean(selectedCatId) && catchContext?.catId !== selectedCatId) || (!startedFromCat && !body.trim() && extraImages.length === 0)}>
-          {posting ? 'Posting...' : 'Post'}
-        </button>
       </form>
     </section>
   );
