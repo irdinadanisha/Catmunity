@@ -5087,14 +5087,16 @@ button:disabled {
 }
 
 .create-post-back {
-  width: 28px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
   display: grid;
   place-items: center;
   padding: 0;
-  border: 0;
+  border: 1px solid rgba(111, 73, 53, 0.16);
+  border-radius: 50%;
   color: #6f4935;
-  background: transparent;
+  background: #fff;
 }
 
 .create-post-header h1 {
