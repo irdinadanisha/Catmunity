@@ -3371,13 +3371,15 @@ function ConfirmScreen({ capture, detectingLocation = false, onRetryLocation, on
 
   return (
     <section className="screen catch-confirm-screen">
-      <BackButton onBack={onBack} />
+      <div className="catch-confirm-navigation">
+        <BackButton onBack={onBack} />
+        {onRetryLocation && (
+          <button className="catch-location-retry" type="button" onClick={onRetryLocation} disabled={detectingLocation}>
+            <RotateCcw size={15} /> {detectingLocation ? 'Detecting...' : 'Retry location'}
+          </button>
+        )}
+      </div>
       <ScreenHeader title="Catch this cat?" subtitle={locationSubtitle} />
-      {onRetryLocation && (
-        <button className="catch-location-retry" type="button" onClick={onRetryLocation} disabled={detectingLocation}>
-          <RotateCcw size={15} /> {detectingLocation ? 'Detecting...' : 'Retry location'}
-        </button>
-      )}
       <SquareCropEditor
         imageUrl={capture.originalImage}
         disabled={isCropping}
@@ -4033,11 +4035,13 @@ function CatDetailsForm({
           detecting={detectingLocation}
           onRetry={onRetryLocation}
         />
-        <Field label="Date found" type="date" value={form.date_found} onChange={(value) => update('date_found', value)} />
-        <button className="primary-button" type="submit" disabled={saving || !locationReady || detectingLocation}>
-          <Check size={18} />
-          {saving ? 'Saving...' : detectingLocation ? 'Detecting location...' : mode === 'edit' ? 'Save changes' : 'Add to collection'}
-        </button>
+        <div className="cat-details-final-row">
+          <Field label="Date found" type="date" value={form.date_found} onChange={(value) => update('date_found', value)} />
+          <button className="cat-collection-submit" type="submit" disabled={saving || !locationReady || detectingLocation}>
+            <Check size={18} />
+            {saving ? 'Saving...' : detectingLocation ? 'Detecting location...' : mode === 'edit' ? 'Save changes' : 'Add to collection'}
+          </button>
+        </div>
       </form>
     </section>
   );

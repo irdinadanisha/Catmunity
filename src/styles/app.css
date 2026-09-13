@@ -5389,23 +5389,31 @@ button:disabled {
 }
 
 /* Minimal catch/register presentation; handlers and capture data stay unchanged. */
-.catch-location-retry {
-  justify-self: start;
+.catch-confirm-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: clamp(4px, 1vw, 10px);
+}
+
+.catch-location-retry,
+.cat-collection-submit {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 8px 12px;
   border: 0;
   border-radius: 999px;
-  background: #e85f4b;
-  color: #fff;
+  background: #fff;
+  color: #8f3f2f;
+  border: 1px solid rgba(111, 73, 53, 0.16);
+  box-shadow: 0 2px 6px rgba(111, 73, 53, 0.06);
   font-size: 0.78rem;
   font-weight: 900;
 }
 
-.catch-location-retry > svg,
-.registration-choice-screen .new-cat-choice > svg,
-.cat-details-screen .details-form > .primary-button > svg {
+.registration-choice-screen .new-cat-choice > svg {
   color: #fff;
   stroke: #fff;
 }
@@ -5424,4 +5432,32 @@ button:disabled {
 .cat-details-screen input::placeholder {
   color: #918983;
   opacity: 1;
+}
+
+.cat-details-final-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.cat-details-final-row > label {
+  flex: 0 1 150px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.cat-details-final-row input[type="date"] {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  font-size: 0.85rem;
+}
+
+.cat-collection-submit {
+  flex: 0 0 auto;
+  min-height: 38px;
+  max-width: 100%;
+  justify-content: center;
 }
