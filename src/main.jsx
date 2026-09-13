@@ -3915,13 +3915,20 @@ function CatDetailsForm({
 
   return (
     <section className="screen cat-details-screen">
-      <BackButton onBack={onBack} />
+      <div className="catch-confirm-navigation">
+        <BackButton onBack={onBack} />
+        <button className="cat-collection-submit" type="submit" form="cat-details-form" disabled={saving || !locationReady || detectingLocation}>
+          <Check size={18} />
+          {saving ? 'Saving...' : detectingLocation ? 'Detecting location...' : mode === 'edit' ? 'Save changes' : 'Add to collection'}
+        </button>
+      </div>
       <ScreenHeader
         title={mode === 'edit' ? 'Edit cat details' : 'Add cat details'}
         subtitle={mode === 'edit' ? 'Update anything that needs a little correction.' : 'A few notes make your collection feel personal.'}
         icon={mode === 'edit' ? Cat : undefined}
       />
       <form
+        id="cat-details-form"
         className="details-form"
         onSubmit={(event) => {
           event.preventDefault();
@@ -4037,10 +4044,6 @@ function CatDetailsForm({
         />
         <div className="cat-details-final-row">
           <Field label="Date found" type="date" value={form.date_found} onChange={(value) => update('date_found', value)} />
-          <button className="cat-collection-submit" type="submit" disabled={saving || !locationReady || detectingLocation}>
-            <Check size={18} />
-            {saving ? 'Saving...' : detectingLocation ? 'Detecting location...' : mode === 'edit' ? 'Save changes' : 'Add to collection'}
-          </button>
         </div>
       </form>
     </section>
