@@ -36,6 +36,38 @@ export async function getCurrentAccurateLocation() {
   });
 }
 
+// Community posts must never substitute a saved or demo location.
+export async function getCurrentPostLocation() {
+  if (!navigator.geolocation) throw new Error('Location is not available on this device.');
+  const position = await new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(resolve, (error) => reject(new Error(
+      error.code === 1
+        ? 'Location permission was denied. Allow location access and try again, or post without a location.'
+        : 'We could not detect your current location. Try again or post without a location.',
+    )), { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
+  });
+  const { latitude, longitude, accuracy } = position.coords;
+  let timer;
+  let readable;
+  try {
+    readable = await Promise.race([
+      reverseGeocodeLocation(latitude, longitude),
+      new Promise((resolve) => { timer = setTimeout(() => resolve(null), 12000); }),
+    ]);
+  } finally { clearTimeout(timer); }
+  if (!readable) throw new Error('Your position was found, but its area name could not be loaded. Please try again.');
+  return { latitude, longitude, accuracyMeters: accuracy, locationName: readable.locationName };
+}
+
+export async function getRelatedCatCatch(userId, catId) {
+  const { data, error } = await supabase.from('user_cats')
+    .select('id, cat_id, discovered_at, sighting_area_name')
+    .eq('user_id', userId).eq('cat_id', catId).eq('is_unlocked', true).single();
+  if (error) throw error;
+  if (!data?.discovered_at) throw new Error('This cat’s catch information could not be loaded.');
+  return { catId: data.cat_id, discoveredAt: data.discovered_at, locationName: data.sighting_area_name || '' };
+}
+
 export async function getCurrentCatLocation() {
   if (!navigator.geolocation) {
     return {
@@ -1135,8 +1167,8 @@ function parseGoogleReverseGeocode(results) {
   const city =
     findAddressComponent(components, ['locality']) ||
     findAddressComponent(components, ['administrative_area_level_2']) ||
-    'Kuala Lumpur';
-  const country = findAddressComponent(components, ['country']) || 'Malaysia';
+    findAddressComponent(components, ['administrative_area_level_1']) || '';
+  const country = findAddressComponent(components, ['country']) || '';
 
   if (!areaName) return null;
 
@@ -1144,7 +1176,7 @@ function parseGoogleReverseGeocode(results) {
     areaName,
     city,
     country,
-    locationName: areaName === city ? `${areaName}, ${country}` : `${areaName}, ${city}`,
+    locationName: [...new Set([areaName, city, country].filter(Boolean))].join(', '),
   };
 }
 

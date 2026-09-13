@@ -5118,7 +5118,7 @@ button:disabled {
   display: flex;
   gap: 10px;
   overflow-x: auto;
-  padding: 2px 2px 8px;
+  padding: 6px 6px 8px;
   scrollbar-width: none;
 }
 
@@ -5209,7 +5209,19 @@ button:disabled {
   opacity: 0.72;
 }
 
+.post-attachment-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.post-submit-button {
+  justify-self: end;
+  width: auto;
+}
+
 .post-extra-upload {
+  flex: 0 0 auto;
   position: relative;
 }
 
@@ -5225,7 +5237,9 @@ button:disabled {
   align-items: center;
   justify-content: center;
   gap: 7px;
-  min-height: 44px;
+  padding: 9px 13px;
+  font-size: 0.78rem;
+  line-height: normal;
   border-radius: 999px;
   color: #8f3f2f;
   background: rgba(255, 240, 200, 0.78);

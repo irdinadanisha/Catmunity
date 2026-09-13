@@ -150,6 +150,10 @@ create table if not exists public.community_posts (
 alter table public.community_posts
 add column if not exists image_urls text[] not null default '{}';
 
+-- Preserve catch time separately from publication time and future sightings.
+alter table public.community_posts
+add column if not exists capture_discovered_at timestamptz;
+
 create table if not exists public.post_likes (
   post_id uuid not null references public.community_posts(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,

@@ -42,6 +42,8 @@ import {
   duplicateLocationRadiusMeters,
   fetchPublicUserCollection,
   getCurrentCatLocation,
+  getCurrentPostLocation,
+  getRelatedCatCatch,
   getCatMapPosition,
   getDistanceMeters,
   getCurrentAccurateLocation,
@@ -987,6 +989,10 @@ function App() {
       showToast('Add a caption or picture before posting.');
       return;
     }
+    if (cat && post.catchContext?.catId !== cat.id) {
+      showToast('Wait for this cat’s catch details before posting.');
+      return;
+    }
     const draftImages = post.startedFromCat && cat
       ? getPostImageUrls(cat, post.extraImages)
       : (post.extraImages || []).filter(isPersistentImageUrl);
@@ -998,8 +1004,9 @@ function App() {
       caption: post.body,
       imageUrl: imageUrls[0] || null,
       imageUrls,
-      locationName: post.startedFromCat && cat
-        ? (cat.area_name || cat.location_name)
+      captureDiscoveredAt: cat ? post.catchContext.discoveredAt : null,
+      locationName: cat
+        ? post.catchContext.locationName
         : (post.includeLocation ? post.locationName : ''),
       mentions: extractMentions(post.body),
     });
@@ -1471,6 +1478,7 @@ function App() {
         {screen === 'createPost' && (
           <CreatePostScreen
             cats={caughtCats}
+            currentUserId={currentUserId}
             initialCatId={postCatId}
             startedFromCat={postStartedFromCat}
             onBack={() => navigate(postReturnScreen)}
@@ -1709,7 +1717,7 @@ function mapCommunityData(data, currentUserId) {
       image_urls: post.image_urls || [],
       body: post.caption,
       location_name: post.location_name || '',
-      capture_discovered_at: captureDiscoveredAt,
+      capture_discovered_at: post.capture_discovered_at || captureDiscoveredAt,
       mentions: post.mentions || [],
       raw_created_at: post.created_at,
       created_at: formatPostTime(post.created_at),
@@ -4936,8 +4944,7 @@ function CommunityPostCard({ post, user, currentUser, cat, isFriendPost, onOpenU
   const [photoViewer, setPhotoViewer] = useState(null);
   const postImageUrls = !imageFailed ? getCommunityPostImages(post, cat) : [];
   const displayImages = postImageUrls;
-  const isCatchPost = postIncludesCatPrimaryImage(post, cat);
-  const captureTime = isCatchPost ? formatCaptureDateTime(post.capture_discovered_at || cat?.discovered_at) : '';
+  const captureTime = post.cat_id ? formatCaptureDateTime(post.capture_discovered_at) : '';
 
   async function handleCommentImages(event) {
     const files = [...(event.target.files || [])].filter((file) => file.type.startsWith('image/'));
@@ -4970,7 +4977,7 @@ function CommunityPostCard({ post, user, currentUser, cat, isFriendPost, onOpenU
               </span>
             </button>
             <span className="comment-header-actions">
-              <small>{post.created_at}</small>
+              <small>{captureTime || post.created_at}</small>
               {onDelete && (
                 <button className="post-delete-icon" type="button" onClick={onDelete} aria-label="Delete post">
                   <Trash2 size={13} />
@@ -5295,7 +5302,7 @@ function PhotoViewer({ images, initialIndex = 0, alt = 'Expanded picture', onClo
   );
 }
 
-function CreatePostScreen({ cats = [], initialCatId = '', startedFromCat = false, onBack, onCreate }) {
+function CreatePostScreen({ currentUserId, cats = [], initialCatId = '', startedFromCat = false, onBack, onCreate }) {
   const [body, setBody] = useState('');
   const [extraImages, setExtraImages] = useState([]);
   const [selectedCatId, setSelectedCatId] = useState(initialCatId || '');
@@ -5304,6 +5311,31 @@ function CreatePostScreen({ cats = [], initialCatId = '', startedFromCat = false
   const [locationStatus, setLocationStatus] = useState('');
   const [locating, setLocating] = useState(false);
   const selectedCat = cats.find((item) => item.id === selectedCatId);
+  const [catchContext, setCatchContext] = useState(null);
+  const [catchError, setCatchError] = useState('');
+  const [posting, setPosting] = useState(false);
+  const [postError, setPostError] = useState('');
+  const locationRequest = useRef(0);
+  useJsApiLoader({ googleMapsApiKey, id: 'catmunity-google-map' });
+
+  useEffect(() => {
+    let cancelled = false;
+    locationRequest.current += 1;
+    setLocating(false);
+    setIncludeLocation(false);
+    setLocationName('');
+    setLocationStatus('');
+    setCatchContext(null);
+    setCatchError('');
+    if (selectedCatId) {
+      getRelatedCatCatch(currentUserId, selectedCatId).then((context) => {
+        if (!cancelled) setCatchContext(context);
+      }).catch(() => {
+        if (!cancelled) setCatchError('Could not load this cat’s catch details. Clear and select it again to retry.');
+      });
+    }
+    return () => { cancelled = true; locationRequest.current += 1; };
+  }, [selectedCatId, currentUserId]);
 
   useEffect(() => {
     setSelectedCatId(initialCatId || '');
@@ -5313,20 +5345,23 @@ function CreatePostScreen({ cats = [], initialCatId = '', startedFromCat = false
   }, [initialCatId, startedFromCat]);
 
   async function handleAddLocation() {
+    if (selectedCatId) return;
+    const request = ++locationRequest.current;
     setLocating(true);
     setLocationStatus('Finding your current location...');
     try {
-      const position = await getCurrentAccurateLocation();
-      const areaName = getApproximateLocation(position.latitude, position.longitude).areaName;
-      setLocationName(areaName);
+      const location = await getCurrentPostLocation();
+      if (request !== locationRequest.current) return;
+      setLocationName(location.locationName);
       setIncludeLocation(true);
-      setLocationStatus(areaName);
+      setLocationStatus(location.locationName);
     } catch (error) {
+      if (request !== locationRequest.current) return;
       setIncludeLocation(false);
       setLocationName('');
       setLocationStatus(error.message || 'Location could not be detected.');
     } finally {
-      setLocating(false);
+      if (request === locationRequest.current) setLocating(false);
     }
   }
 
@@ -5351,25 +5386,33 @@ function CreatePostScreen({ cats = [], initialCatId = '', startedFromCat = false
       </header>
       <form
         className="details-form"
-        onSubmit={(event) => {
+        onSubmit={async (event) => {
           event.preventDefault();
-          onCreate({
-            catId: selectedCatId || null,
-            body: body.trim(),
-            extraImages,
-            locationName,
-            includeLocation,
-            startedFromCat,
-          });
+          if (posting || locating || (selectedCatId && catchContext?.catId !== selectedCatId)) return;
+          setPosting(true);
+          setPostError('');
+          try {
+            await onCreate({
+              catId: selectedCatId || null,
+              body: body.trim(),
+              extraImages,
+              locationName,
+              includeLocation,
+              startedFromCat,
+              catchContext,
+            });
+          } catch (error) {
+            setPostError(error.message || 'Post could not be shared. Please try again.');
+          } finally { setPosting(false); }
         }}
       >
-        {startedFromCat && selectedCat && (
-          <section className="post-preview-card" aria-label="Posting from caught cat">
+        {selectedCat && (
+          <section className="post-preview-card" aria-label="Original catch details">
             <img src={selectedCat.cropped_image_url || selectedCat.original_image_url} alt="" />
             <span>
               <strong>{selectedCat.name || 'Cat'}</strong>
-              <small>{selectedCat.area_name || selectedCat.location_name || 'Original catch location'}</small>
-              <small>{formatCaptureDateTime(selectedCat.discovered_at || selectedCat.created_at) || 'Original catch time'}</small>
+              <small>{catchContext?.catId === selectedCatId ? (catchContext.locationName || 'Catch location unavailable') : (catchError || 'Loading catch details...')}</small>
+              <small>{catchContext?.catId === selectedCatId ? formatCaptureDateTime(catchContext.discoveredAt) : ''}</small>
             </span>
           </section>
         )}
@@ -5377,11 +5420,26 @@ function CreatePostScreen({ cats = [], initialCatId = '', startedFromCat = false
           <span>Caption</span>
           <textarea value={body} placeholder="Share a cat thought, sighting, or update... @friend" onChange={(event) => setBody(event.target.value)} />
         </label>
-        <label className="post-extra-upload">
-          <span>Pictures</span>
-          <input type="file" accept="image/*" multiple onChange={handleExtraImages} />
-          <em><ImageIcon size={16} /> Add pictures</em>
-        </label>
+        <div className="post-attachment-actions">
+          <label className="post-extra-upload">
+            <input type="file" accept="image/*" aria-label="Add pictures" multiple onChange={handleExtraImages} />
+            <em><ImageIcon size={15} /> Add pictures</em>
+          </label>
+          <button className="post-location-button" type="button" onClick={handleAddLocation}
+            disabled={Boolean(selectedCatId) || locating}
+            title={selectedCatId ? 'Using this cat’s original catch location' : undefined}>
+            <MapPin size={15} /> {locating ? 'Finding...' : 'Add location'}
+          </button>
+        </div>
+        {!selectedCatId && locationStatus && (
+          <div className="post-location-option" role="status">
+            <small>{locationStatus}</small>
+            {includeLocation && <button className="mini-text-button" type="button" onClick={() => {
+              locationRequest.current += 1;
+              setLocating(false); setIncludeLocation(false); setLocationName(''); setLocationStatus('');
+            }}>Remove</button>}
+          </div>
+        )}
         {extraImages.length > 0 && (
           <div className="post-extra-preview">
             {extraImages.map((imageUrl, index) => (
@@ -5403,7 +5461,6 @@ function CreatePostScreen({ cats = [], initialCatId = '', startedFromCat = false
               <div className="section-title-row">
                 <div>
                   <h2>Related Cat</h2>
-                  <span className="quiet-label">Optional</span>
                 </div>
                 {selectedCat && (
                   <button className="mini-text-button" type="button" onClick={() => setSelectedCatId('')}>Clear</button>
@@ -5428,33 +5485,11 @@ function CreatePostScreen({ cats = [], initialCatId = '', startedFromCat = false
                 <p className="profile-empty-line">No caught cats to attach yet.</p>
               )}
             </section>
-            <section className="post-location-option" aria-label="Optional location">
-              <div>
-                <strong>Add current location?</strong>
-                <small>{includeLocation ? locationName : (locationStatus || 'Optional')}</small>
-              </div>
-              {includeLocation ? (
-                <button
-                  className="mini-text-button"
-                  type="button"
-                  onClick={() => {
-                    setIncludeLocation(false);
-                    setLocationName('');
-                    setLocationStatus('');
-                  }}
-                >
-                  Remove
-                </button>
-              ) : (
-                <button className="post-location-button" type="button" onClick={handleAddLocation} disabled={locating}>
-                  <MapPin size={15} /> {locating ? 'Finding...' : 'Add location'}
-                </button>
-              )}
-            </section>
           </>
         )}
-        <button className="primary-button" type="submit" disabled={!startedFromCat && !body.trim() && extraImages.length === 0}>
-          <Sparkles size={18} /> Share post
+        {postError && <p role="alert">{postError}</p>}
+        <button className="post-location-button post-submit-button" type="submit" disabled={posting || locating || (Boolean(selectedCatId) && catchContext?.catId !== selectedCatId) || (!startedFromCat && !body.trim() && extraImages.length === 0)}>
+          {posting ? 'Posting...' : 'Post'}
         </button>
       </form>
     </section>
